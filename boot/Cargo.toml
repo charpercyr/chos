@@ -1,0 +1,17 @@
+[package]
+name = "chos-boot"
+version = "0.1.0"
+authors = ["chrou"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+x86_64 = "0.13.2"
+chos-lib = { path = "../lib/chos-lib" }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+chos-x64 = { path = "../lib/chos-x64" }
+
+[dev-dependencies]
+chos-test = { path = "../lib/chos-test" }

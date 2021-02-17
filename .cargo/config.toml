@@ -1,0 +1,3 @@
+
+[target.'cfg(target_os = "none")']
+runner = "python /home/chrou/chos/script/runner.py"

@@ -1,0 +1,10 @@
+{
+    "rust-analyzer.cargo.target": "boot/arch/x86_64-chos-boot.json",
+    "rust-analyzer.checkOnSave.allTargets": false,
+    "rust-analyzer.checkOnSave.extraArgs": [
+        "-Zbuild-std=core,alloc"
+    ],
+    "rust-analyzer.diagnostics.disabled": [
+        "macro-error"
+    ]
+}

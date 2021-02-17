@@ -1,0 +1,90 @@
+
+mod serial;
+mod vga;
+
+use chos_lib::spin::Lock;
+
+use core::fmt::Write;
+
+pub trait Output: Write + Send {
+    fn init(&mut self);
+}
+
+pub static OUTPUT: Lock<Option<&'static mut dyn Output>> = Lock::new(None);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum Device {
+    Vga,
+    Serial,
+}
+
+pub fn initialize(dev: Device) {
+    let mut output = OUTPUT.lock();
+    if output.is_some() {
+        panic!("Output already initialized");
+    }
+    let dev: &mut dyn Output = match dev {
+        Device::Vga => unsafe { &mut vga::VGA },
+        Device::Serial => unsafe { &mut serial::SERIAL },
+    };
+    dev.init();
+    *output = Some(dev);
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($args:tt)*) => {{
+        #[allow(unused_imports)]
+        use core::fmt::Write;
+        if let Some(out) = $crate::arch::x64::log::OUTPUT.lock().as_mut() {
+            write!(*out, $($args)*).unwrap();
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! println {
+    ($($args:tt)*) => {{
+        if let Some(out) = $crate::arch::x64::log::OUTPUT.lock().as_mut() {
+            #[allow(unused_imports)]
+            use core::fmt::Write;
+            writeln!(*out, $($args)*).unwrap();
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! hexdump {
+    ($v:expr) => {{
+        #[allow(unused_unsafe)]
+        unsafe {
+            use core::mem::{transmute, size_of_val};
+            let len = size_of_val(&$v);
+            let ptr: *const u8 = transmute(&$v);
+            let mut i = 0;
+            while i < len {
+                print!("[{:016p}]", ptr);
+                let mut j = 0;
+                while i < len && j < 16 {
+                    print!(" {:02x}", *ptr.offset(i as isize));
+                    i += 1;
+                    j += 1;
+                }
+                println!();
+            }
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! unsafe_println {
+    ($($args:tt)*) => {{
+        let out = &mut *$crate::arch::x64::log::OUTPUT.as_ptr();
+        if let Some(out) = out {
+            #[allow(unused_imports)]
+            use core::fmt::Write;
+            writeln!(*out, $($args)*).unwrap();
+        }
+    }};
+}
