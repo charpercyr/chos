@@ -49,12 +49,3 @@ pub extern "C" fn boot_main() -> ! {
 
     exit_qemu(QemuStatus::Success);
 }
-
-#[cfg(test)]
-mod tests {
-    use chos_test::test;
-    #[test]
-    fn my_test() {
-        crate::println!("Hello");
-    }
-}

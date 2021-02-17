@@ -12,6 +12,3 @@ chos-lib = { path = "../lib/chos-lib" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 chos-x64 = { path = "../lib/chos-x64" }
-
-[dev-dependencies]
-chos-test = { path = "../lib/chos-test" }

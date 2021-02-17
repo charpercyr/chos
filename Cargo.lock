@@ -19,7 +19,6 @@ name = "chos-boot"
 version = "0.1.0"
 dependencies = [
  "chos-lib",
- "chos-test",
  "chos-x64",
  "x86_64",
 ]
@@ -33,22 +32,6 @@ dependencies = [
 
 [[package]]
 name = "chos-lib-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "chos-test"
-version = "0.1.0"
-dependencies = [
- "chos-test-macros",
-]
-
-[[package]]
-name = "chos-test-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",

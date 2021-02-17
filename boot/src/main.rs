@@ -11,7 +11,4 @@
 
 mod arch;
 
-#[cfg(test)]
-pub mod tests;
-
 // extern crate alloc;
