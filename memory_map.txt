@@ -1,0 +1,17 @@
+
+0x0000'0000'0000'0000 - 0x0000'7fff'ffff'ffff - User mappings (128 TB)
+0xffff'8000'0000'0000 - 0xffff'ffff'ffff'ffff - Kernel mappings (128 TB)
+
+Kernel Mappings
+
+0xffff'8000'0000'0000 - 0xffff'800f'ffff'ffff
+Physical memory identity map, max 64G
+Cache, write back, RW, NEX
+
+0xffff'8000'0010'0000'0000 - 0xffff'8000'0010'ffff'ffff
+Device memory, max 4G
+No cache, write trough, RW, NEX
+
+0xffff'8000'0020'0000'0000 - 0xffff'8000'002f'ffff'ffff
+Kernel code, max 64G
+Cache, write back, maps to ELF

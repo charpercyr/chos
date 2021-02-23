@@ -16,11 +16,6 @@ SECTIONS {
 
     .rodata : ALIGN(4K) {
         *(.rodata*)
-
-        . = ALIGN(8);
-        __TEST_CASES_START = .;
-        KEEP(*(.testcases*))
-        __TEST_CASES_END = .;
     }
 
     .bss : ALIGN(4K) {

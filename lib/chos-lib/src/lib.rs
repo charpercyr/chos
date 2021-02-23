@@ -9,8 +9,6 @@ mod macros;
 
 pub mod int;
 
-pub mod spin;
-
 pub mod str;
 
 mod volatile;

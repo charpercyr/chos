@@ -8,7 +8,11 @@ edition = "2018"
 
 [dependencies]
 x86_64 = "0.13.2"
+chos-elf = { path = "../lib/chos-elf" }
 chos-lib = { path = "../lib/chos-lib" }
+multiboot2 = "0.10.1"
+rustc-demangle = "0.1.18"
+spin = "0.7.1"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 chos-x64 = { path = "../lib/chos-x64" }

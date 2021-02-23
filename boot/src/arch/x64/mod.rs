@@ -1,51 +1,50 @@
 
-pub mod asm;
-pub mod log;
+mod asm;
+mod cmdline;
+mod intr;
+mod log;
+mod panic;
+mod qemu;
+mod symbols;
 
-use chos_x64::backtrace;
+use crate::println;
+use cmdline::iter_cmdline;
+use qemu::*;
 
-use core::panic::PanicInfo;
-
-#[repr(u32)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-enum QemuStatus {
-    Success = 0x10,
-    Error = 0x11,
-}
-
-fn exit_qemu(status: QemuStatus) -> ! {
-    unsafe {
-        let status = status as u32;
-        asm! {
-            "outl %eax, $0xf4",
-            in("eax") status,
-            options(att_syntax),
-        };
-        core::hint::unreachable_unchecked()
-    }
-}
-
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    unsafe {
-        use crate::unsafe_println;
-        unsafe_println!("=== PANIC ===");
-        unsafe_println!("{}", info);
-        unsafe_println!("BACKTRACE");
-        for frame in backtrace() {
-            unsafe_println!("  {:p}", frame);
-        }
-        unsafe_println!();
-    }
-    exit_qemu(QemuStatus::Error);
-}
+use multiboot2 as mb;
 
 #[no_mangle]
-pub extern "C" fn boot_main() -> ! {
-    log::initialize(log::Device::Serial);
-    
-    #[cfg(test)]
-    crate::test_main();
+pub extern "C" fn boot_main(mbh: usize) -> ! {
+    let mut logdev = None;
 
+    let mbh = unsafe { mb::load(mbh) };
+
+    if let Some(cmdline) = mbh.command_line_tag() {
+        for kv in iter_cmdline(cmdline.command_line()) {
+            match kv {
+                ("output", Some("serial")) => logdev = Some(log::Device::Serial),
+                ("output", Some("vga")) => logdev = Some(log::Device::Vga),
+                _ => (),
+            }
+        }
+    }
+    let logdev = logdev.unwrap_or(log::Device::Serial);
+
+    log::initialize(logdev);
+    intr::initalize();
+    
+    if let Some(sections) = mbh.elf_sections_tag() {
+        symbols::init_symbols(sections);
+    }
+
+    // unsafe {
+    //     use x86_64::registers::model_specific::Msr;
+    //     let apic_base = Msr::new(0x1b);
+    //     let base_addr = apic_base.read();
+    //     let id = core::ptr::read_volatile((base_addr + 0x020) as *const u32);
+    //     println!("BASE: {:08x}", base_addr);
+    //     println!("CPU ID {}", id);
+    // }
+    
     exit_qemu(QemuStatus::Success);
 }

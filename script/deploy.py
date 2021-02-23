@@ -21,7 +21,7 @@ set timeout=0
 set default=0
 
 menuentry "chos" {{
-    multiboot2 /boot/{CHOS_NAME} arg1 arg2
+    multiboot2 /boot/{CHOS_NAME} output=serial
     boot
 }}
 """

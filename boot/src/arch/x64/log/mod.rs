@@ -2,15 +2,16 @@
 mod serial;
 mod vga;
 
-use chos_lib::spin::Lock;
-
 use core::fmt::Write;
+
+use spin::Mutex;
 
 pub trait Output: Write + Send {
     fn init(&mut self);
 }
 
-pub static OUTPUT: Lock<Option<&'static mut dyn Output>> = Lock::new(None);
+pub static LOCK: Mutex<()> = Mutex::new(());
+pub static mut OUTPUT: Option<&'static mut dyn Output> = None;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -20,7 +21,8 @@ pub enum Device {
 }
 
 pub fn initialize(dev: Device) {
-    let mut output = OUTPUT.lock();
+    let _guard = LOCK.lock();
+    let output = unsafe { &mut OUTPUT };
     if output.is_some() {
         panic!("Output already initialized");
     }
@@ -35,9 +37,11 @@ pub fn initialize(dev: Device) {
 #[macro_export]
 macro_rules! print {
     ($($args:tt)*) => {{
-        #[allow(unused_imports)]
-        use core::fmt::Write;
-        if let Some(out) = $crate::arch::x64::log::OUTPUT.lock().as_mut() {
+        let _guard = $crate::arch::x64::log::LOCK.lock();
+        #[allow(unused_unsafe)]
+        if let Some(out) = unsafe { $crate::arch::x64::log::OUTPUT.as_mut() } {
+            #[allow(unused_imports)]
+            use core::fmt::Write;
             write!(*out, $($args)*).unwrap();
         }
     }};
@@ -46,7 +50,9 @@ macro_rules! print {
 #[macro_export]
 macro_rules! println {
     ($($args:tt)*) => {{
-        if let Some(out) = $crate::arch::x64::log::OUTPUT.lock().as_mut() {
+        let _guard = $crate::arch::x64::log::LOCK.lock();
+        #[allow(unused_unsafe)]
+        if let Some(out) = unsafe { $crate::arch::x64::log::OUTPUT.as_mut() } {
             #[allow(unused_imports)]
             use core::fmt::Write;
             writeln!(*out, $($args)*).unwrap();
@@ -80,7 +86,7 @@ macro_rules! hexdump {
 #[macro_export]
 macro_rules! unsafe_println {
     ($($args:tt)*) => {{
-        let out = &mut *$crate::arch::x64::log::OUTPUT.as_ptr();
+        let out = &mut $crate::arch::x64::log::OUTPUT;
         if let Some(out) = out {
             #[allow(unused_imports)]
             use core::fmt::Write;
