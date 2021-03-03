@@ -2,6 +2,7 @@
 
 .set PRESENT, (1 << 0)
 .set WRITEABLE, (1 << 1)
+.set NOCACHE, (1 << 4) | (1 << 5)
 .set HUGEPAGE, (1 << 7)
 
 .section .inittext, "ax"
@@ -42,15 +43,28 @@ load_gdt:
 
 .type enable_paging, @function
 enable_paging:
+    // Map first 4GB
     xor %eax, %eax
-    or $(PRESENT | WRITEABLE | HUGEPAGE), %eax
-    mov %eax, p3_table
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (0 << 30)), %eax
+    mov %eax, (p3_table + 0x0)
+
+    xor %eax, %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (1 << 30)), %eax
+    mov %eax, (p3_table + 0x8)
+
+    xor %eax, %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (2 << 30)), %eax
+    mov %eax, (p3_table + 0x10)
+
+    xor %eax, %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (3 << 30)), %eax
+    mov %eax, (p3_table + 0x18)
 
     mov $p3_table, %eax
     or $(PRESENT | WRITEABLE), %eax
     mov %eax, p4_table
 
-    mov $p4_table, %eax
+    mov $(p4_table ), %eax
     mov %eax, %cr3
 
     mov %cr4, %eax

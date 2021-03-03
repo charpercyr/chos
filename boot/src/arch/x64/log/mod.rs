@@ -84,6 +84,18 @@ macro_rules! hexdump {
 }
 
 #[macro_export]
+macro_rules! unsafe_print {
+    ($($args:tt)*) => {{
+        let out = &mut $crate::arch::x64::log::OUTPUT;
+        if let Some(out) = out {
+            #[allow(unused_imports)]
+            use core::fmt::Write;
+            write!(*out, $($args)*).unwrap();
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! unsafe_println {
     ($($args:tt)*) => {{
         let out = &mut $crate::arch::x64::log::OUTPUT;

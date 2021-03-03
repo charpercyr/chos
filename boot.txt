@@ -1,0 +1,24 @@
+
+1- Go to x64
+    - First 4GB identity mapped with 1GB pages
+
+2- Initialize simple serial
+
+3- Enable timer
+    - Calculate timer frequency
+    - Used for delays
+
+4- Load and map kernel from multiboot2
+    - PIC x64 kernel
+    - Map to higher half
+
+5- Start other processors
+    - All x64 with the same page table
+
+6- Jump to kernel, from all processors
+    - rsi = multiboot2 structure
+    - rdx = Physical <-> Virtual memory map
+    - rcx = initrd
+    - Page table
+        - First 0-4GB mapped
+        - Kernel mapped

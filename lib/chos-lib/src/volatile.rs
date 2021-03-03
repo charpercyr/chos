@@ -6,6 +6,7 @@ use core::intrinsics::volatile_copy_memory;
 pub trait WriteAccess {}
 pub trait ReadAccess {}
 
+pub struct NoAccess;
 pub struct WriteOnly;
 pub struct ReadOnly;
 pub struct ReadWrite;

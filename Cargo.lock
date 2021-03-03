@@ -3,6 +3,10 @@
 version = 3
 
 [[package]]
+name = "acpica"
+version = "0.1.0"
+
+[[package]]
 name = "bit_field"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22,8 +26,10 @@ dependencies = [
  "chos-lib",
  "chos-x64",
  "multiboot2",
+ "raw-cpuid",
  "rustc-demangle",
  "spin",
+ "static_assertions",
  "x86_64",
 ]
 
@@ -53,6 +59,11 @@ dependencies = [
 [[package]]
 name = "chos-x64"
 version = "0.1.0"
+dependencies = [
+ "chos-lib",
+ "static_assertions",
+ "x86_64",
+]
 
 [[package]]
 name = "multiboot2"
@@ -82,6 +93,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "raw-cpuid"
+version = "9.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c27cb5785b85bd05d4eb171556c9a1a514552e26123aeae6bb7d811353148026"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -92,6 +112,12 @@ name = "spin"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13287b4da9d1207a4f4929ac390916d64eacfe236a487e9a9f5b3be392be5162"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "syn"

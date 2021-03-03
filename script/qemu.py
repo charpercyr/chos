@@ -10,8 +10,9 @@ def qemu(binary: str, serial: bool = True, display: bool = False) -> bool:
     args = [
         'qemu-system-x86_64', binary,
         '-m', '4G',
+        '-smp', '2',
         '-machine', 'q35',
-        '-cpu', 'Skylake-Client-v1',
+        '-cpu', 'Skylake-Client-v3',
         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x4',
         '-display',
     ]

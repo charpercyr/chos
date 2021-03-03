@@ -13,6 +13,8 @@ chos-lib = { path = "../lib/chos-lib" }
 multiboot2 = "0.10.1"
 rustc-demangle = "0.1.18"
 spin = "0.7.1"
+static_assertions = "1.1.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 chos-x64 = { path = "../lib/chos-x64" }
+raw-cpuid = "9.0.0"

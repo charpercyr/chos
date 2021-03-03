@@ -28,6 +28,13 @@ extern "x86-interrupt" fn intr_page_fault(f: &mut InterruptStackFrame, _: PageFa
     panic!();
 }
 
+extern "x86-interrupt" fn intr_timer(_: &mut InterruptStackFrame) {
+    unsafe { crate::unsafe_print!(".") };
+}
+
+extern "x86-interrupt" fn intr_spurious(_: &mut InterruptStackFrame) {
+    // Nothing
+}
 
 fn disable_pic() {
     unsafe {
@@ -44,9 +51,13 @@ static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     idt.double_fault.set_handler_fn(intr_double_fault);
     idt.page_fault.set_handler_fn(intr_page_fault);
 
+    idt[0x20].set_handler_fn(intr_timer);
+    idt[0xff].set_handler_fn(intr_spurious);
+
     idt
 });
 
 pub fn initalize() {
     Lazy::force(&IDT).load();
+    x86_64::instructions::interrupts::enable();
 }
