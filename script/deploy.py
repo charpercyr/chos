@@ -14,14 +14,16 @@ COUNT = SIZE//BS
 LOOPDEV = '/dev/loop0'
 FSDEV = '/dev/loop0p1'
 
-CHOS_NAME='chos-boot.elf'
+CHOS_BOOT_NAME='chos-boot.elf'
+CHOS_KERNEL_NAME='chos-kernel.elf'
 
 GRUB_CFG=f"""\
 set timeout=0
 set default=0
 
 menuentry "chos" {{
-    multiboot2 /boot/{CHOS_NAME} output=serial
+    multiboot2 /boot/{CHOS_BOOT_NAME} output=serial
+    module2 /chos/{CHOS_KERNEL_NAME} kernel
     boot
 }}
 """
@@ -29,7 +31,7 @@ menuentry "chos" {{
 IMG = 'chos.img'
 FS = 'root'
 
-def deploy(binary: str, wd: str):
+def deploy(boot: str, kernel: str, wd: str):
     imgpath = f'{wd}/{IMG}'
     fspath = f'{wd}/{FS}'
 
@@ -41,10 +43,13 @@ def deploy(binary: str, wd: str):
     run('sudo', 'mount', FSDEV, fspath)
     run('sudo', 'grub-install', f'--root-directory={fspath}', f'--boot-directory={fspath}/boot', LOOPDEV)
 
-    run('sudo', 'cp', binary, f'{fspath}/boot/chos-boot.elf')
+    run('sudo', 'cp', boot, f'{fspath}/boot/chos-boot.elf')
 
     write_file(f'{wd}/grub.cfg', GRUB_CFG)
     run('sudo', 'cp', f'{wd}/grub.cfg', f'{fspath}/boot/grub/grub.cfg')
+
+    run('sudo', 'mkdir', '-p', f'{fspath}/chos')
+    run('sudo', 'cp', kernel, f'{fspath}/chos/chos-kernel.elf')
 
     run('sudo', 'umount', fspath)
     run('sudo', 'losetup', '-d', LOOPDEV)

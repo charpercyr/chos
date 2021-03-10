@@ -2,7 +2,7 @@
 1- Go to x64
     - First 4GB identity mapped with 1GB pages
 
-2- Initialize simple serial
+2- Initialize simple serial and interrupts
 
 3- Enable timer
     - Calculate timer frequency
@@ -15,7 +15,9 @@
 5- Start other processors
     - All x64 with the same page table
 
-6- Jump to kernel, from all processors
+6- Disable timer and interrupts
+
+7- Jump to kernel, from all processors
     - rsi = multiboot2 structure
     - rdx = Physical <-> Virtual memory map
     - rcx = initrd

@@ -11,6 +11,8 @@ pub mod int;
 
 pub mod str;
 
+pub mod stride;
+
 mod volatile;
 pub use volatile::*;
 

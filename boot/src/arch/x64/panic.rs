@@ -1,8 +1,9 @@
 
 use core::panic::PanicInfo;
 
-
 use rustc_demangle::demangle;
+
+use x86_64::instructions::interrupts::int3;
 
 use chos_x64::backtrace;
 

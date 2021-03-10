@@ -6,28 +6,37 @@ PYTHON ?= python3
 QEMU ?= qemu-system-x86_64
 
 BOOT := boot
+KERNEL := kernel
 
 BOOT_PROJECT := chos-$(BOOT)
+KERNEL_PROJECT := chos-$(KERNEL)
 
 FLAGS := -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
 
-include boot/arch/$(ARCH).mk
+include $(BOOT)/arch/$(ARCH).mk
+include $(KERNEL)/arch/$(ARCH).mk
 
-.PHONY: all build expand run test
+.PHONY: all build build-kernel run test gdb
 
 all: build
 
-build:
+build-kernel:
+	$(CARGO) build -p $(KERNEL_PROJECT) $(FLAGS) $(KERNEL_FLAGS)
+
+build: build-kernel
 	$(CARGO) build -p $(BOOT_PROJECT) $(FLAGS) $(BOOT_FLAGS)
 
-expand:
-	$(CARGO) expand -p $(BOOT_PROJECT) $(FLAGS) $(BOOT_FLAGS)
-
-run:
+run: build-kernel
 	$(CARGO) run -p $(BOOT_PROJECT) $(FLAGS) $(BOOT_FLAGS)
 
 test:
 	$(CARGO) test -p $(BOOT_PROJECT) $(FLAGS) $(BOOT_FLAGS)
+
+gdb:
+	rust-gdb \
+		-ex "set pagination off" \
+		-ex "file target/x86_64-chos-boot/debug/chos-boot.elf" \
+		-ex "target remote tcp::1234"
 
 clean:
 	$(CARGO) clean

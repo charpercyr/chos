@@ -14,6 +14,7 @@ def qemu(binary: str, serial: bool = True, display: bool = False) -> bool:
         '-machine', 'q35',
         '-cpu', 'Skylake-Client-v3',
         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x4',
+        # '-s', '-S',
         '-display',
     ]
     if display:

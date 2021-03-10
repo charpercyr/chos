@@ -16,6 +16,8 @@ use multiboot2 as mb;
 
 // use chos_x64::apic::Apic;
 
+use core::slice;
+
 #[no_mangle]
 pub extern "C" fn boot_main(mbh: usize) -> ! {
     let mut logdev = log::Device::Serial;
@@ -39,12 +41,28 @@ pub extern "C" fn boot_main(mbh: usize) -> ! {
     }
 
     intr::initalize();
-
-    let cpuid = raw_cpuid::CpuId::new();
-    match cpuid.get_processor_frequency_info() {
-        Some(freq) => println!("{:?}", freq),
-        None => println!("No CPU Frequency Info"),
-    };
+    
+    let mut kernel = None;
+    for module in mbh.module_tags() {
+        match module.name() {
+            "kernel" => kernel = Some(module),
+            _ => (),
+        };
+    }
+    
+    if let Some(kernel) = kernel {
+        let elf = unsafe {
+            chos_elf::Elf64::from_bytes_unchecked(
+                slice::from_raw_parts(
+                    kernel.start_address() as usize as *const u8,
+                    (kernel.end_address() - kernel.start_address()) as usize,
+                ),
+            )
+        };
+        for section in elf.sections().sections() {
+            println!("'{}'", section.name());
+        }
+    }
 
     exit_qemu(QemuStatus::Success);
 }

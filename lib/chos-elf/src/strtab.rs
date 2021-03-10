@@ -3,13 +3,14 @@ use core::marker::PhantomData;
 
 use chos_lib::str::from_cstring_utf8_bounded_unchecked;
 
+#[derive(Clone, Copy)]
 pub struct StringTable<'a> {
     ptr: *const u8,
     size: usize,
     _ref: PhantomData<&'a [u8]>,
 }
 
-impl StringTable<'_> {
+impl<'a> StringTable<'a> {
     pub unsafe fn new(ptr: *const u8, size: usize) -> Self {
         Self {
             ptr,
@@ -18,7 +19,7 @@ impl StringTable<'_> {
         }
     }
 
-    pub fn try_get_string(&self, idx: usize) -> Option<&str> {
+    pub fn try_get_string(&self, idx: usize) -> Option<&'a str> {
         if idx >= self.size {
             return None;
         }
@@ -28,7 +29,8 @@ impl StringTable<'_> {
         ) }
     }
 
-    pub fn get_string(&self, idx: usize) -> &str {
+    pub fn get_string(&self, idx: usize) -> &'a str {
+        assert!(idx < self.size, "Index [{}] out of bounds", idx);
         self.try_get_string(idx).unwrap()
     }
 }
