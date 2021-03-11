@@ -1,9 +1,8 @@
-
 use core::cmp::min;
 use core::fmt;
-use core::ops::{Bound, Index, IndexMut, RangeBounds};
 use core::marker::PhantomData;
 use core::mem::size_of;
+use core::ops::{Bound, Index, IndexMut, RangeBounds};
 
 #[derive(Clone, Copy)]
 pub struct StrideSlice<'a, T> {
@@ -39,15 +38,15 @@ macro_rules! stride_slice_impl {
                     }
                 }
             }
-        
+
             pub fn len(&self) -> usize {
                 self.len
             }
-        
+
             pub fn stride(&self) -> usize {
                 self.stride
             }
-        
+
             pub fn iter(&self) -> StrideSliceIter<'a, T> {
                 StrideSliceIter {
                     cur: self.ptr,
@@ -56,7 +55,7 @@ macro_rules! stride_slice_impl {
                     array: PhantomData,
                 }
             }
-        
+
             unsafe fn ptr_offset(&self, offset: usize) -> *$ptr T {
                 let ptr = self.ptr.cast::<u8>();
                 let ptr = ptr.add(offset * self.stride);
@@ -89,7 +88,15 @@ macro_rules! stride_slice_impl {
             }
         }
 
-        impl<'a, T> IntoIterator for &'_ $Stride<'a, T> {
+        impl<'a, T> IntoIterator for $Stride<'a, T> {
+            type Item = &'a T;
+            type IntoIter = StrideSliceIter<'a, T>;
+            fn into_iter(self) -> Self::IntoIter {
+                self.iter()
+            }
+        }
+
+        impl<'a, T> IntoIterator for &$Stride<'a, T> {
             type Item = &'a T;
             type IntoIter = StrideSliceIter<'a, T>;
             fn into_iter(self) -> Self::IntoIter {
@@ -113,7 +120,6 @@ macro_rules! stride_slice_impl {
 
 stride_slice_impl!(const StrideSlice);
 stride_slice_impl!(mut StrideSliceMut);
-
 
 impl<'a, T> From<&'a [T]> for StrideSlice<'a, T> {
     fn from(s: &'a [T]) -> Self {
@@ -179,7 +185,7 @@ impl<T> IndexMut<usize> for StrideSliceMut<'_, T> {
 
 impl<'a, T> StrideSliceMut<'a, T> {
     pub fn subslice_mut(&mut self, r: impl RangeBounds<usize>) -> StrideSliceMut<'_, T> {
-        unsafe { 
+        unsafe {
             let (start, _, len) = self.ptr_range(r);
             StrideSliceMut {
                 ptr: start,
@@ -221,6 +227,7 @@ impl<'a, T, const N: usize> From<&'a mut [T; N]> for StrideSliceMut<'a, T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct StrideSliceIter<'a, T> {
     cur: *const T,
     end: *const T,
@@ -265,14 +272,17 @@ impl<'a, T> Iterator for StrideSliceIterMut<'a, T> {
     }
 }
 
-
 /**
 Creates a StrideSlice from
 # Safety
 Behavior is undefined if any of the following conditions are violated
-- `ptr` mut be valid for reads 
+- `ptr` mut be valid for reads
 */
-pub unsafe fn from_raw_parts<'a, T>(ptr: *const T, len: usize, stride: usize) -> StrideSlice<'a, T> {
+pub unsafe fn from_raw_parts<'a, T>(
+    ptr: *const T,
+    len: usize,
+    stride: usize,
+) -> StrideSlice<'a, T> {
     StrideSlice {
         ptr,
         len,
@@ -281,7 +291,11 @@ pub unsafe fn from_raw_parts<'a, T>(ptr: *const T, len: usize, stride: usize) ->
     }
 }
 
-pub unsafe fn from_raw_parts_mut<'a, T>(ptr: *mut T, len: usize, stride: usize) -> StrideSliceMut<'a, T> {
+pub unsafe fn from_raw_parts_mut<'a, T>(
+    ptr: *mut T,
+    len: usize,
+    stride: usize,
+) -> StrideSliceMut<'a, T> {
     StrideSliceMut {
         ptr,
         len,

@@ -1,9 +1,8 @@
-
 use core::marker::PhantomData;
 
 use chos_lib::str::from_cstring_utf8_bounded_unchecked;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct StringTable<'a> {
     ptr: *const u8,
     size: usize,
@@ -23,10 +22,9 @@ impl<'a> StringTable<'a> {
         if idx >= self.size {
             return None;
         }
-        unsafe { from_cstring_utf8_bounded_unchecked(
-            self.ptr.offset(idx as isize),
-            self.size - idx,
-        ) }
+        unsafe {
+            from_cstring_utf8_bounded_unchecked(self.ptr.offset(idx as isize), self.size - idx)
+        }
     }
 
     pub fn get_string(&self, idx: usize) -> &'a str {

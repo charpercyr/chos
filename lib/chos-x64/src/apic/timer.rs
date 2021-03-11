@@ -1,5 +1,4 @@
-
-use super::{ApicRegisters};
+use super::ApicRegisters;
 
 pub struct Timer<'a> {
     registers: &'a mut ApicRegisters,

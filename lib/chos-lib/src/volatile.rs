@@ -1,7 +1,6 @@
-
+use core::intrinsics::volatile_copy_memory;
 use core::marker::PhantomData;
 use core::ptr;
-use core::intrinsics::volatile_copy_memory;
 
 pub trait WriteAccess {}
 pub trait ReadAccess {}
@@ -24,11 +23,18 @@ impl<T, P> Volatile<T, P> {
         Self(value, PhantomData)
     }
 
-    pub fn write(&mut self, value: T) where P: WriteAccess {
+    pub fn write(&mut self, value: T)
+    where
+        P: WriteAccess,
+    {
         unsafe { ptr::write_volatile(&mut self.0, value) }
     }
 
-    pub fn read(&self) -> T where T: Copy, P: ReadAccess {
+    pub fn read(&self) -> T
+    where
+        T: Copy,
+        P: ReadAccess,
+    {
         unsafe { ptr::read_volatile(&self.0) }
     }
 
@@ -46,7 +52,7 @@ impl<T, P> From<T> for Volatile<T, P> {
 pub unsafe fn copy_volatile<T: Copy, PS: ReadAccess, PD: WriteAccess>(
     src: *const Volatile<T, PS>,
     dst: *mut Volatile<T, PD>,
-    count: usize
+    count: usize,
 ) {
     use core::mem::transmute;
     volatile_copy_memory::<T>(transmute(dst), transmute(src), count)

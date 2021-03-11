@@ -6,11 +6,11 @@
     "target-pointer-width": "64",
     "target-c-int-width": "32",
     "os": "none",
+    "is_builtin": false,
 
-    "executables": true,
-    "position-independent-executables": true,
-    "relocation_model": "pic",
-
+    "executables": false,
+    "dynamic-linking": true,
+    "only-cdylib": false,
     "linker-flavor": "ld.lld",
     "linker": "rust-lld",
     "features": "-mmx,-sse,+soft-float",
@@ -19,7 +19,7 @@
             "-T", "./kernel/arch/x86_64.ld"
         ]
     },
-    "exe-suffix": ".elf",
+    "dll-prefix": "",
     "dll-suffix": ".elf",
 
     "eliminate-frame-pointer": false,

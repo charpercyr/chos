@@ -1,4 +1,3 @@
-
 macro_rules! ceil_div_impl {
     ($name:ident, $ty:ty) => {
         pub const fn $name(a: $ty, b: $ty) -> $ty {

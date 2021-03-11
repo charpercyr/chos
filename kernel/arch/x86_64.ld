@@ -2,20 +2,40 @@
 ENTRY(entry);
 
 SECTIONS {
-    .text : ALIGN(4k) {
+    . = 0;
+
+    .text : {
         *(.text*)
     }
 
-    .data : ALIGN(4K) {
+    .plt : {
+        *(.plt)
+    }
+
+    . = ALIGN(4K);
+
+    .data : {
         *(.data*)
     }
 
-    .rodata : ALIGN(4K) {
+    .got.plt : {
+        *(.got.plt*)
+    }
+
+    .bss : {
+        *(.bss*)
+    }
+
+    . = ALIGN(4K);
+
+    .rodata :  {
         *(.rodata*)
     }
 
-    .bss : ALIGN(4K) {
-        *(.bss*)
+    . = ALIGN(4K);
+
+    .tdata : {
+        *(.tdata)
     }
 
     . = ALIGN(4K);

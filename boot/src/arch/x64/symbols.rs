@@ -1,4 +1,3 @@
-
 use core::mem::MaybeUninit;
 
 use multiboot2 as mb;
@@ -26,8 +25,15 @@ pub fn init_symbols(sections: mb::ElfSectionsTag) {
     if let (Some(symt), Some(strt)) = (symt, strt) {
         unsafe {
             ELF_INITIALIZED = true;
-            STRING_TABLE = MaybeUninit::new(StringTable::new(strt.start_address() as _, strt.size() as _));
-            SYMBOL_TABLE = MaybeUninit::new(SymbolTable::new(symt.start_address() as _, symt.size() as _, STRING_TABLE.assume_init_ref()));
+            STRING_TABLE = MaybeUninit::new(StringTable::new(
+                strt.start_address() as _,
+                strt.size() as _,
+            ));
+            SYMBOL_TABLE = MaybeUninit::new(SymbolTable::new(
+                symt.start_address() as _,
+                symt.size() as _,
+                STRING_TABLE.assume_init(),
+            ));
         }
     }
 }
@@ -35,7 +41,9 @@ pub fn init_symbols(sections: mb::ElfSectionsTag) {
 pub fn find_symbol(addr: usize) -> Option<(&'static str, usize)> {
     let addr = addr as u64;
     if let Some(symt) = unsafe { get_symt() } {
-        if let Some(sym) = symt.symbols().find(|s| (s.typ() == SymbolType::Func) && (addr >= s.addr()) && (addr < s.addr() + s.size())) {
+        if let Some(sym) = symt.iter().find(|s| {
+            (s.typ() == SymbolType::Func) && (addr >= s.addr()) && (addr < s.addr() + s.size())
+        }) {
             Some((sym.name(), (addr - sym.addr()) as usize))
         } else {
             None

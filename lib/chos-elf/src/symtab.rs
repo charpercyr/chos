@@ -1,15 +1,15 @@
-
 use core::marker::PhantomData;
 use core::mem::size_of;
 
-use crate::StringTable;
-use crate::raw::Elf64Sym;
+use chos_lib::stride::{self, StrideSlice};
 
+use crate::raw::Elf64Sym;
+use crate::StringTable;
+
+#[derive(Clone, Copy, Debug)]
 pub struct SymbolTable<'a> {
-    entries: *const Elf64Sym,
-    size: usize,
-    strings: &'a StringTable<'a>,
-    _ref: PhantomData<&'a [Elf64Sym]>,
+    entries: StrideSlice<'a, Elf64Sym>,
+    strings: StringTable<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,54 +27,62 @@ pub enum SymbolType {
     Func,
     Section,
     File,
+    Common,
+    Tls,
     Other(u8),
 }
 
 impl<'a> SymbolTable<'a> {
-    pub unsafe fn new(entries: *const u8, size: usize, strings: &'a StringTable<'a>) -> Self {
-        assert!(size % size_of::<Elf64Sym>() == 0);
+    pub unsafe fn new(entries: *const u8, size: usize, strings: StringTable<'a>) -> Self {
+        Self::new_with_stride(entries, size, size_of::<Elf64Sym>(), strings)
+    }
+    pub unsafe fn new_with_stride(
+        entries: *const u8,
+        size: usize,
+        entsize: usize,
+        strings: StringTable<'a>,
+    ) -> Self {
+        assert!(size % entsize == 0);
         Self {
-            entries: entries.cast(),
-            size: size / size_of::<Elf64Sym>(),
+            entries: stride::from_raw_parts(entries as *const _, size / entsize, entsize),
             strings,
-            _ref: PhantomData,
         }
     }
 
-    pub fn symbols(&self) -> Symbols<'_> {
-        Symbols {
-            cur: self.entries,
+    pub fn iter(&'a self) -> SymbolTableIter<'a> {
+        SymbolTableIter {
+            iter: self.entries.iter(),
             symtab: self,
         }
     }
 }
 
-pub struct Symbols<'a> {
-    cur: *const Elf64Sym,
+impl<'a> IntoIterator for &'a SymbolTable<'a> {
+    type Item = Symbol<'a>;
+    type IntoIter = SymbolTableIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+pub struct SymbolTableIter<'a> {
+    iter: stride::StrideSliceIter<'a, Elf64Sym>,
     symtab: &'a SymbolTable<'a>,
 }
 
-impl<'a> Iterator for Symbols<'a> {
+impl<'a> Iterator for SymbolTableIter<'a> {
     type Item = Symbol<'a>;
 
     fn next(&mut self) -> Option<Symbol<'a>> {
-        unsafe {
-            if (self.cur.offset_from(self.symtab.entries) as usize) <= self.symtab.size {
-                let sym = Symbol {
-                    entry: self.cur,
-                    symtab: self.symtab,
-                };
-                self.cur = self.cur.offset(1);
-                Some(sym)
-            } else {
-                None
-            }
-        }
+        self.iter.next().map(|entry| Symbol {
+            entry,
+            symtab: self.symtab,
+        })
     }
 }
 
 pub struct Symbol<'a> {
-    entry: *const Elf64Sym,
+    entry: &'a Elf64Sym,
     symtab: &'a SymbolTable<'a>,
 }
 
@@ -99,6 +107,8 @@ impl<'a> Symbol<'a> {
             2 => SymbolType::Func,
             3 => SymbolType::Section,
             4 => SymbolType::File,
+            5 => SymbolType::Common,
+            6 => SymbolType::Tls,
             t => SymbolType::Other(t),
         }
     }
@@ -115,7 +125,7 @@ impl<'a> Symbol<'a> {
         self.raw().size
     }
 
-    pub fn raw(&self) -> &Elf64Sym {
-        unsafe { &*self.entry }
+    pub fn raw(&self) -> &'a Elf64Sym {
+        self.entry
     }
 }

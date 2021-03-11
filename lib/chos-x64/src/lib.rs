@@ -1,5 +1,4 @@
 #![no_std]
-
 #![feature(asm)]
 #![feature(associated_type_bounds)]
 

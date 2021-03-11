@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 chos-lib = { path = "../chos-lib" }
+bitflags = "1.2.1"

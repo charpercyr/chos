@@ -2,8 +2,10 @@
 
 pub mod raw;
 
+mod program;
+pub use program::*;
+
 mod section;
-use raw::Elf64Shdr;
 pub use section::*;
 
 mod strtab;
@@ -45,17 +47,34 @@ impl<'a> Elf64<'a> {
         }
     }
 
+    pub fn program(&self) -> ProgramTable<'a> {
+        let hdr = self.raw();
+        unsafe {
+            ProgramTable::new(
+                (self.hdr as *const u8).add(hdr.phoff as _),
+                hdr.phentsize as _,
+                hdr.phnum as _,
+            )
+        }
+    }
+
     pub fn sections(&self) -> SectionTable<'a> {
         let hdr = self.raw();
-        let shstrt = self.hdr as usize + hdr.shoff as usize + (hdr.shstrndx as usize) * (hdr.shentsize as usize);
-        let shstrt = shstrt as *const Elf64Shdr;
+        let shstrt = self.hdr as usize
+            + hdr.shoff as usize
+            + (hdr.shstrndx as usize) * (hdr.shentsize as usize);
+        let shstrt = shstrt as *const raw::Elf64Shdr;
         unsafe {
             let shstrt = &*(shstrt);
             SectionTable::new(
+                self.hdr as *const u8,
                 (self.hdr as *const u8).add(hdr.shoff as usize),
                 hdr.shentsize as _,
                 hdr.shnum as _,
-                StringTable::new((self.hdr as *const u8).offset(shstrt.off as _), shstrt.size as _),
+                StringTable::new(
+                    (self.hdr as *const u8).offset(shstrt.off as _),
+                    shstrt.size as _,
+                ),
             )
         }
     }

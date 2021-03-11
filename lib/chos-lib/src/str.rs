@@ -1,10 +1,6 @@
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 use core::str::{
-    from_utf8,
-    from_utf8_mut,
-    from_utf8_unchecked,
-    from_utf8_unchecked_mut,
-    Utf8Error,
+    from_utf8, from_utf8_mut, from_utf8_unchecked, from_utf8_unchecked_mut, Utf8Error,
 };
 
 pub enum BoundedError {
@@ -17,7 +13,7 @@ pub unsafe fn strlen_bounded(s: *const u8, max: usize) -> Option<usize> {
     let mut cur = s;
     while *cur != 0 {
         if (cur.offset_from(s) as usize) > max {
-            return None
+            return None;
         }
         cur = cur.offset(1);
     }
@@ -32,7 +28,10 @@ pub unsafe fn from_cstring_utf8<'a>(s: *const u8) -> Result<&'a str, Utf8Error> 
     from_utf8(from_raw_parts(s, strlen(s)))
 }
 
-pub unsafe fn from_cstring_utf8_bounded<'a>(s: *const u8, max: usize) -> Result<&'a str, BoundedError> {
+pub unsafe fn from_cstring_utf8_bounded<'a>(
+    s: *const u8,
+    max: usize,
+) -> Result<&'a str, BoundedError> {
     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
     from_utf8(from_raw_parts(s, len)).map_err(|e| BoundedError::Utf8Error(e))
 }
@@ -41,7 +40,10 @@ pub unsafe fn from_cstring_utf8_mut<'a>(s: *mut u8) -> Result<&'a mut str, Utf8E
     from_utf8_mut(from_raw_parts_mut(s, strlen(s)))
 }
 
-pub unsafe fn from_cstring_utf8_bounded_mut<'a>(s: *mut u8, max: usize) -> Result<&'a mut str, BoundedError> {
+pub unsafe fn from_cstring_utf8_bounded_mut<'a>(
+    s: *mut u8,
+    max: usize,
+) -> Result<&'a mut str, BoundedError> {
     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
     from_utf8_mut(from_raw_parts_mut(s, len)).map_err(|e| BoundedError::Utf8Error(e))
 }
@@ -59,7 +61,10 @@ pub unsafe fn from_cstring_utf8_unchecked_mut<'a>(s: *mut u8) -> &'a mut str {
     from_utf8_unchecked_mut(from_raw_parts_mut(s, strlen(s)))
 }
 
-pub unsafe fn from_cstring_utf8_bounded_unchecked_mut<'a>(s: *mut u8, max: usize) -> Option<&'a mut str> {
+pub unsafe fn from_cstring_utf8_bounded_unchecked_mut<'a>(
+    s: *mut u8,
+    max: usize,
+) -> Option<&'a mut str> {
     let len = strlen_bounded(s, max)?;
     Some(from_utf8_unchecked_mut(from_raw_parts_mut(s, len)))
 }

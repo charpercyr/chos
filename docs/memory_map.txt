@@ -13,5 +13,13 @@ Device memory, max 4G
 No cache, write trough, RW, NEX
 
 0xffff'8000'0020'0000'0000 - 0xffff'8000'002f'ffff'ffff
-Kernel ELF, max 64G
-Cache, write back, maps to ELF
+Kernel ELF File, max 64G
+Cache, write back, copy of ELF, R, NEX
+
+0xffff'8000'0030'0000'0000 - 0xffff'8000'003f'ffff'ffff
+Kernel executable, from ELF, max 64G
+Cache, write back, mapped from ELF
+
+0xffff'8000'0040'0000'0000 - 0xffff'8000'004f'ffff'ffff
+Page table
+No cache, write through, RW, NEX

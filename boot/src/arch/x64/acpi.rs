@@ -1,4 +1,3 @@
-
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem::{size_of, transmute};
@@ -41,7 +40,10 @@ impl fmt::Debug for SDTHeader {
                 .field("revision", &self.revision)
                 .field("checksum", &self.checksum)
                 .field("oemid", &core::str::from_utf8_unchecked(&self.oemid))
-                .field("oem_table_id", &core::str::from_utf8_unchecked(&self.oem_table_id))
+                .field(
+                    "oem_table_id",
+                    &core::str::from_utf8_unchecked(&self.oem_table_id),
+                )
                 .field("oem_revision", &self.oem_revision)
                 .field("creator_id", &self.creator_id)
                 .field("creator_revision", &self.creator_revision)
@@ -67,7 +69,9 @@ impl RSDT {
     }
 
     pub fn madt(&self) -> Option<&MADT> {
-        self.sdts().find(|&sdt| &sdt.sig == MADT::SIGNATURE).map(|sdt| unsafe { transmute(sdt) })
+        self.sdts()
+            .find(|&sdt| &sdt.sig == MADT::SIGNATURE)
+            .map(|sdt| unsafe { transmute(sdt) })
     }
 
     fn sdt_ptr(&self) -> (*const u32, usize) {

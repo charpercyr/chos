@@ -1,8 +1,7 @@
-
-use std::error::Error;
 use std::env;
+use std::error::Error;
 use std::fmt;
-use std::process::{Command};
+use std::process::Command;
 
 #[derive(Debug, Copy, Clone)]
 struct RunError<'a> {

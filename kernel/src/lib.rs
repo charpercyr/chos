@@ -1,7 +1,11 @@
 #![no_std]
-#![no_main]
 
 #![feature(asm)]
+#![feature(extended_key_value_attributes)]
+#![feature(maybe_uninit_ref)]
+
+#[macro_use]
+mod arch;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -9,11 +13,6 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 }
 
 #[no_mangle]
-pub static mut VAR: usize = 0;
-
-#[no_mangle]
 pub extern "C" fn entry() -> ! {
-    unsafe {
-        panic!("{}", VAR);
-    }
+    loop {}
 }

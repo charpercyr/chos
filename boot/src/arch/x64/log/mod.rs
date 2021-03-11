@@ -1,4 +1,3 @@
-
 mod serial;
 mod vga;
 
@@ -65,7 +64,7 @@ macro_rules! hexdump {
     ($v:expr) => {{
         #[allow(unused_unsafe)]
         unsafe {
-            use core::mem::{transmute, size_of_val};
+            use core::mem::{size_of_val, transmute};
             let len = size_of_val(&$v);
             let ptr: *const u8 = transmute(&$v);
             let mut i = 0;

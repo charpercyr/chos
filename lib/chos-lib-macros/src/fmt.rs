@@ -1,31 +1,21 @@
-
 use std::collections::HashSet;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    Expr,
-    Generics,
-    Ident,
     parse::{Parse, ParseStream},
-    Token,
-    Type,
-    WhereClause,
+    Expr, Generics, Ident, Token, Type, WhereClause,
 };
 
 fn all_fmts(span: Span) -> HashSet<Ident> {
     [
-        "Debug",
-        "Display",
-        "Pointer",
-        "Binary",
-        "Octal",
-        "LowerHex", "UpperHex",
-        "LowerExp", "UpperExp",
-    ].iter()
-        .map(|&d| Ident::new(d, span.clone()))
-        .collect()
+        "Debug", "Display", "Pointer", "Binary", "Octal", "LowerHex", "UpperHex", "LowerExp",
+        "UpperExp",
+    ]
+    .iter()
+    .map(|&d| Ident::new(d, span.clone()))
+    .collect()
 }
 
 struct ForwardFmt {
@@ -91,14 +81,19 @@ pub fn parse_forward_fmt(items: TokenStream) -> TokenStream {
         fty,
     } = syn::parse_macro_input!(items as ForwardFmt);
     let wh = wh.map(|w| w.predicates);
-    let impls: Vec<_> = fmts.into_iter().map(|f| quote! {
-        impl #generics core::fmt::#f for #ty where #fty: core::fmt::#f, #wh {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                let field = (#field)(self);
-                core::fmt::#f::fmt(&field, f)
+    let impls: Vec<_> = fmts
+        .into_iter()
+        .map(|f| {
+            quote! {
+                impl #generics core::fmt::#f for #ty where #fty: core::fmt::#f, #wh {
+                    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                        let field = (#field)(self);
+                        core::fmt::#f::fmt(&field, f)
+                    }
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
     let expanded = quote! {
         #(#impls)*
     };

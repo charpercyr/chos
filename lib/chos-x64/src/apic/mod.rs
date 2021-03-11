@@ -1,6 +1,5 @@
-
-use x86_64::VirtAddr;
 use x86_64::registers::model_specific::Msr;
+use x86_64::VirtAddr;
 
 const MSR_LOCAL_APIC_BASE: u32 = 0x1b;
 
@@ -50,13 +49,13 @@ impl Apic {
     }
 
     pub unsafe fn id(&self) -> u32 {
-        self.registers().lapic_id.read()  
+        self.registers().lapic_id.read()
     }
 
     pub unsafe fn version(&self) -> u32 {
         (*self.registers).lapic_version.read()
     }
-    
+
     pub unsafe fn timer(&mut self) -> timer::Timer<'_> {
         timer::Timer::new(self.registers_mut())
     }

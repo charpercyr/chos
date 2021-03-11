@@ -19,6 +19,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "cfg-if"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chos"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "chos-x64",
+ "paste",
+ "x86_64",
+]
+
+[[package]]
 name = "chos-boot"
 version = "0.1.0"
 dependencies = [
@@ -37,12 +53,9 @@ dependencies = [
 name = "chos-elf"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "chos-lib",
 ]
-
-[[package]]
-name = "chos-kernel"
-version = "0.1.0"
 
 [[package]]
 name = "chos-lib"
@@ -77,6 +90,12 @@ checksum = "13e9fc890ff2ef2ded9084c964b950da1bc9e26d480e446ae721607b899db1fd"
 dependencies = [
  "bitflags",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5d65c4d95931acda4498f675e332fcbdc9a06705cd07086c510e9b6009cd1c1"
 
 [[package]]
 name = "proc-macro2"

@@ -1,4 +1,3 @@
-
 use rustc_demangle::demangle;
 
 use spin::Lazy;
@@ -18,8 +17,15 @@ extern "x86-interrupt" fn intr_double_fault(f: &mut InterruptStackFrame, _: u64)
 extern "x86-interrupt" fn intr_page_fault(f: &mut InterruptStackFrame, _: PageFaultErrorCode) {
     use crate::unsafe_println;
     unsafe {
-        if let Some((name, offset)) = super::symbols::find_symbol(f.instruction_pointer.as_u64() as _) {
-            unsafe_println!("PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]", f.instruction_pointer.as_u64(), demangle(name), offset)
+        if let Some((name, offset)) =
+            super::symbols::find_symbol(f.instruction_pointer.as_u64() as _)
+        {
+            unsafe_println!(
+                "PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]",
+                f.instruction_pointer.as_u64(),
+                demangle(name),
+                offset
+            )
         } else {
             unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.instruction_pointer.as_u64());
         }

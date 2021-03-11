@@ -1,0 +1,33 @@
+
+1- Go to x64
+    - First 4GB identity mapped with 1GB pages
+
+2- Initialize simple serial and interrupts
+
+3- Load and map kernel from multiboot2
+    - PIC x64 kernel
+    - Map to higher half
+
+4- Enable timer
+    - Calculate timer frequency
+    - Used for delays
+
+5- Start other processors
+    - All x64 with the same page table
+
+6- Disable timer and interrupts
+
+7- Jump to kernel, from all processors
+    - rdi = kernel boot info structure (See below)
+    - Page table
+        - First 0-4GB mapped
+        - Kernel ELF mapped
+        - Kernel mapped
+        - Page table mapped
+
+Kernel boot structure
+    - Multiboot2 info
+    - Kernel base address
+    - Kernel ELF content
+    - Page table pointer
+    - Boot memory map / allocation

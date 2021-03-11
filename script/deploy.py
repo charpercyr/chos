@@ -15,7 +15,7 @@ LOOPDEV = '/dev/loop0'
 FSDEV = '/dev/loop0p1'
 
 CHOS_BOOT_NAME='chos-boot.elf'
-CHOS_KERNEL_NAME='chos-kernel.elf'
+CHOS_KERNEL_NAME='chos.elf'
 
 GRUB_CFG=f"""\
 set timeout=0
@@ -43,13 +43,13 @@ def deploy(boot: str, kernel: str, wd: str):
     run('sudo', 'mount', FSDEV, fspath)
     run('sudo', 'grub-install', f'--root-directory={fspath}', f'--boot-directory={fspath}/boot', LOOPDEV)
 
-    run('sudo', 'cp', boot, f'{fspath}/boot/chos-boot.elf')
+    run('sudo', 'cp', boot, f'{fspath}/boot/{CHOS_BOOT_NAME}')
 
     write_file(f'{wd}/grub.cfg', GRUB_CFG)
     run('sudo', 'cp', f'{wd}/grub.cfg', f'{fspath}/boot/grub/grub.cfg')
 
     run('sudo', 'mkdir', '-p', f'{fspath}/chos')
-    run('sudo', 'cp', kernel, f'{fspath}/chos/chos-kernel.elf')
+    run('sudo', 'cp', kernel, f'{fspath}/chos/{CHOS_KERNEL_NAME}')
 
     run('sudo', 'umount', fspath)
     run('sudo', 'losetup', '-d', LOOPDEV)

@@ -1,4 +1,3 @@
-
 use core::fmt;
 use core::hint;
 

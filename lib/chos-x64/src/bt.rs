@@ -1,4 +1,3 @@
-
 use core::ptr::null;
 
 #[repr(C, packed)]
@@ -35,7 +34,5 @@ pub unsafe fn backtrace() -> Backtrace {
         "mov {}, rbp",
         out(reg) frame,
     );
-    Backtrace {
-        frame,
-    }
+    Backtrace { frame }
 }

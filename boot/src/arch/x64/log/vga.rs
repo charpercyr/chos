@@ -1,4 +1,3 @@
-
 use chos_lib::{copy_volatile, Volatile};
 
 use core::fmt;
@@ -74,10 +73,7 @@ impl Vga {
     const HEIGHT: usize = 25;
 
     const fn new() -> Self {
-        Self{
-            x: 0,
-            y: 0,
-        }
+        Self { x: 0, y: 0 }
     }
 
     pub fn put(&mut self, entry: VgaEntry) {
@@ -135,9 +131,11 @@ impl fmt::Write for Vga {
         for &b in s.as_bytes() {
             match b {
                 b'\n' => self.newline(),
-                b'\t' => for _ in 0..(4 - self.x % 4) {
-                    self.put(VgaEntry::new(b' ', VgaColor::White, VgaColor::Black));
-                },
+                b'\t' => {
+                    for _ in 0..(4 - self.x % 4) {
+                        self.put(VgaEntry::new(b' ', VgaColor::White, VgaColor::Black));
+                    }
+                }
                 0x20..=0x7e => self.put(VgaEntry::new(b, VgaColor::White, VgaColor::Black)),
                 _ => self.put(VgaEntry::new(0xfe, VgaColor::White, VgaColor::Black)),
             }

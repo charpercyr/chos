@@ -9,7 +9,7 @@ BOOT := boot
 KERNEL := kernel
 
 BOOT_PROJECT := chos-$(BOOT)
-KERNEL_PROJECT := chos-$(KERNEL)
+KERNEL_PROJECT := chos
 
 FLAGS := -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
 

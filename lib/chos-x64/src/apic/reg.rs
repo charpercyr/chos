@@ -1,7 +1,4 @@
-
-
-
-use chos_lib::{ReadOnly, WriteOnly, ReadWrite, NoAccess, Volatile, WriteAccess, ReadAccess};
+use chos_lib::{NoAccess, ReadAccess, ReadOnly, ReadWrite, Volatile, WriteAccess, WriteOnly};
 
 use static_assertions as sa;
 
@@ -13,11 +10,17 @@ pub struct Register<P> {
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);
 
 impl<P> Register<P> {
-    pub fn read(&self) -> u32 where P: ReadAccess {
+    pub fn read(&self) -> u32
+    where
+        P: ReadAccess,
+    {
         self.value.read()
     }
 
-    pub fn write(&mut self, v: u32) where P: WriteAccess {
+    pub fn write(&mut self, v: u32)
+    where
+        P: WriteAccess,
+    {
         self.value.write(v)
     }
 }
