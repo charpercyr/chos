@@ -1,5 +1,6 @@
 #![no_std]
 
+#![feature(allocator_api)]
 #![feature(asm)]
 #![feature(extended_key_value_attributes)]
 #![feature(maybe_uninit_ref)]

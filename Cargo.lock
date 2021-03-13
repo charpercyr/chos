@@ -29,6 +29,7 @@ name = "chos"
 version = "0.1.0"
 dependencies = [
  "cfg-if",
+ "chos-lib",
  "chos-x64",
  "paste",
  "x86_64",

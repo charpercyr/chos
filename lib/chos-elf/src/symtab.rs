@@ -1,4 +1,3 @@
-use core::marker::PhantomData;
 use core::mem::size_of;
 
 use chos_lib::stride::{self, StrideSlice};
