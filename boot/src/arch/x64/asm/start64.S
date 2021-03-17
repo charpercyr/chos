@@ -5,17 +5,16 @@
 .global _start64
 .type _start64, @function
 _start64:
-    mov $stack64_begin, %rsp
-    push $0
-
-    mov $0, %rbp
-
     mov $0x0, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
     mov %ax, %ss
+
+    mov $stack64_begin, %rsp
+    push $0
+    mov $0, %rbp
 
     mov %rbx, %rdi
     call boot_main

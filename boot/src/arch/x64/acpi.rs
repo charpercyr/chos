@@ -192,6 +192,7 @@ pub enum MADTEntry<'a> {
     Unknown(&'a MADTEntryHeader),
 }
 
+#[derive(Clone, Copy)]
 pub struct MADTIter<'a> {
     cur: *const u8,
     end: *const u8,

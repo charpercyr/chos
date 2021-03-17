@@ -110,7 +110,7 @@ impl<T: PoolArcAdapter, P: GlobalPool<T>> PoolArc<T, P> {
     }
 }
 
-impl<T: PoolArcAdapter, P: Pool<T>> Drop for PoolArc<T, P> {
+unsafe impl<#[may_dangle] T: PoolArcAdapter, P: Pool<T>> Drop for PoolArc<T, P> {
     fn drop(&mut self) {
         if self.get_count().fetch_sub(1, Ordering::Release) != 1 {
             return;

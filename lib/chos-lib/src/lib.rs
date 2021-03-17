@@ -4,6 +4,7 @@
 #![feature(bool_to_option)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]
+#![feature(dropck_eyepatch)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;

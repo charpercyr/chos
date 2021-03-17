@@ -1,8 +1,9 @@
 {
     "rust-analyzer.cargo.target": "boot/arch/x86_64-chos-boot.json",
     "rust-analyzer.checkOnSave.allTargets": false,
+    "rust-analyzer.cargo.allFeatures": true,
     "rust-analyzer.checkOnSave.extraArgs": [
-        "-Zbuild-std=core,alloc"
+        "-Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem"
     ],
     "rust-analyzer.diagnostics.disabled": [
         "macro-error"

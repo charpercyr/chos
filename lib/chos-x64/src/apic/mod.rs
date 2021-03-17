@@ -60,11 +60,50 @@ impl Apic {
         timer::Timer::new(self.registers_mut())
     }
 
+    pub unsafe fn start_ap(&mut self, lapic_id: u8, code_page: usize, delay_us: fn(usize)) {
+        start_ap(
+            &mut self.registers_mut().interrupt_command,
+            lapic_id,
+            code_page,
+            delay_us,
+        );
+    }
+
     unsafe fn registers(&self) -> &ApicRegisters {
         &*self.registers
     }
 
     unsafe fn registers_mut(&mut self) -> &mut ApicRegisters {
         &mut *self.registers
+    }
+}
+
+unsafe fn wait_for_delivery(cmd: &mut Register<chos_lib::ReadWrite>) {
+    while cmd.read() & (1 << 12) != 0 {
+        core::hint::spin_loop();
+    }
+}
+
+unsafe fn start_ap(
+    cmd: &mut [Register<chos_lib::ReadWrite>; 2],
+    lapic_id: u8,
+    code_page: usize,
+    delay_us: fn(usize),
+) {
+    cmd[1].write((cmd[1].read() & 0x00ff_ffff) | ((lapic_id as u32) << 24));
+    cmd[0].write((cmd[0].read() & 0xfff0_0000) | 0x0000_c500);
+    wait_for_delivery(&mut cmd[0]);
+
+    cmd[1].write((cmd[1].read() & 0x00ff_ffff) | ((lapic_id as u32) << 24));
+    cmd[0].write((cmd[0].read() & 0xfff0_0000) | 0x0000_8500);
+    wait_for_delivery(&mut cmd[0]);
+
+    delay_us(10_000);
+
+    for _ in 0..2 {
+        cmd[1].write((cmd[1].read() & 0x00ff_ffff) | ((lapic_id as u32) << 24));
+        cmd[0].write((cmd[0].read() & 0xfff0_f800) | 0x000608);
+        delay_us(200);
+        wait_for_delivery(&mut cmd[0]);
     }
 }
