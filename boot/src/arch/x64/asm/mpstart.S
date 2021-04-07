@@ -40,7 +40,7 @@ MPSTART_16:
     .code32
 
     // Set segment registers to 3rd entry (data segment)
-    mov $0x10, %ax
+    movw $0x10, %ax
     movw %ax, %ds
     movw %ax, %ss
 
@@ -49,22 +49,23 @@ MPSTART_16:
     lgdt (%eax)
 
     // Set page table
-    mov $MPSTART_PDT4, %eax
-    mov %eax, %cr3
+    movl $MPSTART_PDT4, %eax
+    movl (%eax), %eax
+    movl %eax, %cr3
 
     // Enable long mode
-    mov %cr4, %eax
-    or $(1 << 5), %eax
-    mov %eax, %cr4
+    movl %cr4, %eax
+    orl $(1 << 5), %eax
+    movl %eax, %cr4
 
-    mov $0xC0000080, %ecx
+    movl $0xC0000080, %ecx
     rdmsr
-    or $(1 << 8), %eax
+    orl $(1 << 8), %eax
     wrmsr
 
-    mov %cr0, %eax
-    or $(1 << 31), %eax
-    mov %eax, %cr0
+    movl %cr0, %eax
+    orl $(1 << 31), %eax
+    movl %eax, %cr0
 
     // Jmp to long mode
     ljmpl $0x8, $(.Lmpstart64 - START + BASE)
@@ -74,26 +75,42 @@ MPSTART_16:
 .Lmpstart64:
     .code64
     // Clear segment registers
-    mov $0x0, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-    mov %ax, %ss
+    movw $0x0, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    movw %ax, %ss
 
-    // Setup stack
-    // TODO
 
-    call secondary_main
+    // Setup stack for CPU
+    // ebx = APIC ID + 1
+    // eax = Stack base
+    // ecx = stack stride
+    // rsp = eax + ecx * ebx
+    mov $0x1, %rax
+    cpuid
+    and $0xff000000, %ebx
+    shr $24, %ebx
+    inc %ebx
+
+    mov $MPSTART_STACK_BASE, %eax
+    mov (%rax), %eax
+    mov $MPSTART_STACK_STRIDE, %ecx
+    mov (%rcx), %ecx
+
+    imul %ebx, %ecx
+    lea (%rax, %rcx), %rsp
+    push $0
+
+    mov $0, %rbp
+
+    movl $secondary_main, %eax
+    callq *%rax
 0:
     hlt
     jmp 0b
 .size MPSTART_16, . - MPSTART_16
-
-.global MPSTART_16_LEN
-.type MPSTART_16_LEN, @object
-MPSTART_16_LEN: .quad . - MPSTART_16
-.size MPSTART_16_LEN, . - MPSTART_16_LEN
 
 .align 16
 .type MPSTART_GDT32, @object
@@ -121,3 +138,8 @@ MPSTART_GDT64_PTR:
 .word . - MPSTART_GDT64 - 1
 .quad MPSTART_GDT64 - START + BASE
 .size MPSTART_GDT64_PTR, . - MPSTART_GDT64_PTR
+
+.global MPSTART_16_LEN
+.type MPSTART_16_LEN, @object
+MPSTART_16_LEN: .quad . - MPSTART_16
+.size MPSTART_16_LEN, . - MPSTART_16_LEN

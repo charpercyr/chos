@@ -1,10 +1,21 @@
+use core::mem::MaybeUninit;
+
 use rustc_demangle::demangle;
 
 use spin::Lazy;
 
+use chos_x64::apic::{self, Apic};
+use chos_x64::ioapic::{self, IOApic};
+
 use x86_64::instructions::port::PortWriteOnly;
 use x86_64::registers::control::Cr2;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode, HandlerFunc};
+use x86_64::instructions::interrupts::without_interrupts;
+
+use super::acpi::madt::{self, MADT};
+
+pub const INTERRUPT_SPURIOUS: u8 = 0xff;
+pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
 
 extern "x86-interrupt" fn intr_breakpoint(f: &mut InterruptStackFrame) {
     unsafe { crate::unsafe_println!("BREAKPOINT: {:?}", f) };
@@ -34,10 +45,6 @@ extern "x86-interrupt" fn intr_page_fault(f: &mut InterruptStackFrame, _: PageFa
     panic!();
 }
 
-extern "x86-interrupt" fn intr_timer(_: &mut InterruptStackFrame) {
-    unsafe { crate::unsafe_print!(".") };
-}
-
 extern "x86-interrupt" fn intr_spurious(_: &mut InterruptStackFrame) {
     // Nothing
 }
@@ -49,21 +56,76 @@ fn disable_pic() {
     }
 }
 
-static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
-    disable_pic();
-    let mut idt = InterruptDescriptorTable::new();
+static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+static mut APIC: MaybeUninit<Apic> = MaybeUninit::uninit();
+static mut IO_APIC: MaybeUninit<IOApic> = MaybeUninit::uninit();
 
+pub fn initalize(madt: &MADT) {
+    disable_pic();
+
+    let idt = unsafe { &mut IDT };
     idt.breakpoint.set_handler_fn(intr_breakpoint);
     idt.double_fault.set_handler_fn(intr_double_fault);
     idt.page_fault.set_handler_fn(intr_page_fault);
 
-    idt[0x20].set_handler_fn(intr_timer);
-    idt[0xff].set_handler_fn(intr_spurious);
+    let ioapic = madt.entries().find_map(|e| {
+        if let madt::Entry::IOAPIC(ioapic) = e {
+            Some(ioapic)
+        } else {
+            None
+        }
+    }).expect("Expect at least 1 IOApic");
+    
+    let apic;
+    unsafe {
+        APIC = MaybeUninit::new(Apic::with_address(madt.lapic_address as usize));
+        IO_APIC = MaybeUninit::new(IOApic::with_address(ioapic.ioapic_address as usize));
 
-    idt
-});
+        apic = APIC.assume_init_mut();
+        let ioapic = IO_APIC.assume_init_mut();
+    }
 
-pub fn initalize() {
-    Lazy::force(&IDT).load();
+    unsafe {
+        IDT[INTERRUPT_SPURIOUS as usize].set_handler_fn(intr_spurious);
+        apic.initialize(INTERRUPT_SPURIOUS);
+    }
+
+    idt.load();
+    
     x86_64::instructions::interrupts::enable();
+}
+
+pub unsafe fn apic() -> &'static mut Apic {
+    APIC.assume_init_mut()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IOApicAllocFailed;
+
+pub fn try_ioapic_alloc<R, F: FnOnce(&mut ioapic::RedirectionEntry) -> R>(n: u8, f: F, handler: HandlerFunc) -> Result<R, IOApicAllocFailed> {
+    without_interrupts(move || {
+        let ioapic = unsafe { IO_APIC.assume_init_mut() };
+        if n >= ioapic.max_red_entries() {
+            return Err(IOApicAllocFailed);
+        }
+        let mut red = ioapic.read_redirection(n);
+        if red.enabled() {
+            return Err(IOApicAllocFailed);
+        }
+
+        let idt = unsafe { &mut IDT };
+        idt[(INTERRUPT_IOAPIC_BASE + n) as usize].set_handler_fn(handler);
+
+        let res = f(&mut red);
+        red.enable();
+        red.set_vector(INTERRUPT_IOAPIC_BASE + n);
+        unsafe { ioapic.write_redirection(n, red) };
+
+        Ok(res)
+    })
+}
+
+pub unsafe fn eoi() {
+    let apic = apic();
+    apic.eoi();
 }

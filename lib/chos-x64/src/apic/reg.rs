@@ -1,31 +1,15 @@
-use chos_lib::{NoAccess, ReadAccess, ReadOnly, ReadWrite, Volatile, WriteAccess, WriteOnly};
+
+use core::hint::spin_loop;
+
+use chos_lib::{NoAccess, ReadOnly, ReadWrite, WriteOnly};
 
 use static_assertions as sa;
 
-#[repr(C)]
-pub struct Register<P> {
-    value: Volatile<u32, P>,
-    _res: [u32; 3],
-}
+pub type Register<P> = chos_lib::PaddedVolatile<u32, P, 0x10>;
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);
 
-impl<P> Register<P> {
-    pub fn read(&self) -> u32
-    where
-        P: ReadAccess,
-    {
-        self.value.read()
-    }
-
-    pub fn write(&mut self, v: u32)
-    where
-        P: WriteAccess,
-    {
-        self.value.write(v)
-    }
-}
-
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct InterruptRegister(Register<ReadWrite>);
 
 impl InterruptRegister {
@@ -50,6 +34,88 @@ impl InterruptRegister {
 }
 
 #[repr(C)]
+pub struct CommandRegisters {
+    command: Register<ReadWrite>,
+    destination: Register<ReadWrite>,
+}
+
+pub enum Command {
+    Normal {
+        vector: u8,
+    },
+    LowPriority {
+        vector: u8,
+    },
+    SMI {
+        vector: u8,
+    },
+    NMI {
+        vector: u8,
+    },
+    Init,
+    InitDeassert,
+    Sipi {
+        page_number: u8,
+    },
+}
+
+impl CommandRegisters {
+    pub unsafe fn send_command(&mut self, destination: u8, command: Command) {
+        self.send_command_nowait(destination, command);
+        self.wait_for_delivery();
+    }
+
+    pub unsafe fn send_command_nowait(&mut self, destination: u8, command: Command) {
+        use Command::*;
+        let mut vector: u32 = 0;
+        let cmd: u32;
+        let mut init: u32 = 0b01;
+        match command {
+            Normal { vector: v } => {
+                vector = v as _;
+                cmd = 0;
+            },
+            LowPriority { vector: v } => {
+                vector = v as _;
+                cmd = 1;
+            },
+            SMI { vector: v} => {
+                vector = v as _;
+                cmd = 2;
+            },
+            NMI { vector: v} => {
+                vector = v as _;
+                cmd = 4;
+            },
+            Init => {
+                cmd = 5;
+                init = 0b01;
+            },
+            InitDeassert => {
+                cmd = 5;
+                init = 0b10;
+            },
+            Sipi { page_number } => {
+                vector = page_number as _;
+                cmd = 6;
+            }
+        };
+        
+        let destination = ((destination as u32) & 0xf) << 24;
+        let cmd = vector | (cmd << 8) | (init << 14);
+
+        self.destination.write(destination);
+        self.command.write(cmd);
+    }
+
+    pub unsafe fn wait_for_delivery(&mut self) {
+        while (self.command.read() & (1 << 12)) != 0 {
+            spin_loop();
+        }
+    }
+}
+
+#[repr(C)]
 pub struct ApicRegisters {
     _res0: [Register<NoAccess>; 2],
     pub lapic_id: Register<ReadWrite>,
@@ -69,7 +135,7 @@ pub struct ApicRegisters {
     pub error_status: Register<ReadOnly>,
     _res2: [Register<NoAccess>; 6],
     pub lvt_corrected_machine_check_interrupt: InterruptRegister,
-    pub interrupt_command: [Register<ReadWrite>; 2],
+    pub interrupt_command: CommandRegisters,
     pub lvt_timer: InterruptRegister,
     pub lvt_thermal_sensor: InterruptRegister,
     pub lvt_performance_monitoring_counters: InterruptRegister,

@@ -21,7 +21,6 @@
     - rdi = kernel boot info structure (See below)
     - Page table
         - First 0-4GB mapped
-        - Kernel ELF mapped
         - Kernel mapped
         - Page table mapped
 
@@ -31,3 +30,9 @@ Kernel boot structure
     - Kernel ELF content
     - Page table pointer
     - Boot memory map / allocation
+
+Physical Memory Map
+    0x00008000 - 0x00010000: MP initialization code
+    0x00010000 - 0x00080000: MP initialization data
+    0x00100000 - 0x01000000: Boot code
+    0x01000000 - 0x40000000: Kernel code (mapped to higher half, see docs/memory_map.txt)
