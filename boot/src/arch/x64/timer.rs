@@ -4,8 +4,6 @@ use core::time::Duration;
 
 use chos_lib::spin::Sem;
 
-use chos_x64::ioapic::*;
-
 use x86_64::structures::idt::InterruptStackFrame;
 
 use super::acpi::hpet::HPET;
@@ -14,10 +12,7 @@ static DONE: Sem = Sem::new(0);
 
 const IOAPIC_TIMER_ROUTE: u8 = 8;
 
-extern "x86-interrupt" fn timer_callback(_: &mut InterruptStackFrame) {
-    unsafe {
-        let hpet = HPET.as_mut().unwrap();
-    }
+extern "x86-interrupt" fn timer_callback(_: InterruptStackFrame) {
     DONE.signal();
     unsafe {
         super::intr::eoi();
@@ -26,16 +21,10 @@ extern "x86-interrupt" fn timer_callback(_: &mut InterruptStackFrame) {
 
 static mut HPET: Option<chos_x64::hpet::HPET> = None;
 
-fn disable_pic() {
-
-}
-
 pub fn initialize(hpet_table: &HPET) {
     super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback).expect("Could not allocate IOApic interrupt 8");
-    let hpet;
     unsafe {
         HPET = Some(chos_x64::hpet::HPET::with_address(hpet_table.address));
-        hpet = HPET.as_mut().unwrap();
     };
 }
 

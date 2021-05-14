@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2.1"
+chos-boot-defs = { path = "../lib/chos-boot-defs" }
 chos-elf = { path = "../lib/chos-elf" }
 chos-lib = { path = "../lib/chos-lib", default-features = false }
 multiboot2 = "0.10.1"
@@ -16,6 +17,6 @@ spin = "0.7.1"
 static_assertions = "1.1.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-x86_64 = "0.13.2"
+x86_64 = "0.14.1"
 chos-x64 = { path = "../lib/chos-x64" }
 raw-cpuid = "9.0.0"

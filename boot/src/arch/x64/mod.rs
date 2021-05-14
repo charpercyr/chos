@@ -3,13 +3,12 @@ mod asm;
 mod cmdline;
 mod intr;
 mod log;
+mod kernel;
 mod mpstart;
 mod panic;
 mod qemu;
 mod symbols;
 mod timer;
-
-use core::time::Duration;
 
 use crate::println;
 use acpi::RSDT;
@@ -17,10 +16,6 @@ use cmdline::iter_cmdline;
 use qemu::*;
 
 use multiboot2 as mb;
-
-use chos_x64::ioapic::IOApic;
-
-use x86_64::structures::idt::InterruptStackFrame;
 
 #[no_mangle]
 pub extern "C" fn boot_main(mbp: usize) -> ! {
@@ -50,6 +45,25 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     let hpet = rsdt.hpet().unwrap();
 
     intr::initalize(madt);
+
+    let kernel = if let Some(kernel) = mbh.module_tags().find(|m| {
+        if let Some(("kernel", _)) = iter_cmdline(m.name()).next() {
+            true
+        } else {
+            false
+        }
+    }) {
+        let kernel = unsafe { core::slice::from_raw_parts(
+            kernel.start_address() as *const u8,
+            (kernel.end_address() - kernel.start_address()) as usize)
+        };
+        chos_elf::Elf64::from_bytes(kernel).expect("Invalid kernel ELF")
+    } else {
+        panic!("No kernel")
+    };
+
+    let boot_memory_map = unsafe { kernel::map_kernel(&kernel) };
+
     timer::initialize(hpet);
 
     let count = core::sync::atomic::AtomicUsize::new(1);
@@ -60,7 +74,6 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             let count = &*count;
             println!("Hello from processor #{}", id);
             count.fetch_add(1, core::sync::atomic::Ordering::Release);
-            x86_64::instructions::interrupts::disable();
             loop {
                 x86_64::instructions::hlt();
             }
@@ -70,12 +83,6 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     while count.load(core::sync::atomic::Ordering::Acquire) < n {
         core::hint::spin_loop();
-    }
-
-    println!("Delay 5s");
-    for i in 1..=5 {
-        timer::delay(Duration::from_secs(1)).unwrap();
-        println!("{}", i);
     }
 
     exit_qemu(QemuStatus::Success);

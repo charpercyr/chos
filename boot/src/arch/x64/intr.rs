@@ -2,9 +2,7 @@ use core::mem::MaybeUninit;
 
 use rustc_demangle::demangle;
 
-use spin::Lazy;
-
-use chos_x64::apic::{self, Apic};
+use chos_x64::apic::Apic;
 use chos_x64::ioapic::{self, IOApic};
 
 use x86_64::instructions::port::PortWriteOnly;
@@ -17,15 +15,15 @@ use super::acpi::madt::{self, MADT};
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
 
-extern "x86-interrupt" fn intr_breakpoint(f: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn intr_breakpoint(f: InterruptStackFrame) {
     unsafe { crate::unsafe_println!("BREAKPOINT: {:?}", f) };
 }
 
-extern "x86-interrupt" fn intr_double_fault(f: &mut InterruptStackFrame, _: u64) -> ! {
+extern "x86-interrupt" fn intr_double_fault(f: InterruptStackFrame, _: u64) -> ! {
     panic!("DOUBLE FAULT: {:?}", f);
 }
 
-extern "x86-interrupt" fn intr_page_fault(f: &mut InterruptStackFrame, _: PageFaultErrorCode) {
+extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, _: PageFaultErrorCode) {
     use crate::unsafe_println;
     unsafe {
         if let Some((name, offset)) =
@@ -45,7 +43,7 @@ extern "x86-interrupt" fn intr_page_fault(f: &mut InterruptStackFrame, _: PageFa
     panic!();
 }
 
-extern "x86-interrupt" fn intr_spurious(_: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn intr_spurious(_: InterruptStackFrame) {
     // Nothing
 }
 
@@ -82,7 +80,6 @@ pub fn initalize(madt: &MADT) {
         IO_APIC = MaybeUninit::new(IOApic::with_address(ioapic.ioapic_address as usize));
 
         apic = APIC.assume_init_mut();
-        let ioapic = IO_APIC.assume_init_mut();
     }
 
     unsafe {

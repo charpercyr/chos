@@ -7,6 +7,8 @@
 #![feature(asm)]
 #![feature(const_fn_transmute)]
 #![feature(const_panic)]
+#![feature(decl_macro)]
+#![feature(destructuring_assignment)]
 #![feature(global_asm)]
 #![feature(inline_const)]
 #![feature(maybe_uninit_ref)]

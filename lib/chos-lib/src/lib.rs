@@ -3,20 +3,22 @@
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
-#![feature(const_fn)]
 #![feature(core_intrinsics)]
 #![feature(const_fn_transmute)]
 #![feature(const_mut_refs)]
+#![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[macro_use]
 pub mod bitfield;
 
-#[macro_use]
 mod macros;
+pub use macros::*;
+
+mod either;
+pub use either::*;
 
 pub mod int;
 

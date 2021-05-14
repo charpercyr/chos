@@ -1,34 +1,34 @@
 
-1- Go to x64
+1- Go to x64 (done)
     - First 4GB identity mapped with 1GB pages
 
-2- Initialize simple serial and interrupts
+2- Initialize simple serial and interrupts (done)
 
 3- Load and map kernel from multiboot2
     - PIC x64 kernel
     - Map to higher half
 
-4- Enable timer
+4- Enable timer (done)
     - Calculate timer frequency
     - Used for delays
 
-5- Start other processors
+5- Start other processors (done)
     - All x64 with the same page table
 
 6- Disable timer and interrupts
 
 7- Jump to kernel, from all processors
     - rdi = kernel boot info structure (See below)
+    - rsi = APIC ID
     - Page table
         - First 0-4GB mapped
         - Kernel mapped
         - Page table mapped
 
 Kernel boot structure
+    - Kernel entry address
     - Multiboot2 info
-    - Kernel base address
     - Kernel ELF content
-    - Page table pointer
     - Boot memory map / allocation
 
 Physical Memory Map

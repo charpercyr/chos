@@ -1,15 +1,21 @@
 
 pub use chos_lib_macros::bitfield;
 
-pub trait FieldCast<R>: Sized {
+pub trait FieldRead<R>: Sized {
     fn from_repr(v: R) -> Self;
+}
+
+pub trait FieldWrite<R>: FieldRead<R> {
     fn into_repr(self) -> R;
 }
 
-impl<T> FieldCast<T> for T {
+impl<T> FieldRead<T> for T {
     fn from_repr(v: T) -> T {
         v
     }
+}
+
+impl<T> FieldWrite<T> for T {
     fn into_repr(self) -> T {
         self
     }
@@ -18,10 +24,12 @@ impl<T> FieldCast<T> for T {
 macro_rules! impl_field_cast {
     ($([$from:ident, $to:ident]),* $(,)?) => {
         $(
-            impl FieldCast<$from> for $to {
+            impl FieldRead<$from> for $to {
                 fn from_repr(v: $from) -> $to {
                     v as $to
                 }
+            }
+            impl FieldWrite<$from> for $to {
                 fn into_repr(self) -> $from {
                     self as $from
                 }
@@ -54,10 +62,12 @@ impl_field_cast!(
 macro_rules! impl_field_to_bool {
     ($($ty:ident),* $(,)?) => {
         $(
-            impl FieldCast<$ty> for bool {
+            impl FieldRead<$ty> for bool {
                 fn from_repr(v: $ty) -> Self {
                     v != 0
                 }
+            }
+            impl FieldWrite<$ty> for bool {
                 fn into_repr(self) -> $ty {
                     self as $ty
                 }
@@ -114,7 +124,7 @@ impl_bitfield_repr!(
 #[macro_export]
 macro_rules! field_enum {
     (
-        @field
+        @field_read
         $name:ident,
         $repr:ident,
         $(
@@ -129,6 +139,15 @@ macro_rules! field_enum {
                 _ => panic!(concat!("Invalid repr for ", stringify!($name))),
             }
         }
+    };
+    (
+        @field_write
+        $name:ident,
+        $repr:ident,
+        $(
+            $field:ident = $value:expr
+        ),* $(,)?
+    ) => {
         fn into_repr(self) -> $repr {
             match self {
                 $(
@@ -137,7 +156,6 @@ macro_rules! field_enum {
             }
         }
     };
-
     (
         $(
             $(#[$attr:meta])*
@@ -157,8 +175,11 @@ macro_rules! field_enum {
                 $($field = $value,)*
             }
     
-            impl FieldCast<$repr> for $name {
-                $crate::field_enum!(@field $name, $repr, $($field = $value,)*);
+            impl FieldRead<$repr> for $name {
+                $crate::field_enum!(@field_read $name, $repr, $($field = $value,)*);
+            }
+            impl FieldWrite<$repr> for $name {
+                $crate::field_enum!(@field_write $name, $repr, $($field = $value,)*);
             }
         )*
     };

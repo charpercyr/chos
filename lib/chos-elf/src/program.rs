@@ -115,7 +115,7 @@ impl fmt::Debug for ProgramEntry<'_> {
         f.debug_struct("ProgramEntry")
             .field("typ", &self.typ())
             .field("flags", &self.flags())
-            .field("offset", &self.vaddr())
+            .field("offset", &self.offset())
             .field("vaddr", &self.vaddr())
             .field("paddr", &self.paddr())
             .field("file_size", &self.file_size())

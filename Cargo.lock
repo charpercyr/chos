@@ -13,12 +13,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed8765909f9009617974ab6b7d332625b320b33c326b1e9321382ef1999b5d56"
 
 [[package]]
-name = "bitfield"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46afbd2983a5d5a7bd740ccb198caf5b82f45c40c09c0eed36052d91cb92e719"
-
-[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -46,6 +40,7 @@ name = "chos-boot"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "chos-boot-defs",
  "chos-elf",
  "chos-lib",
  "chos-x64",
@@ -56,6 +51,10 @@ dependencies = [
  "static_assertions",
  "x86_64",
 ]
+
+[[package]]
+name = "chos-boot-defs"
+version = "0.1.0"
 
 [[package]]
 name = "chos-elf"
@@ -69,6 +68,7 @@ dependencies = [
 name = "chos-lib"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "chos-lib-macros",
  "static_assertions",
 ]
@@ -86,7 +86,6 @@ dependencies = [
 name = "chos-x64"
 version = "0.1.0"
 dependencies = [
- "bitfield",
  "chos-lib",
  "static_assertions",
  "x86_64",
@@ -154,9 +153,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "syn"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ce15dd3ed8aa2f8eeac4716d6ef5ab58b6b9256db41d7e1a0224c2788e8fd87"
+checksum = "48fe99c6bd8b1cc636890bcc071842de909d902c81ac7dab53ba33c421ab8ffb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -170,11 +169,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
 
 [[package]]
-name = "x86_64"
-version = "0.13.5"
+name = "volatile"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f00e138c487966a6efdb30416baff8f973d17c61c9560a6047c74f8828c46fe1"
+checksum = "e4c2dbd44eb8b53973357e6e207e370f0c1059990df850aca1eca8947cf464f0"
+
+[[package]]
+name = "x86_64"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9ce25c8b91769cf3522618360482d4fe8e2abf7056958ae88b1f039d6cf6bc2"
 dependencies = [
  "bit_field",
  "bitflags",
+ "volatile",
 ]

@@ -2,10 +2,10 @@
 
 #![feature(allocator_api)]
 #![feature(asm)]
+#![feature(decl_macro)]
 #![feature(extended_key_value_attributes)]
 #![feature(maybe_uninit_ref)]
 
-#[macro_use]
 mod arch;
 
 #[panic_handler]

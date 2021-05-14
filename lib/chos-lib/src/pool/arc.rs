@@ -1,40 +1,45 @@
 
-use core::alloc::AllocError;
+use core::alloc::{AllocError, Layout};
 use core::fmt;
-use core::marker::PhantomData;
+use core::marker::{PhantomData, Unpin};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{Pool, GlobalPool};
+use cfg_if::cfg_if;
 
-pub struct PoolArcCount {
+use super::Pool;
+
+#[cfg(feature = "alloc")]
+use alloc::alloc::{Global, handle_alloc_error};
+
+pub struct IArcCount {
     count: AtomicUsize,
 }
 
-impl PoolArcCount {
+impl IArcCount {
     pub const INIT: Self = Self {
         count: AtomicUsize::new(0),
     };
 }
 
-impl fmt::Debug for PoolArcCount {
+impl fmt::Debug for IArcCount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PoolArcCount").finish()
+        f.debug_struct("IArcCount").finish()
     }
 }
 
-pub trait PoolArcAdapter {
-    fn count(&self) -> &PoolArcCount;
+pub trait IArcAdapter {
+    fn count(&self) -> &IArcCount;
 }
 
-pub struct PoolArc<T: PoolArcAdapter, P: Pool<T>> {
+pub struct IArc<T: IArcAdapter, P: Pool<T>> {
     ptr: NonNull<T>,
     alloc: P,
     value: PhantomData<T>,
 }
 
-impl<T: PoolArcAdapter, P: Pool<T>> PoolArc<T, P> {
+impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
     pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError> {
         value.count().count.fetch_add(1, Ordering::Relaxed);
         let ptr = unsafe { alloc.allocate()?.cast() };
@@ -78,7 +83,7 @@ impl<T: PoolArcAdapter, P: Pool<T>> PoolArc<T, P> {
     }
 
     pub fn is_unique(&self) -> bool {
-        self.get_count().load(Ordering::Relaxed) == 1
+        self.count() == 1
     }
 
     fn get_count(&self) -> &AtomicUsize {
@@ -86,13 +91,14 @@ impl<T: PoolArcAdapter, P: Pool<T>> PoolArc<T, P> {
     }
 }
 
-impl<T: PoolArcAdapter, P: GlobalPool<T>> PoolArc<T, P> {
+#[cfg(feature = "alloc")]
+impl<T: IArcAdapter> IArc<T, Global> {
     pub fn new(value: T) -> Self {
-        Self::try_new_in(value, P::VALUE).unwrap_or_else(|_| P::handle_alloc_error())
+        Self::try_new_in(value, Global).unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
     }
 
     pub fn try_new(value: T) -> Result<Self, AllocError> {
-        Self::try_new_in(value, P::VALUE)
+        Self::try_new_in(value, Global)
     }
 
     pub fn into_raw(this: Self) -> *const T {
@@ -104,13 +110,13 @@ impl<T: PoolArcAdapter, P: GlobalPool<T>> PoolArc<T, P> {
     pub unsafe fn from_raw(raw: *const T) -> Self {
         Self {
             ptr: NonNull::new_unchecked(raw as *mut T),
-            alloc: P::VALUE,
+            alloc: Global,
             value: PhantomData,
         }
     }
 }
 
-unsafe impl<#[may_dangle] T: PoolArcAdapter, P: Pool<T>> Drop for PoolArc<T, P> {
+impl<T: IArcAdapter, P: Pool<T>> Drop for IArc<T, P> {
     fn drop(&mut self) {
         if self.get_count().fetch_sub(1, Ordering::Release) != 1 {
             return;
@@ -124,7 +130,7 @@ unsafe impl<#[may_dangle] T: PoolArcAdapter, P: Pool<T>> Drop for PoolArc<T, P> 
     }
 }
 
-impl<T: PoolArcAdapter, P: Pool<T> + Clone> Clone for PoolArc<T, P> {
+impl<T: IArcAdapter, P: Pool<T> + Clone> Clone for IArc<T, P> {
     fn clone(&self) -> Self {
         self.get_count().fetch_add(1, Ordering::Relaxed);
         Self {
@@ -135,9 +141,38 @@ impl<T: PoolArcAdapter, P: Pool<T> + Clone> Clone for PoolArc<T, P> {
     }
 }
 
-impl<T: PoolArcAdapter, P: Pool<T>> Deref for PoolArc<T, P> {
+impl<T: IArcAdapter, P: Pool<T>> Deref for IArc<T, P> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.as_ref()
     }
 }
+
+macro_rules! fmt {
+    ($($fmt:ident),* $(,)?) => {
+        $(
+            impl<T: IArcAdapter + fmt::$fmt, P: Pool<T>> fmt::$fmt for IArc<T, P> {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::$fmt::fmt(self.as_ref(), f)
+                }
+            }
+        )*
+    };
+}
+
+fmt!(
+    Debug, Display,
+    Binary, Octal,
+    LowerHex, UpperHex,
+    LowerExp, UpperExp,
+);
+
+impl<T: IArcAdapter, P: Pool<T>> fmt::Pointer for IArc<T, P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.ptr, f)
+    }
+}
+
+impl<T: IArcAdapter, P: Unpin + Pool<T>> Unpin for IArc<T, P> {}
+unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Sync> Sync for IArc<T, P> {}
+unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Send> Send for IArc<T, P> {}

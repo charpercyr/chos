@@ -2,6 +2,7 @@
 use core::fmt;
 
 use chos_lib::bitfield::*;
+use chos_lib::field_enum;
 
 bitfield! {
     #[derive(Copy, Clone)]
@@ -58,7 +59,7 @@ impl RedirectionEntry {
     }
 
     pub fn set_vector(&mut self, v: u8) {
-        self.inner.set_vector(v)
+        self.inner.set_vector(v);
     }
 
     pub fn delivery_mode(&self) -> DeliveryMode {
@@ -66,7 +67,7 @@ impl RedirectionEntry {
     }
 
     pub fn set_delivery_mode(&mut self, d: DeliveryMode) {
-        self.inner.set_delivery_mode(d)
+        self.inner.set_delivery_mode(d);
     }
 
     pub fn destination(&self) -> Destination {
@@ -137,7 +138,7 @@ pub enum Destination {
     Logical(u8),
 }
 
-chos_lib::field_enum! {
+field_enum! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub enum DeliveryMode (u64) {
         Fixed = 0,

@@ -1,5 +1,6 @@
 
 use core::mem::transmute;
+use core::ptr::addr_of;
 
 use chos_lib::{ReadWrite, WriteOnly, NoAccess};
 
@@ -69,10 +70,8 @@ impl IOApic {
     }
 
     fn read(&mut self, addr: u32) -> u32 {
-        unsafe {
-            self.registers.select.write(addr);
-            self.registers.register.read()
-        }
+        self.registers.select.write(addr);
+        self.registers.register.read()
     }
 
     unsafe fn write(&mut self, addr: u32, value: u32) {

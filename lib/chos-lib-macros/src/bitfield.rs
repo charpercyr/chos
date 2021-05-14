@@ -203,15 +203,16 @@ fn impl_field(repr: &syn::Type, default_vis: Option<&syn::Visibility>, field: &B
     let gvis = gvis.as_ref().or(default_vis).unwrap_or(&syn::Visibility::Inherited);
     let getter = quote! {
         #gvis fn #gname (&self) -> #typ {
-            FieldCast::<#repr>::from_repr(Bitfield::get_bits(&self.bits, #low, #hig))
+            FieldRead::<#repr>::from_repr(Bitfield::get_bits(&self.bits, #low, #hig))
         }
     };
     let setter = setter.as_ref().map(|setter| {
         let BitfieldAccessor { vis: svis, name: sname } = setter;
         let svis = svis.as_ref().or(default_vis).unwrap_or(&syn::Visibility::Inherited);
         quote! {
-            #svis fn #sname (&mut self, value: #typ) {
-                BitfieldMut::set_bits(&mut self.bits, #low, #hig, FieldCast::<#repr>::into_repr(value))
+            #svis fn #sname (&mut self, value: #typ) -> &mut Self {
+                BitfieldMut::set_bits(&mut self.bits, #low, #hig, FieldWrite::<#repr>::into_repr(value));
+                self
             }
         }
     });

@@ -49,8 +49,7 @@ struct Registers {
     main_counter_value: PaddedVolatile<u64, ReadWrite, 0x10>,
 }
 
-#[allow(safe_packed_borrows)]
-#[repr(C, packed)]
+#[repr(C)]
 #[derive(Debug)]
 struct TimerRegisters {
     configuration: Volatile<TimerConfiguration, ReadWrite>,
@@ -61,10 +60,10 @@ struct TimerRegisters {
 impl fmt::Debug for Registers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Registers")
-            .field("capabilities", unsafe { &self.capabilities })
-            .field("configuration", unsafe { &self.configuration })
-            .field("interrupt_status", unsafe { &self.interrupt_status })
-            .field("counter", unsafe { &self.main_counter_value })
+            .field("capabilities", &self.capabilities )
+            .field("configuration", &self.configuration )
+            .field("interrupt_status", &self.interrupt_status )
+            .field("counter", &self.main_counter_value )
             .finish()
     }
 }
@@ -82,19 +81,19 @@ impl HPET {
     }
 
     pub fn period(&self) -> u32 {
-        unsafe { self.registers.capabilities.read().counter_clk_period() as u32 }
+        self.registers.capabilities.read().counter_clk_period()
     }
 
     pub fn vendor_id(&self) -> u16 {
-        unsafe { self.registers.capabilities.read().vendor_id() as u16 }
+        self.registers.capabilities.read().vendor_id()
     }
 
     pub fn timer_count(&self) -> u8 {
-        unsafe { self.registers.capabilities.read().num_tim_cap() as u8 + 1 }
+        self.registers.capabilities.read().num_tim_cap() + 1
     }
 
     pub fn enabled(&self) -> bool {
-        unsafe { self.registers.configuration.read().enable() }
+        self.registers.configuration.read().enable()
     }
 
     pub unsafe fn enable(&mut self) {
@@ -112,7 +111,7 @@ impl HPET {
     }
 
     pub fn count(&self) -> u64 {
-        unsafe { self.registers.main_counter_value.read() }
+        self.registers.main_counter_value.read()
     }
 
     pub unsafe fn set_count(&mut self, count: u64) {
@@ -140,7 +139,7 @@ pub struct Timer<'a> {
 
 impl Timer<'_> {
     pub fn int_route(&self) -> u8 {
-        unsafe { self.registers.configuration.read().int_route_cnf() }
+        self.registers.configuration.read().int_route_cnf()
     }
 
     pub unsafe fn set_int_route(&mut self, route: u8) {

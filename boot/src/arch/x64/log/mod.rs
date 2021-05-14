@@ -60,29 +60,6 @@ macro_rules! println {
 }
 
 #[macro_export]
-macro_rules! hexdump {
-    ($v:expr) => {{
-        #[allow(unused_unsafe)]
-        unsafe {
-            use core::mem::{size_of_val, transmute};
-            let len = size_of_val(&$v);
-            let ptr: *const u8 = transmute(&$v);
-            let mut i = 0;
-            while i < len {
-                print!("[{:016p}]", ptr);
-                let mut j = 0;
-                while i < len && j < 16 {
-                    print!(" {:02x}", *ptr.offset(i as isize));
-                    i += 1;
-                    j += 1;
-                }
-                println!();
-            }
-        }
-    }};
-}
-
-#[macro_export]
 macro_rules! unsafe_print {
     ($($args:tt)*) => {{
         let out = &mut $crate::arch::x64::log::OUTPUT;
@@ -91,7 +68,7 @@ macro_rules! unsafe_print {
             use core::fmt::Write;
             write!(*out, $($args)*).unwrap();
         }
-    }};
+    }}
 }
 
 #[macro_export]
@@ -103,5 +80,20 @@ macro_rules! unsafe_println {
             use core::fmt::Write;
             writeln!(*out, $($args)*).unwrap();
         }
-    }};
+    }}
+}
+
+pub fn hexdump(b: &[u8]) {
+    let len = b.len();
+    let mut i = 0;
+    while i < len {
+        let mut j = 0;
+        print!("{:016p}]", &b[i]);
+        while j < 16 && i < len {
+            print!(" {:02x}", b[i]);
+            i += 1;
+            j += 1;
+        }
+        println!();
+    }
 }

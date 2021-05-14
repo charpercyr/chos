@@ -1,4 +1,3 @@
-
 pub mod hpet;
 pub mod madt;
 
@@ -22,20 +21,31 @@ pub struct SDTHeader {
 
 impl fmt::Debug for SDTHeader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            sig,
+            length,
+            revision,
+            checksum,
+            oemid,
+            oem_table_id,
+            oem_revision,
+            creator_id,
+            creator_revision,
+        } = *self;
         unsafe {
             f.debug_struct("SDTHeader")
-                .field("sig", &core::str::from_utf8_unchecked(&self.sig))
-                .field("length", &self.length)
-                .field("revision", &self.revision)
-                .field("checksum", &self.checksum)
-                .field("oemid", &core::str::from_utf8_unchecked(&self.oemid))
+                .field("sig", &core::str::from_utf8_unchecked(&sig))
+                .field("length", &length)
+                .field("revision", &revision)
+                .field("checksum", &checksum)
+                .field("oemid", &core::str::from_utf8_unchecked(&oemid))
                 .field(
                     "oem_table_id",
-                    &core::str::from_utf8_unchecked(&self.oem_table_id),
+                    &core::str::from_utf8_unchecked(&oem_table_id),
                 )
-                .field("oem_revision", &self.oem_revision)
-                .field("creator_id", &self.creator_id)
-                .field("creator_revision", &self.creator_revision)
+                .field("oem_revision", &oem_revision)
+                .field("creator_id", &creator_id)
+                .field("creator_revision", &creator_revision)
                 .finish()
         }
     }
@@ -58,16 +68,17 @@ impl RSDT {
     }
 
     pub fn madt(&self) -> Option<&madt::MADT> {
-        self.find_table(madt::MADT::SIGNATURE).map(|hdr| unsafe { transmute(hdr) })
+        self.find_table(madt::MADT::SIGNATURE)
+            .map(|hdr| unsafe { transmute(hdr) })
     }
 
     pub fn hpet(&self) -> Option<&hpet::HPET> {
-        self.find_table(hpet::HPET::SIGNATURE).map(|hdr| unsafe { transmute(hdr) })
+        self.find_table(hpet::HPET::SIGNATURE)
+            .map(|hdr| unsafe { transmute(hdr) })
     }
 
     fn find_table(&self, sig: &[u8; 4]) -> Option<&SDTHeader> {
-        self.sdts()
-            .find(|&sdt| &sdt.sig == sig)
+        self.sdts().find(|&sdt| &sdt.sig == sig)
     }
 
     fn sdt_ptr(&self) -> (*const u32, usize) {
