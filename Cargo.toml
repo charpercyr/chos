@@ -5,3 +5,6 @@ members = [
     "kernel",
     "lib/*",
 ]
+exclude = [
+    "script"
+]

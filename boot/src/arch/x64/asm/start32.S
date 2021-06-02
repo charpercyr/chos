@@ -1,5 +1,3 @@
-
-
 .set PRESENT, (1 << 0)
 .set WRITEABLE, (1 << 1)
 .set NOCACHE, (1 << 4) | (1 << 5)
@@ -61,7 +59,7 @@ enable_paging:
     mov %eax, (p3_table + 0x18)
 
     mov $p3_table, %eax
-    or $(PRESENT | WRITEABLE), %eax
+    or $(PRESENT | WRITEABLE | NOCACHE), %eax
     mov %eax, p4_table
 
     mov $(p4_table ), %eax

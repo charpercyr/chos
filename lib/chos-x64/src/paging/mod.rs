@@ -1,8 +1,7 @@
 
-use core::mem::transmute;
 use core::ops::{Index, IndexMut};
 
-use chos_lib::{Either, bitfield::*};
+use chos_lib::bitfield::*;
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 pub const PAGE_SIZE: usize = 4096;

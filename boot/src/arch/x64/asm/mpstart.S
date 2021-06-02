@@ -1,4 +1,3 @@
-
 .section .rodata
 
 .align 16

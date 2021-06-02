@@ -46,23 +46,23 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     intr::initalize(madt);
 
-    let kernel = if let Some(kernel) = mbh.module_tags().find(|m| {
-        if let Some(("kernel", _)) = iter_cmdline(m.name()).next() {
-            true
-        } else {
-            false
-        }
-    }) {
-        let kernel = unsafe { core::slice::from_raw_parts(
-            kernel.start_address() as *const u8,
-            (kernel.end_address() - kernel.start_address()) as usize)
-        };
-        chos_elf::Elf64::from_bytes(kernel).expect("Invalid kernel ELF")
-    } else {
-        panic!("No kernel")
-    };
+    // let kernel = if let Some(kernel) = mbh.module_tags().find(|m| {
+    //     if let Some(("kernel", _)) = iter_cmdline(m.name()).next() {
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }) {
+    //     let kernel = unsafe { core::slice::from_raw_parts(
+    //         kernel.start_address() as *const u8,
+    //         (kernel.end_address() - kernel.start_address()) as usize)
+    //     };
+    //     chos_elf::Elf64::from_bytes(kernel).expect("Invalid kernel ELF")
+    // } else {
+    //     panic!("No kernel")
+    // };
 
-    let boot_memory_map = unsafe { kernel::map_kernel(&kernel) };
+    // let boot_memory_map = unsafe { kernel::map_kernel(&kernel) };
 
     timer::initialize(hpet);
 

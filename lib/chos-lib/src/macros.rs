@@ -1,14 +1,5 @@
 
 #[macro_export]
-macro_rules! include_asm {
-    ($($path:expr),* $(,)?) => {
-        $(
-            global_asm!(include_str!($path));
-        )*
-    };
-}
-
-#[macro_export]
 macro_rules! offset_of{
     ($field:ident, $container:ty) => {{
         #[inline(always)]

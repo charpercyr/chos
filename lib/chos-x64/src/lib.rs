@@ -10,3 +10,6 @@ pub mod apic;
 pub mod hpet;
 pub mod ioapic;
 pub mod paging;
+
+#[macro_use]
+mod macros;

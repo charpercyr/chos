@@ -6,7 +6,7 @@ from subprocess import CompletedProcess, DEVNULL
 KERNEL_SUCCESS = 33
 KERNEL_FAILURE = 35
 
-def qemu(binary: str, serial: bool = True, display: bool = False) -> bool:
+def qemu(binary: str, serial: bool = True, display: bool = False, debug: bool = False) -> bool:
     args = [
         'qemu-system-x86_64', binary,
         '-m', '4G',
@@ -14,7 +14,6 @@ def qemu(binary: str, serial: bool = True, display: bool = False) -> bool:
         '-machine', 'q35',
         '-cpu', 'Skylake-Client-v3',
         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x4',
-        # '-s', '-S',
         '-display',
     ]
     if display:
@@ -24,6 +23,9 @@ def qemu(binary: str, serial: bool = True, display: bool = False) -> bool:
 
     if serial:
         args.extend(['-serial', 'stdio'])
+
+    if debug:
+        args.extend(['-s', '-S'])
 
     ret = run(*args, checkReturnCode=False, stderr=DEVNULL)
     if ret.returncode == KERNEL_SUCCESS:

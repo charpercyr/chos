@@ -1,6 +1,5 @@
-
 /*
-    %rdi = kernel info struct (see /docs/boot.txt)
+    %rdi = kernel info struct (see /docs/boot.txt, or KernelBootInfo in /lib/chos-boot-defs/src/lib.rs)
     %rsi = apic id
 */
 .global kernel_start

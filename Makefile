@@ -11,7 +11,7 @@ KERNEL := kernel
 BOOT_PROJECT := chos-$(BOOT)
 KERNEL_PROJECT := chos
 
-FLAGS := -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
+FLAGS := $(FLAGS) -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
 
 include $(BOOT)/arch/$(ARCH).mk
 include $(KERNEL)/arch/$(ARCH).mk
@@ -34,6 +34,7 @@ test:
 
 gdb:
 	rust-gdb \
+		-tui \
 		-ex "set pagination off" \
 		-ex "file target/x86_64-chos-boot/debug/chos-boot.elf" \
 		-ex "target remote tcp::1234" \

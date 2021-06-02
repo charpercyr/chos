@@ -1,4 +1,3 @@
-
 .section .inittext, "ax"
 .code64
 

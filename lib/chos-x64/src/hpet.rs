@@ -40,7 +40,7 @@ bitfield! {
     }
 }
 
-#[repr(C, packed)]
+#[repr(C)]
 struct Registers {
     capabilities: PaddedVolatile<GeneralCapabilities, ReadOnly, 0x10>,
     configuration: PaddedVolatile<Configuration, ReadWrite, 0x10>,

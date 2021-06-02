@@ -1,6 +1,5 @@
 
 use core::mem::transmute;
-use core::ptr::addr_of;
 
 use chos_lib::{ReadWrite, WriteOnly, NoAccess};
 
@@ -12,7 +11,7 @@ pub use redirection::*;
 type Register<P> = chos_lib::PaddedVolatile<u32, P, 0x10>;
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);
 
-#[repr(C, packed)]
+#[repr(C)]
 struct Registers {
     select: Register<WriteOnly>,
     register: Register<ReadWrite>,
