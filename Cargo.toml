@@ -6,5 +6,5 @@ members = [
     "lib/*",
 ]
 exclude = [
-    "script"
+    "build",
 ]

@@ -1,0 +1,4 @@
+
+[project]
+target = "../../../arch/x86_64-chos.json"
+linker-script = "./linker.ld"

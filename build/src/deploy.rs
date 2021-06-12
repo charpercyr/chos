@@ -163,6 +163,8 @@ pub fn deploy(
         }
     }
 
+    crate::cmd::status(&mut Command::new("sync"));
+
     Ok(())
 }
 

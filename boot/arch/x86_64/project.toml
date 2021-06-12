@@ -1,0 +1,8 @@
+
+[project]
+target = "../../../arch/x86_64-chos.json"
+linker-script = "./linker.ld"
+deploy = "/boot/boot.elf"
+copy = [
+    ["./grub.cfg", "/boot/grub/grub.cfg"],
+]

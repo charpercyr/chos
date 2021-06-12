@@ -1,0 +1,8 @@
+
+[meta]
+include = [
+    "arch/${ARCH}/project.toml"
+]
+
+[project]
+deploy = "/chos/chos.elf"

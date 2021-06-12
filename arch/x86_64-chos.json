@@ -8,19 +8,15 @@
     "os": "none",
     "is_builtin": false,
 
-    "executables": false,
+    "executables": true,
     "dynamic-linking": true,
     "only-cdylib": false,
     "linker-flavor": "ld.lld",
     "linker": "rust-lld",
     "features": "-mmx,-sse,+soft-float",
-    "pre-link-args": {
-        "ld.lld": [
-            "-T", "./kernel/arch/x86_64.ld"
-        ]
-    },
     "dll-prefix": "",
     "dll-suffix": ".elf",
+    "exe-suffix": ".elf",
 
     "eliminate-frame-pointer": false,
     "disable-redzone": true,
