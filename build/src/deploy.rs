@@ -1,16 +1,24 @@
 use crate::{build_main, DeployOpts, Project};
 
-use std::fs;
-use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::str::{from_utf8, FromStr};
+use std::process::{Command};
+use std::str::{FromStr};
 
-use tempfile::TempDir;
+use duct::cmd;
 
-fn check_config(config: &Vec<Project>) {
+use tempfile::Builder;
+
+fn display_cmd(cmd: &mut Command) -> std::io::Result<()> {
+    Ok(crate::display_cmd(cmd))
+}
+
+fn check_config(config: &[Project]) {
     for proj in config {
-        assert!(proj.flags.deploy.is_some(), "Deploy path must be set for {}", proj.name);
+        assert!(
+            proj.flags.deploy.is_some(),
+            "Deploy path must be set for {}",
+            proj.name
+        );
     }
 }
 
@@ -20,9 +28,10 @@ struct Loopdev {
 }
 
 fn remove_loop(loopdev: impl AsRef<Path>) {
-    let mut cmd = Command::new("sudo");
-    cmd.arg("losetup").arg("-d").arg(loopdev.as_ref());
-    crate::cmd::status(&mut cmd);
+    cmd!("sudo", "losetup", "-d", loopdev.as_ref())
+        .before_spawn(display_cmd)
+        .run()
+        .unwrap();
 }
 
 impl Loopdev {
@@ -30,40 +39,19 @@ impl Loopdev {
         let file = file.as_ref();
         let mount = mount.as_ref();
 
-        let mut cmd = Command::new("losetup");
-        cmd.arg("-f");
-        crate::cmd::display_cmd(&cmd);
-        let output = cmd.output()?;
-
-        crate::cmd::check_status(output.status);
-
-        let loopdev = from_utf8(&output.stdout)?.trim();
+        let loopdev = cmd!("losetup", "-f").before_spawn(display_cmd).read()?;
         let looppart = format!("{}p1", loopdev);
 
-        let mut cmd = Command::new("sudo");
-        cmd.arg("losetup").arg("-P").arg(loopdev).arg(file);
-        crate::cmd::status(&mut cmd);
+        let err_guard = crate::ErrorGuard::new(|| remove_loop(&loopdev));
 
-        let mut cmd = Command::new("sudo");
-        cmd.arg("mkfs.ext2").arg(&looppart);
-        crate::cmd::display_cmd(&cmd);
-        let status = cmd.status()?;
-        if !status.success() {
-            remove_loop(loopdev);
-            crate::cmd::check_status(status);
-        }
+        cmd!("sudo", "losetup", "-P", &loopdev, file).before_spawn(display_cmd).run()?;
+        cmd!("sudo", "mkfs.ext2", &looppart).before_spawn(display_cmd).run()?;
+        cmd!("sudo", "mount", &looppart, mount).before_spawn(display_cmd).run()?;
 
-        let mut cmd = Command::new("sudo");
-        cmd.arg("mount").arg(looppart).arg(mount);
-        crate::cmd::display_cmd(&cmd);
-        let status = cmd.status()?;
-        if !status.success() {
-            remove_loop(loopdev);
-            crate::cmd::check_status(status);
-        }
+        err_guard.defuse();
 
         Ok(Self {
-            loopdev: PathBuf::from_str(loopdev)?,
+            loopdev: PathBuf::from_str(&loopdev)?,
             mount: mount.to_owned(),
         })
     }
@@ -75,15 +63,12 @@ impl Loopdev {
 
 impl Drop for Loopdev {
     fn drop(&mut self) {
-        let mut cmd = Command::new("sudo");
-        cmd.arg("umount").arg(&self.mount);
-        crate::cmd::status(&mut cmd);
-
+        cmd!("sudo", "umount", &self.mount).before_spawn(display_cmd).run().unwrap();
         remove_loop(&self.loopdev);
     }
 }
 
-fn copy_file(mount: impl AsRef<Path>, from: impl AsRef<Path>, to: impl AsRef<Path>) {
+fn copy_file(mount: impl AsRef<Path>, from: impl AsRef<Path>, to: impl AsRef<Path>) -> crate::Result<()> {
     let mount = mount.as_ref();
     let from = from.as_ref();
     let to = to.as_ref();
@@ -94,49 +79,49 @@ fn copy_file(mount: impl AsRef<Path>, from: impl AsRef<Path>, to: impl AsRef<Pat
 
     let to_dir = to_path.parent().unwrap();
 
-    let mut cmd = Command::new("sudo");
-    cmd.arg("mkdir").arg("-p").arg(to_dir);
-    crate::cmd::status(&mut cmd);
+    cmd!("sudo", "mkdir", "-p", to_dir).run()?;
+    cmd!("sudo", "cp", from, to_path).run()?;
 
-    let mut cmd = Command::new("sudo");
-    cmd.arg("cp").arg(from).arg(to_path);
-    crate::cmd::status(&mut cmd);
+    Ok(())
 }
 
 pub fn deploy(
     file: impl AsRef<Path>,
-    config: &Vec<Project>,
+    config: &[Project],
     release: bool,
     image_size: usize,
 ) -> crate::Result<()> {
     check_config(config);
     let file = file.as_ref();
-    let mut cmd = Command::new("dd");
-    let image_size = image_size / crate::DEPLOY_BLOCK_SIZE;
-    cmd.arg("if=/dev/zero");
-    cmd.arg(format!("of={}", file.to_string_lossy()));
-    cmd.arg(format!("bs={}", crate::DEPLOY_BLOCK_SIZE));
-    cmd.arg(format!("count={}", image_size));
-    crate::cmd::status(&mut cmd);
 
-    let mut cmd = Command::new("fdisk");
-    cmd.arg(file);
-    cmd.stdin(Stdio::piped());
-    crate::cmd::display_cmd(&cmd);
-    let mut fdisk = cmd.spawn()?;
-    BufWriter::new(fdisk.stdin.as_mut().unwrap()).write_all(b"n\n\n\n\n\nw\n")?;
-    crate::cmd::check_status(fdisk.wait()?);
+    cmd!(
+        "dd",
+        "if=/dev/zero",
+        format!("of={}", file.to_string_lossy()),
+        format!("bs={}", crate::DEPLOY_BLOCK_SIZE),
+        format!("count={}", image_size / crate::DEPLOY_BLOCK_SIZE),
+    )
+    .before_spawn(display_cmd)
+    .run()?;
 
-    let mount = TempDir::new()?;
+    cmd!("fdisk", file)
+        .stdin_bytes(&b"n\n\n\n\n\nw\n"[..])
+        .before_spawn(display_cmd)
+        .run()?;
+
+    let mount = Builder::new().prefix("chos").tempdir()?;
     let loopdev = Loopdev::new(file, mount.path())?;
     let mount_path = mount.path().to_string_lossy();
 
-    let mut cmd = Command::new("sudo");
-    cmd.arg("grub-install");
-    cmd.arg(format!("--root-directory={}", mount_path));
-    cmd.arg(format!("--boot-directory={}/boot", mount_path));
-    cmd.arg(loopdev.loopdev());
-    crate::cmd::status(&mut cmd);
+    cmd!(
+        "sudo",
+        "grub-install",
+        format!("--root-directory={}", mount_path),
+        format!("--boot-directory={}/boot", mount_path),
+        loopdev.loopdev(),
+    )
+    .before_spawn(display_cmd)
+    .run()?;
 
     for proj in config {
         let target_name = proj
@@ -146,30 +131,36 @@ pub fn deploy(
             .unwrap()
             .file_stem()
             .unwrap()
-            .to_string_lossy()
-        ;
-        let mut bin_name = proj.cargo_name.to_string();
+            .to_string_lossy();
+        let mut bin_name = proj.cargo_name.clone();
         bin_name += ".elf";
         let binary_path: PathBuf = [
             "./target",
             &target_name,
             if release { "release" } else { "debug" },
-            &bin_name].iter().collect();
-            
-        copy_file(mount.path(), binary_path, proj.flags.deploy.as_ref().unwrap());
+            &bin_name,
+        ]
+        .iter()
+        .collect();
 
-        for (from ,to) in &proj.flags.copy {
-            copy_file(mount.path(), from, to);
+        copy_file(
+            mount.path(),
+            binary_path,
+            proj.flags.deploy.as_ref().unwrap(),
+        )?;
+
+        for (from, to) in &proj.flags.copy {
+            copy_file(mount.path(), from, to)?;
         }
     }
 
-    crate::cmd::status(&mut Command::new("sync"));
+    cmd!("sync").run()?;
 
     Ok(())
 }
 
-pub fn deploy_main(opts: &DeployOpts, config: &Vec<Project>) {
-    build_main(&opts.build, &config);
+pub fn deploy_main(opts: &DeployOpts, config: &[Project]) {
+    build_main(&opts.build, config);
     deploy(
         &opts.output,
         config,

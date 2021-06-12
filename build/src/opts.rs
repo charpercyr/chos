@@ -25,6 +25,13 @@ pub struct DeployOpts {
 pub struct RunOpts {
     #[structopt(flatten)]
     pub build: BuildOpts,
+    /// Start qemu in debug mode
+    #[structopt(long, short = "d")]
+    pub debug: bool,
+    #[structopt(long, short, default_value = "4G")]
+    pub mem: String,
+    #[structopt(long, short, default_value = "2")]
+    pub smp: usize,
 }
 
 #[derive(StructOpt, Debug)]

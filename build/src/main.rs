@@ -16,8 +16,6 @@ use consts::*;
 mod deploy;
 use deploy::*;
 
-mod cmd;
-
 mod config;
 use config::*;
 
@@ -26,6 +24,12 @@ use project::*;
 
 mod opts;
 use opts::*;
+
+mod run;
+use run::*;
+
+mod util;
+use util::*;
 
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -99,7 +103,6 @@ fn get_projects(opts: &BuildOpts) -> Result<Vec<Project>> {
 }
 
 fn main() {
-
     let opts = Opts::from_args();
     match opts {
         Opts::Build(opts) => {
@@ -112,7 +115,7 @@ fn main() {
         }
         Opts::Run(opts) => {
             let config = get_projects(&opts.build).unwrap();
-            build_main(&opts.build, &config);
+            run_main(&opts, &config);
         }
         Opts::Clean => clean_main(),
     }

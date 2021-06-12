@@ -1,5 +1,5 @@
 {
-    "rust-analyzer.cargo.target": "boot/arch/x86_64-chos-boot.json",
+    "rust-analyzer.cargo.target": "arch/x86_64-chos.json",
     "rust-analyzer.checkOnSave.allTargets": false,
     "rust-analyzer.cargo.allFeatures": false,
     "rust-analyzer.checkOnSave.extraArgs": [
