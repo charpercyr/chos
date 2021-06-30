@@ -12,8 +12,6 @@ fn init_page_entry(e: &mut PageEntry, paddr: u64, write: bool, exec: bool) {
         .set_no_execute(!exec)
         .set_phys_addr(paddr)
         .set_global(true)
-        .set_no_cache(true)
-        .set_write_through(true)
         .set_writable(write)
         .set_present(true)
     ;
@@ -35,7 +33,7 @@ impl Mapper {
         let p3 = &mut self.p4[p4i];
         let p3 = if !p3.present() {
             let p3 = alloc.alloc_page_table();
-            init_page_entry(&mut self.p4[p4i], p3 as *mut _ as u64, true, false);
+            init_page_entry(&mut self.p4[p4i], p3 as *mut _ as u64, true, true);
             p3
         } else {
             &mut *(p3.phys_addr() as *mut PageTable)
@@ -44,7 +42,7 @@ impl Mapper {
         let p2 = &mut p3[p3i];
         let p2 = if !p2.present() {
             let p2 = alloc.alloc_page_table();
-            init_page_entry(&mut p3[p3i], p2 as *mut _ as u64, true, false);
+            init_page_entry(&mut p3[p3i], p2 as *mut _ as u64, true, true);
             p2
         } else {
             &mut *(p2.phys_addr() as *mut PageTable)
@@ -53,7 +51,7 @@ impl Mapper {
         let p1 = &mut p2[p2i];
         let p1 = if !p1.present() {
             let p1 = alloc.alloc_page_table();
-            init_page_entry(&mut p2[p2i], p1 as *mut _ as u64, true, false);
+            init_page_entry(&mut p2[p2i], p1 as *mut _ as u64, true, true);
             p1
         } else {
             &mut *(p1.phys_addr() as *mut PageTable)

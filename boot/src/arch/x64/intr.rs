@@ -23,7 +23,7 @@ extern "x86-interrupt" fn intr_double_fault(f: InterruptStackFrame, _: u64) -> !
     panic!("DOUBLE FAULT: {:?}", f);
 }
 
-extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, _: PageFaultErrorCode) {
+extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, e: PageFaultErrorCode) {
     use crate::unsafe_println;
     unsafe {
         if let Some((name, offset)) =
@@ -33,12 +33,12 @@ extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, _: PageFaultEr
                 "PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]",
                 f.instruction_pointer.as_u64(),
                 demangle(name),
-                offset
+                offset,
             )
         } else {
             unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.instruction_pointer.as_u64());
         }
-        unsafe_println!("Tried to access 0x{:x}", Cr2::read().as_u64());
+        unsafe_println!("Tried to access 0x{:x} : {:?}", Cr2::read().as_u64(), e);
     }
     panic!();
 }

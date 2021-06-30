@@ -12,6 +12,7 @@ mod timer;
 
 use crate::println;
 use acpi::RSDT;
+use chos_boot_defs::virt;
 use cmdline::iter_cmdline;
 use qemu::*;
 
@@ -66,24 +67,28 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     timer::initialize(hpet);
 
-    let count = core::sync::atomic::AtomicUsize::new(1);
-    let n = unsafe { mpstart::start_mp(
-        madt,
-        |id, count| {
-            let count: *const core::sync::atomic::AtomicUsize = count.cast();
-            let count = &*count;
-            println!("Hello from processor #{}", id);
-            count.fetch_add(1, core::sync::atomic::Ordering::Release);
-            loop {
-                x86_64::instructions::hlt();
-            }
-        },
-        &count as *const _ as _,
-    ) };
+    // let count = core::sync::atomic::AtomicUsize::new(1);
+    // let n = unsafe { mpstart::start_mp(
+    //     madt,
+    //     |id, count| {
+    //         let count: *const core::sync::atomic::AtomicUsize = count.cast();
+    //         let count = &*count;
+    //         println!("Hello from processor #{}", id);
+    //         count.fetch_add(1, core::sync::atomic::Ordering::Release);
+    //         loop {
+    //             x86_64::instructions::hlt();
+    //         }
+    //     },
+    //     &count as *const _ as _,
+    // ) };
 
-    while count.load(core::sync::atomic::Ordering::Acquire) < n {
-        core::hint::spin_loop();
-    }
+    // while count.load(core::sync::atomic::Ordering::Acquire) < n {
+    //     core::hint::spin_loop();
+    // }
+
+    let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE;
+    let entry: fn() -> &'static str = unsafe { core::mem::transmute(entry) };
+    println!("Got '{0}' [{0:p}] from kernel", entry());
 
     exit_qemu(QemuStatus::Success);
 }

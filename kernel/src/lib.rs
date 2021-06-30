@@ -20,6 +20,6 @@ percpu! {
 }
 
 #[no_mangle]
-pub extern "C" fn entry() -> ! {
-    loop {}
+pub extern "C" fn entry() -> &'static str {
+    "Hello from the kernel :3"
 }
