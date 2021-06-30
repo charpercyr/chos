@@ -1,15 +1,16 @@
 use core::mem::MaybeUninit;
+use core::slice::from_raw_parts;
 
 use multiboot2 as mb;
 
-use chos_elf::{StringTable, SymbolTable, SymbolType};
+use chos_elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType};
 
 static mut ELF_INITIALIZED: bool = false;
-static mut SYMBOL_TABLE: MaybeUninit<SymbolTable<'static>> = MaybeUninit::uninit();
-static mut STRING_TABLE: MaybeUninit<StringTable<'static>> = MaybeUninit::uninit();
+static mut SYMBOL_TABLE: MaybeUninit<Symtab<'static>> = MaybeUninit::uninit();
+static mut STRING_TABLE: MaybeUninit<StrTab<'static>> = MaybeUninit::uninit();
 
-unsafe fn get_symt() -> Option<&'static SymbolTable<'static>> {
-    ELF_INITIALIZED.then(|| SYMBOL_TABLE.assume_init_ref())
+unsafe fn get_tables() -> Option<(&'static Symtab<'static>, &'static StrTab<'static>)> {
+    ELF_INITIALIZED.then(|| (SYMBOL_TABLE.assume_init_ref(), STRING_TABLE.assume_init_ref()))
 }
 
 pub fn init_symbols(sections: mb::ElfSectionsTag) {
@@ -25,26 +26,19 @@ pub fn init_symbols(sections: mb::ElfSectionsTag) {
     if let (Some(symt), Some(strt)) = (symt, strt) {
         unsafe {
             ELF_INITIALIZED = true;
-            STRING_TABLE = MaybeUninit::new(StringTable::new(
-                strt.start_address() as _,
-                strt.size() as _,
-            ));
-            SYMBOL_TABLE = MaybeUninit::new(SymbolTable::new(
-                symt.start_address() as _,
-                symt.size() as _,
-                STRING_TABLE.assume_init(),
-            ));
+            STRING_TABLE = MaybeUninit::new(StrTab::new(from_raw_parts(strt.start_address() as *const u8, strt.size() as usize)));
+            SYMBOL_TABLE = MaybeUninit::new(Symtab::new(from_raw_parts(symt.start_address() as *const u8, symt.size() as usize), LookupStrategy::Linear));
         }
     }
 }
 
 pub fn find_symbol(addr: usize) -> Option<(&'static str, usize)> {
     let addr = addr as u64;
-    if let Some(symt) = unsafe { get_symt() } {
+    if let Some((symt, strt)) = unsafe { get_tables() } {
         if let Some(sym) = symt.iter().find(|s| {
-            (s.typ() == SymbolType::Func) && (addr >= s.addr()) && (addr < s.addr() + s.size())
+            (s.typ() == SymtabEntryType::Func) && (addr >= s.value()) && (addr < s.value() + s.size())
         }) {
-            Some((sym.name(), (addr - sym.addr()) as usize))
+            Some((sym.name(strt).unwrap_or(""), (addr - sym.value()) as usize))
         } else {
             None
         }

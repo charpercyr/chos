@@ -1,9 +1,20 @@
 #![no_std]
 
-pub mod raw;
+mod dynamic;
+pub use dynamic::*;
+
+mod gnu_hash;
+pub use gnu_hash::*;
+
+mod macros;
 
 mod program;
 pub use program::*;
+
+pub mod raw;
+
+mod rela;
+pub use rela::*;
 
 mod section;
 pub use section::*;
@@ -14,85 +25,96 @@ pub use strtab::*;
 mod symtab;
 pub use symtab::*;
 
-use core::marker::PhantomData;
+use self::raw::Elf64Hdr;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ElfError {
+use core::{mem::size_of, usize};
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ElfErrorKind {
+    InvalidSize,
     InvalidSignature,
-    InvalidBuffer,
 }
 
-pub struct Elf64<'a> {
-    hdr: *const raw::Elf64Hdr,
-    _ref: PhantomData<&'a [u8]>,
+#[derive(Copy, Clone, Debug)]
+pub struct ElfError {
+    pub kind: ElfErrorKind,
+    pub msg: &'static str,
 }
 
-impl<'a> Elf64<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, ElfError> {
-        unsafe {
-            let hdr: *const raw::Elf64Hdr = bytes.as_ptr().cast();
-            let hdr = &*hdr;
-            let file_sz = usize::max(
-                (hdr.shoff as usize) + (hdr.shentsize as usize) * (hdr.shnum as usize),
-                (hdr.phoff as usize) + (hdr.phentsize as usize) * (hdr.phnum as usize),
-            );
-            if hdr.ident.magic != raw::MAGIC || hdr.ident.class != raw::CLASS64 {
-                Err(ElfError::InvalidSignature)
-            } else if file_sz > bytes.len() {
-                Err(ElfError::InvalidBuffer)
-            } else {
-                Ok(Self {
-                    hdr,
-                    _ref: PhantomData,
-                })
-            }
-        }
+impl ElfError {
+    pub const fn new(kind: ElfErrorKind, msg: &'static str) -> Self {
+        Self { kind, msg }
     }
-    pub unsafe fn from_bytes_unchecked(bytes: &'a [u8]) -> Self {
-        Self {
-            hdr: bytes.as_ptr().cast(),
-            _ref: PhantomData,
+}
+
+pub struct Elf<'a> {
+    hdr: &'a raw::Elf64Hdr,
+    data: &'a [u8],
+}
+
+impl<'a> Elf<'a> {
+    pub fn new(data: &'a [u8]) -> Result<Self, ElfError> {
+        if data.len() < size_of::<Elf64Hdr>() {
+            return Err(ElfError::new(
+                ElfErrorKind::InvalidSize,
+                "Buffer is too small for header",
+            ));
         }
+        let hdr: *const Elf64Hdr = data.as_ptr().cast();
+        let hdr = unsafe { &*hdr };
+        if hdr.ident.magic != raw::MAGIC {
+            return Err(ElfError::new(
+                ElfErrorKind::InvalidSignature,
+                "ELF signature is invalid",
+            ));
+        }
+
+        if hdr.phoff as usize + (hdr.phentsize as usize * hdr.phnum as usize) > data.len() {
+            return Err(ElfError::new(
+                ElfErrorKind::InvalidSize,
+                "Buffer is too small for program header",
+            ));
+        }
+
+        if hdr.shoff as usize + (hdr.shentsize as usize * hdr.shnum as usize) > data.len() {
+            return Err(ElfError::new(
+                ElfErrorKind::InvalidSize,
+                "Buffer is too small for section header",
+            ));
+        }
+
+        Ok(Self { hdr, data })
     }
 
-    pub fn program(&self) -> ProgramTable<'a> {
-        let hdr = self.raw();
-        unsafe {
-            ProgramTable::new(
-                (self.hdr as *const u8).add(hdr.phoff as _),
-                hdr.phentsize as _,
-                hdr.phnum as _,
-            )
-        }
+    pub fn get_buffer(&self, offset: usize, len: usize) -> &'a [u8] {
+        &self.data[offset..(offset + len)]
     }
 
-    pub fn sections(&self) -> SectionTable<'a> {
-        let hdr = self.raw();
-        let shstrt = self.hdr as usize
-            + hdr.shoff as usize
-            + (hdr.shstrndx as usize) * (hdr.shentsize as usize);
-        let shstrt = shstrt as *const raw::Elf64Shdr;
+    pub fn program(&self) -> Program<'a> {
         unsafe {
-            let shstrt = &*(shstrt);
-            SectionTable::new(
-                self.hdr as *const u8,
-                (self.hdr as *const u8).add(hdr.shoff as usize),
-                hdr.shentsize as _,
-                hdr.shnum as _,
-                StringTable::new(
-                    (self.hdr as *const u8).offset(shstrt.off as _),
-                    shstrt.size as _,
+            Program::new(
+                self.get_buffer(
+                    self.hdr.phoff as usize,
+                    self.hdr.phnum as usize * self.hdr.phentsize as usize,
                 ),
+                self.hdr.phentsize as usize,
             )
         }
     }
 
-    pub fn raw(&self) -> &'a raw::Elf64Hdr {
-        unsafe { &*self.hdr }
+    pub fn sections(&'a self) -> Sections<'a> {
+        unsafe {
+            Sections::new(
+                self.get_buffer(
+                    self.hdr.shoff as usize,
+                    self.hdr.shnum as usize * self.hdr.shentsize as usize,
+                ),
+                self.hdr.shentsize as usize,
+            )
+        }
     }
 
-    pub unsafe fn data_ptr(&self, off: usize) -> *const u8 {
-        let data = self.hdr as *const u8;
-        data.add(off)
+    pub fn raw(&self) -> &Elf64Hdr {
+        &self.hdr
     }
 }

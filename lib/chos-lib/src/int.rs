@@ -1,20 +1,26 @@
+
+pub trait CeilDiv {
+    fn ceil_div(self, rhs: Self) -> Self;
+}
+
 macro_rules! ceil_div_impl {
-    ($name:ident, $ty:ty) => {
-        pub const fn $name(a: $ty, b: $ty) -> $ty {
-            (a + b - 1) / b
-        }
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl CeilDiv for $ty {
+                #[inline]
+                fn ceil_div(self, rhs: Self) -> Self {
+                    (self + rhs - 1) / rhs
+                }
+            }
+        )*
     };
 }
 
-ceil_div_impl!(ceil_div_u8, u8);
-ceil_div_impl!(ceil_div_i8, i8);
-ceil_div_impl!(ceil_div_u16, u16);
-ceil_div_impl!(ceil_div_i16, i16);
-ceil_div_impl!(ceil_div_u32, u32);
-ceil_div_impl!(ceil_div_i32, i32);
-ceil_div_impl!(ceil_div_u64, u64);
-ceil_div_impl!(ceil_div_i64, i64);
-ceil_div_impl!(ceil_div_u128, u128);
-ceil_div_impl!(ceil_div_i128, i128);
-ceil_div_impl!(ceil_div_usize, usize);
-ceil_div_impl!(ceil_div_isize, isize);
+ceil_div_impl!(
+    u8, i8,
+    u16, i16,
+    u32, i32,
+    u64, i64,
+    u128, i128,
+    usize, isize,
+);

@@ -136,7 +136,7 @@ macro_rules! field_enum {
                 $(
                     $value => Self::$field,
                 )*
-                _ => panic!(concat!("Invalid repr for ", stringify!($name))),
+                _ => panic!(concat!("Invalid repr for ", stringify!($name), " = {}"), v),
             }
         }
     };

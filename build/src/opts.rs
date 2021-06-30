@@ -8,6 +8,10 @@ pub struct BuildOpts {
     /// Release build
     #[structopt(long)]
     pub release: bool,
+    #[structopt(long)]
+    pub cargo_args: Vec<String>,
+    #[structopt(long)]
+    pub rustc_args: Vec<String>,
 }
 
 #[derive(StructOpt, Debug)]

@@ -9,10 +9,11 @@
 #![feature(const_panic)]
 #![feature(decl_macro)]
 #![feature(destructuring_assignment)]
+#![feature(fn_traits)]
 #![feature(global_asm)]
 #![feature(inline_const)]
-#![feature(maybe_uninit_ref)]
 #![feature(once_cell)]
+#![feature(unboxed_closures)]
 
 
 mod arch;

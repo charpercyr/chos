@@ -41,7 +41,7 @@ load_gdt:
 
 .type enable_paging, @function
 enable_paging:
-    // Map first 4GB
+    // Map first 1GB
     xor %eax, %eax
     or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (0 << 30)), %eax
     mov %eax, (p3_table + 0x0)
@@ -71,7 +71,8 @@ enable_paging:
 
     mov $0xC0000080, %ecx
     rdmsr
-    or $(1 << 8), %eax
+    // LONG_MODE | NO_EXECUTE_ENABLE
+    or $((1 << 8) | (1 << 11)), %eax
     wrmsr
 
     mov %cr0, %eax

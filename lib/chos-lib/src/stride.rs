@@ -227,7 +227,7 @@ impl<'a, T, const N: usize> From<&'a mut [T; N]> for StrideSliceMut<'a, T> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct StrideSliceIter<'a, T> {
     cur: *const T,
     end: *const T,

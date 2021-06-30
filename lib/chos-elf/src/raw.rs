@@ -58,7 +58,7 @@ pub struct Elf64Sym {
     pub info: u8,
     pub other: u8,
     pub shndx: u16,
-    pub addr: u64,
+    pub value: u64,
     pub size: u64,
 }
 
@@ -73,4 +73,28 @@ pub struct Elf64Phdr {
     pub filesz: u64,
     pub memsz: u64,
     pub align: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C, packed)]
+pub struct Elf64Dyn {
+    pub tag: u64,
+    pub val: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C, packed)]
+pub struct Elf64Rela {
+    pub off: u64,
+    pub info: u64,
+    pub addend: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C, packed)]
+pub struct Elf64GnuHash {
+    pub nbuckets: u32,
+    pub symoffset: u32,
+    pub bloom_size: u32,
+    pub bloom_shift: u32,
 }

@@ -1,7 +1,7 @@
 
 ENTRY(entry);
 
-SECTIONS {
+/* SECTIONS {
     . = 0;
 
     .text : {
@@ -22,8 +22,14 @@ SECTIONS {
         *(.got.plt*)
     }
 
+    . = ALIGN(4K);
+
     .bss : {
         *(.bss*)
+    }
+
+    .tbss : {
+        *(.tbss*)
     }
 
     . = ALIGN(4K);
@@ -35,7 +41,7 @@ SECTIONS {
     . = ALIGN(4K);
 
     .tdata : {
-        *(.tdata)
+        *(.tdata*)
     }
 
     . = ALIGN(4K);
@@ -48,4 +54,4 @@ SECTIONS {
     .rela.dyn : { *(.rela.dyn) }
     .hash : { *(.hash) }
     .gnu.hash : { *(.gnu.hash) }
-}
+} */

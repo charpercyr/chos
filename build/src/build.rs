@@ -26,11 +26,13 @@ pub fn build_main(opts: &BuildOpts, config: &[Project]) {
         args.push("--target".into());
         args.push(proj.flags.target.as_ref().unwrap().to_string_lossy().into_owned());
         args.extend(proj.flags.flags.iter().cloned());
+        args.extend(opts.cargo_args.iter().cloned());
 
         args.push("--".into());
         args.push(format!("-Clink-args=-T{}", proj.flags.linker_script.as_ref().unwrap().to_string_lossy()));
         args.extend(proj.flags.rustc_flags.iter().cloned());
-        
+        args.extend(opts.rustc_args.iter().cloned());
+
         cmd("cargo", args).run().unwrap();
     }
 }

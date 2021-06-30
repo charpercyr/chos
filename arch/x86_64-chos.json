@@ -6,7 +6,6 @@
     "target-pointer-width": "64",
     "target-c-int-width": "32",
     "os": "none",
-    "is_builtin": false,
 
     "executables": true,
     "dynamic-linking": true,

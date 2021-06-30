@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 cwd=$(realpath $(dirname $0))
 

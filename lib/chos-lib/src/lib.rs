@@ -24,6 +24,8 @@ pub mod int;
 
 pub mod intrusive;
 
+pub mod iter;
+
 pub mod pool;
 
 pub mod spin;
@@ -36,3 +38,16 @@ mod volatile;
 pub use volatile::*;
 
 pub use chos_lib_macros::forward_fmt;
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod tests {
+    use std::prelude::v1::*;
+    #[test]
+    fn my_test() {
+        let v = Vec::<usize>::new();
+        assert!(v.len() == 0);
+    }
+}

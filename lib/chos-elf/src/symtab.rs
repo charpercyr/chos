@@ -1,26 +1,119 @@
-use core::mem::size_of;
 
-use chos_lib::stride::{self, StrideSlice};
-
+use crate::GnuHash;
+use crate::StrTab;
 use crate::raw::Elf64Sym;
-use crate::StringTable;
 
-#[derive(Clone, Copy, Debug)]
-pub struct SymbolTable<'a> {
-    entries: StrideSlice<'a, Elf64Sym>,
-    strings: StringTable<'a>,
+use core::mem::size_of;
+use core::slice::{from_raw_parts, Iter};
+
+#[derive(Copy, Clone)]
+pub enum LookupStrategy<'a> {
+    Linear,
+    GnuHash(GnuHash<'a>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SymbolBinding {
+#[derive(Copy, Clone)]
+pub struct Symtab<'a> {
+    entries: &'a [Elf64Sym],
+    strat: LookupStrategy<'a>,
+}
+
+impl<'a> Symtab<'a> {
+    pub unsafe fn new(buf: &'a [u8], strat: LookupStrategy<'a>) -> Self {
+        Self {
+            entries: from_raw_parts(buf.as_ptr().cast(), buf.len() / size_of::<Elf64Sym>()),
+            strat,
+        }
+    }
+
+    pub fn lookup(&'a self, name: &str, strtab: &'a StrTab<'a>) -> Option<SymtabEntry<'a>> {
+        match self.strat {
+            LookupStrategy::Linear => self.lookup_linear(name, strtab),
+            LookupStrategy::GnuHash(h) => h.lookup(name, strtab, self),
+        }
+    }
+
+    fn lookup_linear(&self, name: &str, strtab: &StrTab<'a>) -> Option<SymtabEntry<'a>> {
+        for sym in self {
+            if let Some(symname) = sym.name(strtab) {
+                if symname == name {
+                    return Some(sym);
+                }
+            }
+        }
+        None
+    }
+}
+crate::elf_table!('a, Symtab, entries, SymtabEntry, SymtabEntryIter, Iter<'a, Elf64Sym>);
+
+#[derive(Copy, Clone)]
+pub struct SymtabEntry<'a> {
+    hdr: &'a Elf64Sym,
+}
+impl<'a> SymtabEntry<'a> {
+    fn new(hdr: &'a Elf64Sym) -> Self {
+        Self { hdr }
+    }
+
+    pub fn name(&self, strtab: &'a StrTab<'a>) -> Option<&'a str> {
+        strtab.get_string(self.hdr.name as usize)
+    }
+
+    pub fn info(&self) -> u8 {
+        self.hdr.info
+    }
+
+    pub fn bind(&self) -> SymtabEntryBind {
+        use SymtabEntryBind::*;
+        match self.hdr.info >> 4 {
+            0 => Local,
+            1 => Global,
+            2 => Weak,
+            b => SymtabEntryBind::Unknown(b),
+        }
+    }
+
+    pub fn typ(&self) -> SymtabEntryType {
+        use SymtabEntryType::*;
+        match self.hdr.info & 0xf {
+            0 => NoType,
+            1 => Object,
+            2 => Func,
+            3 => Section,
+            4 => File,
+            5 => Common,
+            6 => Tls,
+            t => Unknown(t),
+        }
+    }
+
+    pub fn other(&self) -> u8 {
+        self.hdr.other
+    }
+
+    pub fn shndx(&self) -> u16 {
+        self.hdr.shndx
+    }
+
+    pub fn value(&self) -> u64 {
+        self.hdr.value
+    }
+
+    pub fn size(&self) -> u64 {
+        self.hdr.size
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SymtabEntryBind {
     Local,
     Global,
     Weak,
-    Other(u8),
+    Unknown(u8),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SymbolType {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SymtabEntryType {
     NoType,
     Object,
     Func,
@@ -28,103 +121,5 @@ pub enum SymbolType {
     File,
     Common,
     Tls,
-    Other(u8),
-}
-
-impl<'a> SymbolTable<'a> {
-    pub unsafe fn new(entries: *const u8, size: usize, strings: StringTable<'a>) -> Self {
-        Self::new_with_stride(entries, size, size_of::<Elf64Sym>(), strings)
-    }
-    pub unsafe fn new_with_stride(
-        entries: *const u8,
-        size: usize,
-        entsize: usize,
-        strings: StringTable<'a>,
-    ) -> Self {
-        assert!(size % entsize == 0);
-        Self {
-            entries: stride::from_raw_parts(entries as *const _, size / entsize, entsize),
-            strings,
-        }
-    }
-
-    pub fn iter(&'a self) -> SymbolTableIter<'a> {
-        SymbolTableIter {
-            iter: self.entries.iter(),
-            symtab: self,
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a SymbolTable<'a> {
-    type Item = Symbol<'a>;
-    type IntoIter = SymbolTableIter<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-pub struct SymbolTableIter<'a> {
-    iter: stride::StrideSliceIter<'a, Elf64Sym>,
-    symtab: &'a SymbolTable<'a>,
-}
-
-impl<'a> Iterator for SymbolTableIter<'a> {
-    type Item = Symbol<'a>;
-
-    fn next(&mut self) -> Option<Symbol<'a>> {
-        self.iter.next().map(|entry| Symbol {
-            entry,
-            symtab: self.symtab,
-        })
-    }
-}
-
-pub struct Symbol<'a> {
-    entry: &'a Elf64Sym,
-    symtab: &'a SymbolTable<'a>,
-}
-
-impl<'a> Symbol<'a> {
-    pub fn name(&self) -> &'a str {
-        self.symtab.strings.get_string(self.raw().name as usize)
-    }
-
-    pub fn binding(&self) -> SymbolBinding {
-        match (self.raw().info & 0xf0) >> 4 {
-            0 => SymbolBinding::Local,
-            1 => SymbolBinding::Global,
-            2 => SymbolBinding::Weak,
-            b => SymbolBinding::Other(b),
-        }
-    }
-
-    pub fn typ(&self) -> SymbolType {
-        match self.raw().info & 0xf {
-            0 => SymbolType::NoType,
-            1 => SymbolType::Object,
-            2 => SymbolType::Func,
-            3 => SymbolType::Section,
-            4 => SymbolType::File,
-            5 => SymbolType::Common,
-            6 => SymbolType::Tls,
-            t => SymbolType::Other(t),
-        }
-    }
-
-    pub fn shndx(&self) -> u16 {
-        self.raw().shndx
-    }
-
-    pub fn addr(&self) -> u64 {
-        self.raw().addr
-    }
-
-    pub fn size(&self) -> u64 {
-        self.raw().size
-    }
-
-    pub fn raw(&self) -> &'a Elf64Sym {
-        self.entry
-    }
+    Unknown(u8),
 }

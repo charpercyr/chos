@@ -9,7 +9,7 @@ pub enum Either<L, R> {
     Right(R),
 }
 
-use Either::*;
+pub use Either::*;
 
 impl<L, R> Either<L, R> {
     pub fn is_left(&self) -> bool {
@@ -23,6 +23,20 @@ impl<L, R> Either<L, R> {
         match self {
             Left(_) => false,
             Right(_) => true,
+        }
+    }
+
+    pub fn either<T, LF: FnOnce(L) -> T, RF: FnOnce(R) -> T>(self, lf: LF, rf: RF) -> T {
+        match self {
+            Left(l) => lf(l),
+            Right(r) => rf(r),
+        }
+    }
+
+    pub fn either_with<T, C, LF: FnOnce(C, L) -> T, RF: FnOnce(C, R) -> T>(self, c: C, lf: LF, rf: RF) -> T {
+        match self {
+            Left(l) => lf(c, l),
+            Right(r) => rf(c, r),
         }
     }
 
@@ -201,6 +215,13 @@ impl<L, R> Either<L, R> {
             Right(r) => unsafe { Right(Pin::new_unchecked(r)) },
         }
     }
+
+    pub fn flip(self) -> Either<R, L> {
+        match self {
+            Left(l) => Right(l),
+            Right(r) => Left(r),
+        }
+    }
 }
 
 impl<T> Either<T, T> {
@@ -210,4 +231,31 @@ impl<T> Either<T, T> {
             Right(r) => r,
         }
     }
+
+    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Either<U, U> {
+        match self {
+            Left(l) => Left(f(l)),
+            Right(r) => Right(f(r)),
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! try_left {
+    ($e:expr) => {
+        match $e {
+            $crate::either::Left(l) => l,
+            $crate::either::Right(r) => return $crate::either::Either::Right(r.into()),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! try_right {
+    ($e:expr) => {
+        match $e {
+            $crate::either::Left(l) => return $crate::either::Either::Left(l.into()),
+            $crate::either::Right(r) => r,
+        }
+    };
 }

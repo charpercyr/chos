@@ -1,5 +1,6 @@
 
 use core::ops::{Index, IndexMut};
+use core::slice::{Iter, IterMut};
 
 use chos_lib::bitfield::*;
 
@@ -43,6 +44,7 @@ impl PageEntry {
 }
 
 #[derive(Clone, Debug)]
+#[repr(C, align(4096))]
 pub struct PageTable {
     entries: [PageEntry; PAGE_TABLE_SIZE],
 }
@@ -53,19 +55,69 @@ impl PageTable {
             entries: [PageEntry::zero(); PAGE_TABLE_SIZE],
         }
     }
-}
 
-impl Index<usize> for PageTable {
-    type Output = PageEntry;
+    pub fn iter(&self) -> PageTableIter<'_> {
+        PageTableIter {
+            iter: self.entries.iter(),
+        }
+    }
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.entries[index]
+    pub fn iter_mut(&mut self) -> PageTableIterMut<'_> {
+        PageTableIterMut {
+            iter: self.entries.iter_mut(),
+        }
     }
 }
 
-impl IndexMut<usize> for PageTable {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.entries[index]
+impl Index<u16> for PageTable {
+    type Output = PageEntry;
+
+    fn index(&self, index: u16) -> &Self::Output {
+        &self.entries[index as usize]
+    }
+}
+
+impl IndexMut<u16> for PageTable {
+    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
+        &mut self.entries[index as usize]
+    }
+}
+
+pub struct PageTableIter<'a> {
+    iter: Iter<'a, PageEntry>,
+}
+
+impl<'a> Iterator for PageTableIter<'a> {
+    type Item = &'a PageEntry;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> IntoIterator for &'a PageTable {
+    type Item = &'a PageEntry;
+    type IntoIter = PageTableIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut PageTable {
+    type Item = &'a mut PageEntry;
+    type IntoIter = PageTableIterMut<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+pub struct PageTableIterMut<'a> {
+    iter: IterMut<'a, PageEntry>,
+}
+
+impl<'a> Iterator for PageTableIterMut<'a> {
+    type Item = &'a mut PageEntry;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
 
@@ -84,7 +136,7 @@ pub fn split_virtual_address(addr: u64) -> Option<(u16, u16, u16, u16, u16)> {
 }
 
 pub fn make_canonical(addr: u64) -> u64 {
-    if addr & (1 << 47) != 0 {
+    if (addr & (1 << 47)) != 0 {
         addr | 0xffff_0000_0000_0000
     } else {
         addr & 0x0000_ffff_ffff_ffff
