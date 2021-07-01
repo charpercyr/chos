@@ -1,25 +1,36 @@
 #![no_std]
 
-#![feature(allocator_api)]
 #![feature(asm)]
 #![feature(decl_macro)]
 #![feature(thread_local)]
 
 mod arch;
-mod percpu;
+
+use chos_boot_defs::KernelBootInfo;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-percpu! {
-    pub static mut ref FOO: usize = 0;
-    pub static mut ref BAR: usize = 1;
-    pub static mut ref BAZ: [usize; 4] = [0, 1, 2, 3];
+macro_rules! rip {
+    () => {
+        unsafe {
+            let rip: usize;
+            asm! {
+                "leaq (%rip), {}",
+                lateout(reg) rip,
+                options(att_syntax, nostack),
+            };
+            rip
+        }
+    };
 }
 
 #[no_mangle]
-pub extern "C" fn entry() -> &'static str {
-    "Hello from the kernel :3"
+pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
+    (info.early_log)(format_args!("Hello From the kernel [{}] @ {:016x} !", id, rip!()));
+    loop {}
+    // chos_x64::qemu::exit_qemu(chos_x64::qemu::QemuStatus::Success)
 }
+chos_boot_defs::check_kernel_entry!(entry);

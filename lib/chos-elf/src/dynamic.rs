@@ -22,7 +22,7 @@ impl<'a> Dynamic<'a> {
         }
     }
 
-    pub fn rela(&self, elf: &Elf<'a>) -> Option<Rela<'a>> {
+    pub fn rela(&self, elf: &'a Elf<'a>) -> Option<Rela<'a>> {
         let mut rela = None;
         let mut relasz = None;
         for e in self {
@@ -32,6 +32,24 @@ impl<'a> Dynamic<'a> {
                 _ => (),
             }
             if let (Some(rela), Some(relasz)) = (rela, relasz) {
+                unsafe { return Some(Rela::new(elf.get_buffer(rela as usize, relasz as usize))) }
+            }
+        }
+        None
+    }
+
+    pub fn relaplt(&self, elf: &'a Elf<'a>) -> Option<Rela<'a>> {
+        let mut rela = None;
+        let mut relasz = None;
+        let mut relaplt = false;
+        for e in self {
+            match e.typ() {
+                DynamicEntryType::JmpRel => rela = Some(e.val()),
+                DynamicEntryType::PltRelSz => relasz = Some(e.val()),
+                DynamicEntryType::PltRel if e.val() == 7 => relaplt = true,
+                _ => (),
+            }
+            if let (Some(rela), Some(relasz), true) = (rela, relasz, relaplt) {
                 unsafe { return Some(Rela::new(elf.get_buffer(rela as usize, relasz as usize))) }
             }
         }

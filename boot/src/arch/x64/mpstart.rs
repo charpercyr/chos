@@ -58,7 +58,7 @@ pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) 
             None
         }
     });
-    let count = entries.clone().count();
+    let count = madt.apic_count();
 
     MPSTART_FN = MaybeUninit::new(start_fn);
     MPSTART_USER = user;

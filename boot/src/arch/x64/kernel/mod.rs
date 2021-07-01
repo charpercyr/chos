@@ -1,16 +1,18 @@
 
 mod mapper;
 mod palloc;
+mod reloc;
 
 use crate::arch::x64::kernel::mapper::{Mapper};
 use crate::arch::x64::kernel::palloc::PAlloc;
+use crate::arch::x64::kernel::reloc::apply_relocations;
 use crate::println;
 
 use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::str::from_utf8_unchecked;
 use core::u8;
 
-use chos_boot_defs::{phys, virt, BootMemoryMap};
+use chos_boot_defs::{phys, virt};
 
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
@@ -26,7 +28,7 @@ unsafe fn use_page_table(tbl: &mut PageTable) {
     }
 }
 
-pub unsafe fn map_kernel(kernel: &Elf) -> BootMemoryMap {
+pub unsafe fn map_kernel(kernel: &Elf) {
     let iter = kernel
         .program()
         .iter()
@@ -68,6 +70,7 @@ pub unsafe fn map_kernel(kernel: &Elf) -> BootMemoryMap {
 
     let mut palloc = PAlloc::new(pmap_end as *mut u8);
     let mut mapper = Mapper::new(&mut palloc);
+    mapper.identity_map_4g(&mut palloc);
 
     for p in iter {
         assert_eq!(p.align() as usize, PAGE_SIZE);
@@ -95,15 +98,9 @@ pub unsafe fn map_kernel(kernel: &Elf) -> BootMemoryMap {
             mapper.map(paddr, vaddr, flags.contains(ProgramEntryFlags::WRITE), flags.contains(ProgramEntryFlags::EXEC), &mut palloc);
         }
     }
-    mapper.identity_map_4g(&mut palloc);
     palloc.map_self(virt::KERNEL_PT_BASE, &mut mapper);
 
     use_page_table(mapper.p4);
 
-    core::ptr::read_volatile((virt::KERNEL_CODE_BASE + 0x1000) as *const u8);
-
-    BootMemoryMap {
-        entries: core::ptr::null(),
-        len: 0,
-    }
+    apply_relocations(kernel);
 }

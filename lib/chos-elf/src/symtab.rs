@@ -102,6 +102,10 @@ impl<'a> SymtabEntry<'a> {
     pub fn size(&self) -> u64 {
         self.hdr.size
     }
+
+    pub fn raw(&self) -> &Elf64Sym {
+        &self.hdr
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

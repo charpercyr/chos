@@ -3,8 +3,8 @@ use core::panic::PanicInfo;
 use rustc_demangle::demangle;
 
 use chos_x64::backtrace;
+use chos_x64::qemu::*;
 
-use super::qemu::*;
 use crate::unsafe_println;
 
 static mut IN_PANIC: bool = false;

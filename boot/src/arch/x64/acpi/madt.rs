@@ -1,6 +1,5 @@
-
-use core::mem::{size_of, transmute};
 use core::marker::PhantomData;
+use core::mem::{size_of, transmute};
 
 use bitflags::bitflags;
 
@@ -28,6 +27,12 @@ impl MADT {
                 madt: PhantomData,
             }
         }
+    }
+
+    pub fn apic_count(&self) -> usize {
+        self.entries()
+            .filter(|e| if let Entry::LAPIC(_) = e { true } else { false })
+            .count()
     }
 }
 

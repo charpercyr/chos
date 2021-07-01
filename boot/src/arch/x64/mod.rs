@@ -6,17 +6,26 @@ mod log;
 mod kernel;
 mod mpstart;
 mod panic;
-mod qemu;
 mod symbols;
 mod timer;
 
-use crate::println;
+use core::sync::atomic::AtomicUsize;
+
+use crate::{arch::x64::intr::apic, println};
 use acpi::RSDT;
-use chos_boot_defs::virt;
+use chos_boot_defs::{KernelBootInfo, KernelEntry, virt};
 use cmdline::iter_cmdline;
-use qemu::*;
+
+use spin::Barrier;
 
 use multiboot2 as mb;
+
+struct MpInfo {
+    entry: KernelEntry,
+    barrier: Barrier,
+    kbi: KernelBootInfo,
+    page_table_phys: usize,
+}
 
 #[no_mangle]
 pub extern "C" fn boot_main(mbp: usize) -> ! {
@@ -63,32 +72,50 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         panic!("No kernel")
     };
 
-    let _boot_memory_map = unsafe { kernel::map_kernel(&kernel) };
-
-    timer::initialize(hpet);
-
-    // let count = core::sync::atomic::AtomicUsize::new(1);
-    // let n = unsafe { mpstart::start_mp(
-    //     madt,
-    //     |id, count| {
-    //         let count: *const core::sync::atomic::AtomicUsize = count.cast();
-    //         let count = &*count;
-    //         println!("Hello from processor #{}", id);
-    //         count.fetch_add(1, core::sync::atomic::Ordering::Release);
-    //         loop {
-    //             x86_64::instructions::hlt();
-    //         }
-    //     },
-    //     &count as *const _ as _,
-    // ) };
-
-    // while count.load(core::sync::atomic::Ordering::Acquire) < n {
-    //     core::hint::spin_loop();
-    // }
+    unsafe { kernel::map_kernel(&kernel) };
 
     let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE;
-    let entry: fn() -> &'static str = unsafe { core::mem::transmute(entry) };
-    println!("Got '{0}' [{0:p}] from kernel", entry());
+    let entry: KernelEntry = unsafe { core::mem::transmute(entry) };
 
-    exit_qemu(QemuStatus::Success);
+    let apic_count = madt.apic_count();
+
+    let mp_info = MpInfo {
+        entry,
+        barrier: Barrier::new(apic_count),
+        kbi: KernelBootInfo {
+            elf: &kernel as *const _ as usize,
+            multiboot_header: mbp,
+            early_log: |args| println!("{}", args),
+        },
+        page_table_phys: unsafe {
+            let cr3: usize;
+            asm! {
+                "mov %cr3, {}",
+                lateout(reg) cr3,
+                options(att_syntax, nomem, nostack),
+            };
+            cr3
+        }
+    };
+
+    timer::initialize(hpet);
+    let n = unsafe { mpstart::start_mp(
+        madt,
+        |id, mp_info| {
+            println!("Here {}", id);
+            let mp_info: &MpInfo = &*mp_info.cast();
+            let cr3: usize;
+            asm! {
+                "mov {}, %cr3",
+                in(reg) mp_info.page_table_phys,
+                options(att_syntax, nomem, nostack),
+            };
+            mp_info.barrier.wait();
+            (mp_info.entry)(&mp_info.kbi, id);
+        },
+        &mp_info as *const _ as _,
+    ) };
+    mp_info.barrier.wait();
+
+    entry(&mp_info.kbi, unsafe { apic().id() });
 }
