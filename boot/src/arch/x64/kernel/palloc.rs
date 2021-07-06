@@ -1,7 +1,8 @@
 
+use core::mem::size_of;
 use core::ptr::write;
 
-use chos_x64::paging::{PAGE_SIZE, PageTable};
+use chos_x64::paging::{PAGE_SIZE, PAGE_SIZE64, PAddr, PageTable, VAddr};
 
 use super::mapper::Mapper;
 
@@ -28,13 +29,17 @@ impl PAlloc {
         }
     }
 
-    pub unsafe fn map_self(&mut self, mut vaddr: u64, mapper: &mut Mapper) {
+    pub unsafe fn map_self(&mut self, mut vaddr: VAddr, mapper: &mut Mapper) {
         let mut cur = self.pbase;
         // We might need to allocate more pages, so self.pcur might change during iteration
         while cur < self.pcur {
-            mapper.map(cur as u64, vaddr, true, false, self);
+            mapper.map(PAddr::new(cur as u64), vaddr, true, false, self);
             cur = cur.add(1);
-            vaddr += PAGE_SIZE as u64;
+            vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64).expect("Got invalid vaddr, this is very unlikely");
         }
+    }
+
+    pub fn total_size(&self) -> usize {
+        unsafe { (self.pcur.offset_from(self.pbase) as usize) * size_of::<PageTable>() }
     }
 }

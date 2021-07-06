@@ -1,7 +1,7 @@
 {
     "rust-analyzer.cargo.target": "arch/x86_64-chos.json",
     "rust-analyzer.checkOnSave.allTargets": false,
-    "rust-analyzer.cargo.allFeatures": false,
+    "rust-analyzer.cargo.allFeatures": true,
     "rust-analyzer.checkOnSave.extraArgs": [
         "-Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem", "--verbose"
     ],

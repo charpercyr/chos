@@ -16,13 +16,13 @@ fn symbol_value(sym: SymtabEntry) -> i64 {
 
 fn symbol_offset_value(sym: SymtabEntry) -> i64 {
     check_symbol(sym);
-    unsafe { transmute(sym.value() + BASE) }
+    unsafe { transmute(sym.value() + BASE.as_u64()) }
 }
 
 pub unsafe fn do_relocation(symtab: &Symtab, e: &RelaEntry) {
     use chos_elf::X64RelaType::*;
     // crate::println!("Reloc {:?} @ {:08x} + {:08x}", e.x64_typ(), e.offset(), e.addend());
-    let off = (e.offset() + BASE) as *mut i64;
+    let off = (e.offset() + BASE.as_u64()) as *mut i64;
     match e.x64_typ() {
         None => (),
         _64 => write_volatile(

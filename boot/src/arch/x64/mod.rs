@@ -9,11 +9,10 @@ mod panic;
 mod symbols;
 mod timer;
 
-use core::sync::atomic::AtomicUsize;
-
 use crate::{arch::x64::intr::apic, println};
 use acpi::RSDT;
 use chos_boot_defs::{KernelBootInfo, KernelEntry, virt};
+use chos_x64::paging::PageTable;
 use cmdline::iter_cmdline;
 
 use spin::Barrier;
@@ -24,7 +23,7 @@ struct MpInfo {
     entry: KernelEntry,
     barrier: Barrier,
     kbi: KernelBootInfo,
-    page_table_phys: usize,
+    page_table: *mut PageTable,
 }
 
 #[no_mangle]
@@ -49,7 +48,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         symbols::init_symbols(sections);
     }
 
-    let rsdt = mbh.rsdp_v1_tag().unwrap().rsdt_address();
+    let rsdt = mbh.rsdp_v1_tag().expect("No RSDT from Multiboot").rsdt_address();
     let rsdt = unsafe { &*(rsdt as *const RSDT) };
     let madt = rsdt.madt().unwrap();
     let hpet = rsdt.hpet().unwrap();
@@ -72,9 +71,9 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         panic!("No kernel")
     };
 
-    unsafe { kernel::map_kernel(&kernel) };
+    let mem_info = unsafe { kernel::map_kernel(&kernel) };
 
-    let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE;
+    let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE.as_u64();
     let entry: KernelEntry = unsafe { core::mem::transmute(entry) };
 
     let apic_count = madt.apic_count();
@@ -86,30 +85,18 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             elf: &kernel as *const _ as usize,
             multiboot_header: mbp,
             early_log: |args| println!("{}", args),
+            mem_info,
         },
-        page_table_phys: unsafe {
-            let cr3: usize;
-            asm! {
-                "mov %cr3, {}",
-                lateout(reg) cr3,
-                options(att_syntax, nomem, nostack),
-            };
-            cr3
-        }
+        page_table: unsafe { PageTable::get_current_page_table() },
     };
 
     timer::initialize(hpet);
-    let n = unsafe { mpstart::start_mp(
+    unsafe { mpstart::start_mp(
         madt,
         |id, mp_info| {
             println!("Here {}", id);
             let mp_info: &MpInfo = &*mp_info.cast();
-            let cr3: usize;
-            asm! {
-                "mov {}, %cr3",
-                in(reg) mp_info.page_table_phys,
-                options(att_syntax, nomem, nostack),
-            };
+            (*mp_info.page_table).set_page_table();
             mp_info.barrier.wait();
             (mp_info.entry)(&mp_info.kbi, id);
         },

@@ -1,11 +1,122 @@
 
+use core::fmt;
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
 
 use chos_lib::bitfield::*;
 
 pub const PAGE_TABLE_SIZE: usize = 512;
-pub const PAGE_SIZE: usize = 4096;
+
+pub const PAGE_SHIFT: u32 = 12;
+pub const PAGE_MASK: u64 = (1 << PAGE_SHIFT) - 1;
+pub const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
+pub const PAGE_SIZE64: u64 = 1 << PAGE_SHIFT;
+
+macro_rules! impl_addr_fns {
+    ($ty:ty) => {
+        impl $ty {
+            pub const fn as_u64(self) -> u64 {
+                self.0
+            }
+        
+            pub const fn is_page_aligned(self) -> bool {
+                self.0 & PAGE_MASK == 0
+            }
+        
+            pub const fn align_page(self) -> Self {
+                Self(self.0 & !PAGE_MASK)
+            }
+        
+            pub const fn align_page_up(self) -> Self {
+                Self((self.0 + PAGE_SIZE64 - 1) / PAGE_SIZE64 * PAGE_SIZE64)
+            }
+        
+            pub const fn page(self) -> u64 {
+                self.0 >> 12
+            }
+
+            pub unsafe fn offset(self, o: i64) -> Self {
+                if o < 0 {
+                    Self(self.0 - (-o as u64))
+                } else {
+                    Self(self.0 + o as u64)
+                }
+            }
+
+            pub unsafe fn add(self, o: u64) -> Self {
+                Self(self.0 + o)
+            }
+
+            pub unsafe fn sub(self, o: u64) -> Self {
+                Self(self.0 - o)
+            }
+        }
+
+        impl fmt::Debug for $ty {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, concat!(stringify!($ty), "({:#x})"), self.0)
+            }
+        }
+
+        impl fmt::Pointer for $ty {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{:#x}", self.0)
+            }
+        }
+    };
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct VAddr(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VaddrError {
+    NonCanonical,
+}
+
+impl VAddr {
+    pub const fn new(v: u64) -> Result<Self, VaddrError> {
+        if v & (1 << 47) != 0 && v & 0xffff_0000_0000_0000 != 0xffff_0000_0000_0000 {
+            Err(VaddrError::NonCanonical)
+        } else if (v & (1 << 47)) == 0 && v & 0xffff_0000_0000_0000 != 0 {
+            Err(VaddrError::NonCanonical)
+        } else {
+            Ok(Self(v))
+        }
+    }
+
+    pub const fn make_canonical(mut v: u64) -> Self {
+        v |= if v & (1 << 47) != 0 { 0xffff_0000_0000_0000 } else { 0 };
+        Self(v)
+    }
+
+    pub const unsafe fn new_unchecked(v: u64) -> Self {
+        Self(v)
+    }
+
+    pub fn split(self) -> (u16, u16, u16, u16, u16) {
+        let addr = self.0;
+        let off = (addr & 0xfff) as u16;
+        let p1 = ((addr & (0x1ff << 12)) >> 12) as u16;
+        let p2 = ((addr & (0x1ff << 21)) >> 21) as u16;
+        let p3 = ((addr & (0x1ff << 30)) >> 30) as u16;
+        let p4 = ((addr & (0x1ff << 39)) >> 39) as u16;
+        (p4, p3, p2, p1, off)
+    }
+}
+impl_addr_fns!(VAddr);
+
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct PAddr(u64);
+
+impl PAddr {
+    pub const fn new(v: u64) -> Self {
+        Self(v)
+    }
+}
+impl_addr_fns!(PAddr);
 
 bitfield! {
     #[derive(Clone, Copy)]
@@ -33,13 +144,13 @@ impl PageEntry {
         Self::new(0)
     }
 
-    pub fn phys_addr(&self) -> u64 {
-        self.addr() << 12
+    pub fn phys_addr(&self) -> PAddr {
+        PAddr::new(self.addr() << 12)
     }
     
-    pub fn set_phys_addr(&mut self, addr: u64) -> &mut Self {
-        assert_eq!(addr % 4096, 0);
-        self.set_addr(addr >> 12)
+    pub fn set_phys_addr(&mut self, addr: PAddr) -> &mut Self {
+        assert!(addr.is_page_aligned(), "Address is not page aligned");
+        self.set_addr(addr.page())
     }
 }
 
@@ -66,6 +177,24 @@ impl PageTable {
         PageTableIterMut {
             iter: self.entries.iter_mut(),
         }
+    }
+
+    pub unsafe fn set_page_table(&mut self) {
+        asm! {
+            "mov %rax, %cr3",
+            in("rax") self,
+            options(att_syntax, nostack),
+        }
+    }
+
+    pub unsafe fn get_current_page_table() -> &'static mut Self {
+        let pgt: *mut Self;
+        asm! {
+            "mov %cr3, %rax",
+            lateout("rax") pgt,
+            options(att_syntax, nostack, nomem),
+        }
+        &mut *pgt
     }
 }
 
@@ -119,20 +248,6 @@ impl<'a> Iterator for PageTableIterMut<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-}
-
-pub fn split_virtual_address(addr: u64) -> Option<(u16, u16, u16, u16, u16)> {
-    if (addr & (1 << 47)) != 0 && (addr & 0xffff_0000_0000_0000) != 0xffff_0000_0000_0000 {
-        return None;
-    } else if (addr & (1 << 47)) == 0 && (addr & 0xffff_0000_0000_0000) != 0 {
-        return None;
-    }
-    let off = (addr & 0xfff) as u16;
-    let p1 = ((addr & (0x1ff << 12)) >> 12) as u16;
-    let p2 = ((addr & (0x1ff << 21)) >> 21) as u16;
-    let p3 = ((addr & (0x1ff << 30)) >> 30) as u16;
-    let p4 = ((addr & (0x1ff << 39)) >> 39) as u16;
-    Some((p4, p3, p2, p1, off))
 }
 
 pub fn make_canonical(addr: u64) -> u64 {

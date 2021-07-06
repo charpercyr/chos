@@ -1,15 +1,20 @@
 
 use cfg_if::cfg_if;
 
-macro_rules! use_arch {
-    ($mod:ident, $arch:expr) => {
-        cfg_if! {
-            if #[cfg(target_arch = $arch)] {
-                mod $mod;
-                pub use self::$mod::*;
+macro_rules! match_arch {
+    ($($arch:expr => $amod:ident),* $(,)?) => {
+        $(
+            cfg_if! {
+                if #[cfg(target_arch = $arch)] {
+                    mod $amod;
+                    pub use self::$amod::*;
+                }
             }
-        }
+        )*
     };
 }
 
-use_arch!(x86_64, "x86_64");
+match_arch!(
+    "x86_64" => x86_64,
+    "arm" => arm,
+);

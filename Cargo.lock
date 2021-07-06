@@ -32,6 +32,7 @@ dependencies = [
  "chos-boot-defs",
  "chos-x64",
  "paste",
+ "spin",
  "x86_64",
 ]
 
@@ -55,6 +56,9 @@ dependencies = [
 [[package]]
 name = "chos-boot-defs"
 version = "0.1.0"
+dependencies = [
+ "chos-x64",
+]
 
 [[package]]
 name = "chos-elf"

@@ -17,7 +17,7 @@
     "dll-suffix": ".elf",
     "exe-suffix": ".elf",
 
-    "eliminate-frame-pointer": false,
+    "frame-pointer": "always",
     "disable-redzone": true,
     
     "panic-strategy": "abort"
