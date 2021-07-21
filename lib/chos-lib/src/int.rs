@@ -44,7 +44,7 @@ pub const fn ceil_log2u64(value: u64) -> u32 {
     match value {
         0 => unsafe { unreachable_unchecked() },
         1 => 0,
-        n => log2u64(next_pow2u64(value)),
+        n => log2u64(next_pow2u64(n)),
     }
 }
 

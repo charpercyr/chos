@@ -11,6 +11,10 @@ fn panic(info: &PanicInfo) -> ! {
     unsafe {
         if let Some(logger) = PANIC_LOGGER {
             logger(format_args!("PANIC: {}", info));
+            logger(format_args!("Backtrace"));
+            for frame in chos_x64::backtrace() {
+                logger(format_args!("  {:016p}", frame));
+            }
         }
         exit_qemu(chos_x64::qemu::QemuStatus::Error)
     }

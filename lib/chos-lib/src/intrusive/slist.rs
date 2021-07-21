@@ -1,12 +1,8 @@
 
-use crate::container_of;
-
 use super::{Adapter, Pointer};
 
 use core::cell::Cell;
 use core::fmt;
-use core::marker::PhantomPinned;
-use core::pin::Pin;
 use core::ptr::null;
 
 pub struct Link {

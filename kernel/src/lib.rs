@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(allocator_api)]
 #![feature(asm)]
 #![feature(const_fn_transmute)]
 #![feature(decl_macro)]
@@ -12,7 +13,7 @@ mod log;
 mod mm;
 mod panic;
 
-use chos_boot_defs::{KernelBootInfo, KernelMemEntry};
+use chos_boot_defs::KernelBootInfo;
 use chos_x64::qemu::{exit_qemu, QemuStatus};
 use multiboot2::MemoryArea;
 use panic::set_panic_logger;
@@ -63,10 +64,28 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     unsafe { set_panic_logger(info.early_log) };
     log::use_early_debug(info.early_log);
     setup_early_memory_allocator(info);
-    let p1 = unsafe { mm::phys::alloc::allocate_pages(0) }.unwrap();
-    let p2 = unsafe { mm::phys::alloc::allocate_pages(0) }.unwrap();
-    unsafe { mm::phys::alloc::deallocate_pages(p1, 0) };
-    unsafe { mm::phys::alloc::deallocate_pages(p2, 0) };
+
+    use mm::phys::alloc::{allocate_pages, deallocate_pages};
+
+    unsafe {
+        let p1 = allocate_pages(0).unwrap();
+        let p2 = allocate_pages(0).unwrap();
+        let p3 = allocate_pages(0).unwrap();
+        let p4 = allocate_pages(0).unwrap();
+        // let p5 = allocate_pages(0).unwrap();
+        deallocate_pages(p1, 0);
+        deallocate_pages(p2, 0);
+        deallocate_pages(p3, 0);
+        deallocate_pages(p4, 0);
+        // deallocate_pages(p5, 0);
+        debug!("{:p}", p1);
+        debug!("{:p}", p2);
+        debug!("{:p}", p3);
+        debug!("{:p}", p4);
+        // debug!("{:p}", p5);
+    }
+    
+
     exit_qemu(QemuStatus::Success);
 }
 chos_boot_defs::check_kernel_entry!(entry);

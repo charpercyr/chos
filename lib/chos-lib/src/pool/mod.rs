@@ -24,11 +24,22 @@ macro_rules! pool {
     ($name:ident => $r:expr) => {
         pub struct $name;
         unsafe impl<T> $crate::pool::Pool<T> for $name {
-            unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError> {
+            unsafe fn allocate(&self) -> core::result::Result<core::ptr::NonNull<T>, core::alloc::AllocError> {
                 $crate::pool::Pool::<T>::allocate($r)
             }
-            unsafe fn deallocate(&self, ptr: NonNull<T>) {
+            unsafe fn deallocate(&self, ptr: core::ptr::NonNull<T>) {
                 $crate::pool::Pool::<T>::deallocate($r, ptr)
+            }
+        }
+    };
+    ($name:ident: $ty:ident => $r:expr) => {
+        pub struct $name;
+        unsafe impl $crate::pool::Pool<$ty> for $name {
+            unsafe fn allocate(&self) -> core::result::Result<core::ptr::NonNull<$ty>, core::alloc::AllocError> {
+                $crate::pool::Pool::<$ty>::allocate($r)
+            }
+            unsafe fn deallocate(&self, ptr: core::ptr::NonNull<$ty>) {
+                $crate::pool::Pool::<$ty>::deallocate($r, ptr)
             }
         }
     };

@@ -1,5 +1,5 @@
-use core::mem::{align_of, size_of, transmute, MaybeUninit};
-use core::ptr::{NonNull, null, null_mut, write, write_bytes};
+use core::mem::{MaybeUninit, align_of, size_of};
+use core::ptr::{null_mut, write, write_bytes};
 use core::slice;
 
 use chos_lib::int::{log2u64, CeilDiv};
@@ -20,6 +20,7 @@ struct Region {
 
 struct BlockHeader {
     next: *mut BlockHeader,
+    prev: *mut BlockHeader,
 }
 
 type BitmapRepr = usize;
@@ -75,18 +76,19 @@ impl Region {
             let block_hdr = Self::get_page_ptr(region, current_page).cast::<BlockHeader>();
             write(block_hdr, BlockHeader {
                 next: null_mut(),
+                prev: null_mut(),
             });
             if shift < biggest_shift {
                 let bit = block_list.bitmap_offset + (current_page >> (shift + 1)) as usize;
                 let byte = bit / (size_of::<BitmapRepr>() * 8);
                 let bit = bit % (size_of::<BitmapRepr>() * 8);
                 // debug!("Set bitmap {:02} ({:05} {02})", shift, byte, bit);
-                bitmap[byte] |= (1 << bit);
+                bitmap[byte] |= 1 << bit;
             }
 
             block_list.blocks = block_hdr;
-            remaining_pages -= (1 << shift);
-            current_page += (1 << shift);
+            remaining_pages -= 1 << shift;
+            current_page += 1 << shift;
         }
         // debug!("Region {:#?}", *region);
         // debug!("Blocks {:#?}", Self::block_lists(region.cast(), biggest_shift));
@@ -155,19 +157,27 @@ impl Region {
         let block_lists = Self::block_lists(base, self.biggest_shift);
         let block_list = &mut block_lists[shift as usize];
         let paddr = if block_list.blocks == null_mut() {
-            self.free_pages += (1 << shift);
+            self.free_pages += 1 << shift;
             let block = self.allocate(shift + 1)?;
             let other = block.add(PAGE_SIZE64 << shift);
             let other = other.as_u64() as *mut BlockHeader;
             write(other, BlockHeader {
                 next: block_list.blocks,
+                prev: null_mut(),
             });
+            if (*other).next != null_mut() {
+                (*(*other).next).prev = other;
+            }
             block_list.blocks = other;
             block
         } else {
-            self.free_pages -= (1 << shift);
+            self.free_pages -= 1 << shift;
             let block = block_list.blocks;
             block_list.blocks = (*block).next;
+            if block_list.blocks != null_mut() {
+                (*block_list.blocks).prev = null_mut();
+            }
+            write_bytes(block, 0xcc, 1);
             PAddr::new(block as u64)
         };
         let page = (paddr.as_u64() - base as u64) / PAGE_SIZE64 - self.meta_pages;
@@ -178,28 +188,74 @@ impl Region {
             debug_assert!(bit < (self.bitmap_size as usize));
             let word = bit / (size_of::<BitmapRepr>() * 8);
             let bit = bit % (size_of::<BitmapRepr>() * 8);
-            bitmap[word] ^= (1 << bit);
+            bitmap[word] ^= 1 << bit;
         }
         Some(paddr)
     }
 
     unsafe fn merge_blocks(&mut self, block_lists: &mut [BlockList], bitmap: &mut [BitmapRepr], page: u64, shift: u32) {
+        assert!(shift < self.biggest_shift);
         let base = self as *mut Self as u64;
         let block_list = &mut block_lists[shift as usize];
-        let other = {
-
-        };
+        
         let mut other = None;
         let mut cur = block_list.blocks;
         while cur != null_mut() {
             let other_page = (cur as u64 - base) / PAGE_SIZE64 - self.meta_pages;
-            if (page & !1) == (other_page & !1) {
-
+            assert_ne!(page, other_page);
+            if (page >> (shift + 1)) == (other_page >> (shift + 1)) {
+                other = Some(cur);
                 break;
             }
             cur = (*cur).next;
         }
         let other = other.expect("The block was not found in the list");
+        if (*other).next != null_mut() {
+            (*(*other).next).prev = (*other).prev;
+        }
+        if (*other).prev != null_mut() {
+            (*(*other).prev).next = (*other).next;
+        }
+        if block_list.blocks == other {
+            block_list.blocks = (*other).next;
+        }
+        write_bytes(other, 0xcc, 1);
+
+        let page = page & !((1 << (shift + 1)) - 1);
+        self.deallocate_inner(block_lists, bitmap, page, shift + 1);
+    }
+
+    unsafe fn deallocate_inner(&mut self, block_lists: &mut [BlockList], bitmap: &mut [BitmapRepr], page: u64, shift: u32) {
+        let base = self as *mut Self as u64;
+
+        let mut merged: bool = false;
+        if shift < self.biggest_shift {
+            let block_list = &mut block_lists[shift as usize];
+            let bit = block_list.bitmap_offset + (page >> (shift + 1)) as usize;
+            debug_assert!(bit < (self.bitmap_size as usize));
+            let word = bit / (size_of::<BitmapRepr>() * 8);
+            let bit = bit % (size_of::<BitmapRepr>() * 8);
+            bitmap[word] ^= 1 << bit;
+            if (bitmap[word] & (1 << bit)) == 0 {
+                self.merge_blocks(block_lists, bitmap, page, shift);
+                merged = true;
+                self.free_pages -= 1 << shift;
+            }
+        }
+        if !merged {
+            let block_list = &mut block_lists[shift as usize];
+            let block = (base + (page + self.meta_pages) * PAGE_SIZE64) as *mut BlockHeader;
+            write(block, BlockHeader {
+                next: null_mut(),
+                prev: null_mut(),
+            });
+            (*block).next = block_list.blocks;
+            if (*block).next != null_mut() {
+                (*(*block).next).prev = block;
+            }
+            block_list.blocks = block;
+            self.free_pages += 1 << shift;
+        }
     }
 
     unsafe fn deallocate(&mut self, paddr: PAddr, shift: u32) {
@@ -208,18 +264,7 @@ impl Region {
         let page = (paddr.as_u64() - base as u64) / PAGE_SIZE64 - self.meta_pages;
         let bitmap = Self::bitmap(base, self.biggest_shift, self.bitmap_size);
         let block_lists = Self::block_lists(base, self.biggest_shift);
-        let block_list = &mut block_lists[shift as usize];
-
-        if shift < self.biggest_shift {
-            let bit = block_list.bitmap_offset + (page >> (shift + 1)) as usize;
-            debug_assert!(bit < (self.bitmap_size as usize));
-            let word = bit / (size_of::<BitmapRepr>() * 8);
-            let bit = bit % (size_of::<BitmapRepr>() * 8);
-            bitmap[word] ^= (1 << bit);
-            if (bitmap[word] & (1 << bit)) == 0 {
-                self.merge_blocks(block_lists, bitmap, page, shift);
-            }
-        }
+        self.deallocate_inner(block_lists, bitmap, page, shift)
     }
 }
 static mut REGIONS: Option<*mut Region> = None;
@@ -265,15 +310,30 @@ unsafe fn find_map_regions<R, F: FnMut(&mut Region) -> Option<R>>(mut f: F) -> O
     None
 }
 
+unsafe fn debug_alloc(msg: &str) {
+    debug!("{}\n{:#?}", msg, (*REGIONS.unwrap_unchecked()));
+    let block_lists = Region::block_lists(REGIONS.unwrap_unchecked().cast(),(*REGIONS.unwrap_unchecked()).biggest_shift);
+    for (i, b) in block_lists.iter().enumerate() {
+        let mut cur = b.blocks;
+        debug!("  [{:02}]", i);
+        while cur != null_mut() {
+            debug!("    {:p}", cur);
+            cur = (*cur).next;
+        }
+    }
+}
+
 pub unsafe fn allocate_pages(shift: u32) -> Option<PAddr> {
-    find_map_regions(|region| {
+    let res = find_map_regions(|region| {
         if shift <= region.biggest_shift {
             if let Some(addr) = region.allocate(shift) {
                 return Some(addr);
             }
         }
         None
-    })
+    });
+    debug_alloc("ALLOC");
+    res
 }
 
 pub unsafe fn deallocate_pages(page: PAddr, shift: u32) {
@@ -281,6 +341,7 @@ pub unsafe fn deallocate_pages(page: PAddr, shift: u32) {
     find_map_regions(|region| {
         region.contains(page).then(|| region.deallocate(page, shift))
     });
+    debug_alloc("DEALLOC");
 }
 
 pub fn free_pages() -> u64 {
