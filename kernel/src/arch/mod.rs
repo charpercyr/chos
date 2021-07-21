@@ -15,6 +15,6 @@ macro_rules! match_arch {
 }
 
 match_arch!(
-    "x86_64" => x86_64,
+    "x86_64" => x64,
     "arm" => arm,
 );

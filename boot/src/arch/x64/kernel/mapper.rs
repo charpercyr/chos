@@ -1,5 +1,8 @@
 
+use chos_lib::int::CeilDiv;
 use chos_x64::paging::{PAddr, PageEntry, PageTable, VAddr};
+
+use multiboot2::MemoryMapTag;
 
 use super::palloc::PAlloc;
 
@@ -8,12 +11,12 @@ pub struct Mapper {
 }
 
 fn init_page_entry(e: &mut PageEntry, paddr: PAddr, write: bool, exec: bool) {
-    e
-        .set_no_execute(!exec)
-        .set_phys_addr(paddr)
-        .set_global(true)
-        .set_writable(write)
-        .set_present(true)
+    *e = e
+        .with_no_execute(!exec)
+        .with_phys_addr(paddr)
+        .with_global(true)
+        .with_writable(write)
+        .with_present(true)
     ;
 }
 
@@ -60,17 +63,17 @@ impl Mapper {
         init_page_entry(&mut p1[p1i], paddr, write, exec);
     }
 
-    pub unsafe fn identity_map_4g(&mut self, alloc: &mut PAlloc) {
+    pub unsafe fn identity_map_memory(&mut self, alloc: &mut PAlloc, map: &MemoryMapTag) {
+        const GB: u64 = 0x4000_0000;
+
         let p3 = alloc.alloc_page_table();
         init_page_entry(&mut self.p4[0], PAddr::new(p3 as *mut _ as u64), true, true);
-        init_page_entry(&mut p3[0], PAddr::new(0x0000_0000), true, true);
-        init_page_entry(&mut p3[1], PAddr::new(0x4000_0000), true, true);
-        init_page_entry(&mut p3[2], PAddr::new(0x8000_0000), true, true);
-        init_page_entry(&mut p3[3], PAddr::new(0xc000_0000), true, true);
-        
-        p3[0].set_huge_page(true);
-        p3[1].set_huge_page(true);
-        p3[2].set_huge_page(true);
-        p3[3].set_huge_page(true);
+        let mem_size = map.all_memory_areas().map(|e| e.end_address()).max().expect("Memory map is empty");
+        let g_count = mem_size.ceil_div(GB);
+        for i in 0..g_count {
+            init_page_entry(&mut p3[i as u16], PAddr::new(i * GB), true, true);
+            p3[i as u16].set_huge_page(true);
+            crate::println!("Identity map {:016x} - {:016x}", i * GB, (i + 1) * GB);
+        }
     }
 }

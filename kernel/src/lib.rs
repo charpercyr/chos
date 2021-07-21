@@ -1,33 +1,21 @@
 #![no_std]
-
 #![feature(asm)]
+#![feature(const_fn_transmute)]
 #![feature(decl_macro)]
-#![feature(thread_local)]
+#![feature(maybe_uninit_slice)]
 #![feature(never_type)]
+#![feature(option_result_unwrap_unchecked)]
+#![feature(thread_local)]
 
 mod arch;
+mod log;
+mod mm;
+mod panic;
 
-use chos_boot_defs::KernelBootInfo;
+use chos_boot_defs::{KernelBootInfo, KernelMemEntry};
 use chos_x64::qemu::{exit_qemu, QemuStatus};
-
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
-
-macro_rules! rip {
-    () => {
-        unsafe {
-            let rip: usize;
-            asm! {
-                "leaq (%rip), {}",
-                lateout(reg) rip,
-                options(att_syntax, nostack),
-            };
-            rip
-        }
-    };
-}
+use multiboot2::MemoryArea;
+use panic::set_panic_logger;
 
 fn hlt_loop() -> ! {
     unsafe {
@@ -40,16 +28,45 @@ fn hlt_loop() -> ! {
     }
 }
 
+fn is_early_memory(area: &MemoryArea, info: &KernelBootInfo) -> bool {
+    area.typ() == multiboot2::MemoryAreaType::Available
+        && area.start_address() > info.mem_info.code.phys.as_u64() + info.mem_info.code.size as u64
+        && area.start_address() > info.mem_info.pt.phys.as_u64() + info.mem_info.pt.size as u64
+}
+
+fn setup_early_memory_allocator(info: &KernelBootInfo) {
+    let mbh = unsafe { multiboot2::load(info.multiboot_header) };
+    if let Some(mem) = mbh.memory_map_tag() {
+        let iter = mem.all_memory_areas().filter_map(|area| {
+            is_early_memory(area, info).then(|| {
+                debug!(
+                    "Using {:#016x} - {:#016x} as early memory",
+                    area.start_address(),
+                    area.end_address()
+                );
+                (
+                    arch::mm::PAddr::new(area.start_address()),
+                    area.size() / arch::mm::PAGE_SIZE64 * arch::mm::PAGE_SIZE64,
+                    arch::mm::VAddr::make_canonical(area.start_address()),
+                )
+            })
+        });
+        unsafe { mm::phys::alloc::add_regions(iter) };
+    }
+}
+
 #[no_mangle]
 pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
-    (info.early_log)(format_args!("[{}] Hello From the kernel @ {:016x} !", id, rip!()));
-    static BARRIER: spin::Barrier = spin::Barrier::new(2);
-    BARRIER.wait();
-    if id == 0 {
-        (info.early_log)(format_args!("Kernel mem info {:#x?}", info.mem_info));
-        exit_qemu(QemuStatus::Success);
-    } else {
+    if id != 0 {
         hlt_loop();
     }
+    unsafe { set_panic_logger(info.early_log) };
+    log::use_early_debug(info.early_log);
+    setup_early_memory_allocator(info);
+    let p1 = unsafe { mm::phys::alloc::allocate_pages(0) }.unwrap();
+    let p2 = unsafe { mm::phys::alloc::allocate_pages(0) }.unwrap();
+    unsafe { mm::phys::alloc::deallocate_pages(p1, 0) };
+    unsafe { mm::phys::alloc::deallocate_pages(p2, 0) };
+    exit_qemu(QemuStatus::Success);
 }
 chos_boot_defs::check_kernel_entry!(entry);

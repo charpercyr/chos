@@ -1,25 +1,53 @@
 
 use core::fmt;
 
-use chos_lib::bitfield::*;
-use chos_lib::field_enum;
+use modular_bitfield::{bitfield, BitfieldSpecifier, specifiers::*};
 
-bitfield! {
-    #[derive(Copy, Clone)]
-    #[repr(transparent)]
-    struct RedirectionEntryInner(u64) {
-        [imp Debug]
-        [imp Eq]
-        destination, set_destination: 63, 56 -> u8;
-        mask, set_mask: 16;
-        trigger_mode, set_trigger_mode: 15 -> TriggerMode;
-        remote_irr: 14;
-        pin_polarity, set_pin_polarity: 13 -> PinPolarity;
-        delivery_status: 12 -> DeliveryStatus;
-        destination_mode, set_destination_mode: 11;
-        delivery_mode, set_delivery_mode: 10, 8 -> DeliveryMode;
-        vector, set_vector: 7, 0 -> u8;
-    }
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[bits = 1]
+pub enum TriggerMode {
+    Edge = 0,
+    Level = 1,
+}
+
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[bits = 1]
+pub enum DeliveryStatus {
+    Idle = 0,
+    Pending = 1,
+}
+
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[bits = 1]
+pub enum PinPolarity {
+    HighActive = 0,
+    LowActive = 1,
+}
+
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[bits = 3]
+pub enum DeliveryMode {
+    Fixed = 0,
+    LowPriority = 1,
+    SMI = 2,
+    NMI = 4,
+    Init = 5,
+    ExInt = 6,
+}
+
+#[bitfield(bits = 64)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct RedirectionEntryInner {
+    vector: u8,
+    delivery_mode: DeliveryMode,
+    destination_mode: bool,
+    delivery_status: DeliveryStatus,
+    pin_polarity: PinPolarity,
+    remote_irr: bool,
+    trigger_mode: TriggerMode,
+    mask: bool,
+    #[skip] __: B39,
+    destination: u8,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -37,12 +65,8 @@ impl fmt::Debug for RedirectionEntry {
 impl RedirectionEntry {
     pub const fn new(value: u64) -> Self {
         Self {
-            inner: RedirectionEntryInner::new(value),
+            inner: RedirectionEntryInner::from_bytes(value.to_ne_bytes()),
         }
-    }
-
-    pub fn bits(&self) -> u64 {
-        self.inner.bits
     }
 
     pub fn set_defaults(&mut self) {
@@ -136,34 +160,4 @@ impl RedirectionEntry {
 pub enum Destination {
     Physical(u8),
     Logical(u8),
-}
-
-field_enum! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum DeliveryMode (u64) {
-        Fixed = 0,
-        LowPriority = 1,
-        SMI = 2,
-        NMI = 4,
-        Init = 5,
-        ExInt = 6,
-    }
-
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum DeliveryStatus (u64) {
-        Idle = 0,
-        Pending = 1,
-    }
-
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum PinPolarity (u64) {
-        HighActive = 0,
-        LowActive = 1,
-    }
-
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum TriggerMode (u64) {
-        Edge = 0,
-        Level = 1,
-    }
 }

@@ -25,7 +25,7 @@ static mut MPSTART_PDT4: usize = 0;
 #[no_mangle]
 static MPSTART_STACK_BASE: usize = 0x9000;
 #[no_mangle]
-static MPSTART_STACK_STRIDE: usize = 8192;
+static MPSTART_STACK_STRIDE: usize = 0x4000;
 
 unsafe fn start_processor(apic: &mut Apic, lapic_id: u8) {
     let mpstart_page = MPSTART_RELOC_ADDRESS as usize / 4096;

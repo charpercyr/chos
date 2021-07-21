@@ -3,7 +3,7 @@ use core::fmt;
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
 
-use chos_lib::bitfield::*;
+use modular_bitfield::{bitfield, specifiers::*};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 
@@ -118,39 +118,41 @@ impl PAddr {
 }
 impl_addr_fns!(PAddr);
 
-bitfield! {
-    #[derive(Clone, Copy)]
-    pub struct PageEntry (u64) {
-        [vis pub]
-        [imp Debug]
-        no_execute, set_no_execute: 63;
-        os1, set_os1: 62, 52 -> u16;
-        pub(self) addr, pub(self) set_addr: 51, 12;
-        os0, set_os0: 11, 9 -> u8;
-        global, set_global: 8;
-        huge_page, set_huge_page: 7;
-        dirty, set_dirty: 6;
-        accessed, set_accessed: 5;
-        no_cache, set_no_cache: 4;
-        write_trough, set_write_through: 3;
-        user, set_user: 2;
-        writable, set_writable: 1;
-        present, set_present: 0;
-    }
+#[bitfield(bits = 64)]
+#[derive(Clone, Copy, Debug)]
+pub struct PageEntry {
+    pub present: bool,
+    pub writable: bool,
+    pub user: bool,
+    pub write_through: bool,
+    pub no_cache: bool,
+    pub accessed: bool,
+    pub dirty: bool,
+    pub huge_page: bool,
+    pub global: bool,
+    pub os0: B3,
+    addr: B40,
+    pub os1: B11,
+    pub no_execute: bool,
 }
 
 impl PageEntry {
     pub const fn zero() -> Self {
-        Self::new(0)
+        Self::new()
     }
 
     pub fn phys_addr(&self) -> PAddr {
         PAddr::new(self.addr() << 12)
     }
-    
-    pub fn set_phys_addr(&mut self, addr: PAddr) -> &mut Self {
+
+    pub fn set_phys_addr(&mut self, addr: PAddr) {
         assert!(addr.is_page_aligned(), "Address is not page aligned");
-        self.set_addr(addr.page())
+        self.set_addr(addr.page());
+    }
+    
+    pub fn with_phys_addr(self, addr: PAddr) -> Self {
+        assert!(addr.is_page_aligned(), "Address is not page aligned");
+        self.with_addr(addr.page())
     }
 }
 

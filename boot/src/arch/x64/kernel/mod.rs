@@ -19,8 +19,9 @@ use chos_lib::iter::IteratorExt;
 
 use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_x64::paging::{PAddr, PAGE_SIZE, VAddr};
+use multiboot2::MemoryMapTag;
 
-pub unsafe fn map_kernel(kernel: &Elf) -> KernelMemInfo {
+pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     let iter = kernel
         .program()
         .iter()
@@ -58,11 +59,20 @@ pub unsafe fn map_kernel(kernel: &Elf) -> KernelMemInfo {
             phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()
         );
         copy_nonoverlapping(data.as_ptr(), (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) as *mut u8, p.file_size() as usize);
+        if p.file_size() < p.mem_size() {
+            println!(
+                "ZERO {:08x} - {:08x}",
+                phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size(),
+                phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size(),
+
+            );
+            write_bytes((phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()) as *mut u8, 0, (p.mem_size() - p.file_size()) as usize);
+        }
     }
 
     let mut palloc = PAlloc::new(pmap_end as *mut u8);
     let mut mapper = Mapper::new(&mut palloc);
-    mapper.identity_map_4g(&mut palloc);
+    mapper.identity_map_memory(&mut palloc, memory);
 
     for p in iter {
         assert_eq!(p.align() as usize, PAGE_SIZE);

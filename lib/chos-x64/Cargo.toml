@@ -8,5 +8,6 @@ edition = "2018"
 
 [dependencies]
 chos-lib = { path = "../chos-lib" }
+modular-bitfield = "0.11.2"
 static_assertions = "1.1.0"
 x86_64 = "0.14.1"

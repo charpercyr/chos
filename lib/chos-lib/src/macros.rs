@@ -7,7 +7,7 @@ macro_rules! offset_of{
             unsafe {
                 use core::mem::MaybeUninit;
                 let container: MaybeUninit<$container> = MaybeUninit::uninit();
-                let container = container.get_ref();
+                let container = container.assume_init_ref();
                 let field = &container.$field;
                 let container = container as *const _;
                 let container = container as *const u8;
@@ -23,12 +23,29 @@ macro_rules! offset_of{
 #[macro_export]
 macro_rules! container_of {
     ($ptr:expr, $field:ident, $container:ty) => {{
-        #[inline(always)]
-        unsafe fn container_of() -> *const $container {
-            let ptr = $ptr as *const u8;
-            let ptr = ptr.sub(offset_of!($field, $container));
-            ptr as *const $container
-        }
-        container_of()
+        let ptr = $ptr as *const u8;
+        let ptr = ptr.sub($crate::offset_of!($field, $container));
+        ptr as *const $container
     }};
+}
+
+#[macro_export]
+macro_rules! intrusive_adapter {
+    ($(#[$attr:meta])* $(pub $(($($vis:tt)*))?)? struct $name:ident = $ptr:ty : $value:ty { $field:ident : $fty:ty }) => {
+        $(#[$attr])*
+        $(pub $(($($vis)*))*)* struct $name;
+        impl $crate::intrusive::Adapter for $name {
+            type Value = $value;
+            type Pointer = $ptr;
+            type Link = $fty;
+
+            unsafe fn get_link(&self, value: *const Self::Value) -> *const Self::Link {
+                &(*value).$field
+            }
+
+            unsafe fn get_value(&self, link: *const Self::Link) -> *const Self::Value {
+                $crate::container_of!(link, $field, $value)
+            }
+        }
+    };
 }

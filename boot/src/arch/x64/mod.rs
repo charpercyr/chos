@@ -71,7 +71,12 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         panic!("No kernel")
     };
 
-    let mem_info = unsafe { kernel::map_kernel(&kernel) };
+    let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
+    println!("Memory map");
+    for e in memory_map.all_memory_areas() {
+        println!("  {:012x}-{:012x} {:?}", e.start_address(), e.end_address(), e.typ());
+    }
+    let mem_info = unsafe { kernel::map_kernel(&kernel, memory_map) };
 
     let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE.as_u64();
     let entry: KernelEntry = unsafe { core::mem::transmute(entry) };
@@ -94,7 +99,6 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     unsafe { mpstart::start_mp(
         madt,
         |id, mp_info| {
-            println!("Here {}", id);
             let mp_info: &MpInfo = &*mp_info.cast();
             (*mp_info.page_table).set_page_table();
             mp_info.barrier.wait();

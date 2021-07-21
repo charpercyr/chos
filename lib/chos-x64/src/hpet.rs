@@ -2,42 +2,47 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
-use chos_lib::{bitfield::*, PaddedVolatile, ReadOnly, ReadWrite, Volatile};
+use chos_lib::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
 
-bitfield! {
-    #[derive(Copy, Clone)]
-    struct GeneralCapabilities(u64) {
-        [imp Debug]
-        counter_clk_period: 63, 32 -> u32;
-        vendor_id: 32, 16 -> u16;
-        leg_rt_cap: 15;
-        count_size_cap: 13;
-        num_tim_cap: 12, 8 -> u8;
-        rev_id: 7, 0 -> u8;
-    }
+use modular_bitfield::{bitfield, specifiers::*};
 
-    #[derive(Copy, Clone)]
-    struct Configuration(u64) {
-        [imp Debug]
-        leg_rt, set_leg_rt: 1;
-        enable, set_enable: 0;
-    }
+#[bitfield(bits = 64)]
+#[derive(Copy, Clone, Debug)]
+struct GeneralCapabilities {
+    rev_id: u8,
+    num_tim_cap: B5,
+    count_size_cap: bool,
+    #[skip] __: B1,
+    leg_rt_cap: bool,
+    vendor_id: u16,
+    counter_clk_period: u32,
+}
 
-    #[derive(Copy, Clone)]
-    struct TimerConfiguration(u64) {
-        [imp Debug]
-        int_route_cap: 63, 32 -> u32;
-        fsb_int_del_cap: 15;
-        fsb_en_cnf, set_fsb_en_cnf: 14;
-        int_route_cnf, set_int_route_cnf: 13, 9 -> u8;
-        mode_32_cnf, set_mode_32_cnf: 8;
-        val_set_cnf, set_val_set_cnf: 6;
-        size_cap: 5;
-        per_int_cap: 4;
-        type_cnf, set_type_cnf: 3;
-        int_enb_cnf, set_int_enb_cnf: 2;
-        int_type_cnf, set_int_type_cnf: 1;
-    }
+#[bitfield(bits = 64)]
+#[derive(Copy, Clone, Debug)]
+struct Configuration {
+    enable: bool,
+    leg_rt: bool,
+    #[skip] __: B62,
+}
+
+#[bitfield(bits = 64)]
+#[derive(Copy, Clone, Debug)]
+struct TimerConfiguration {
+    #[skip] __: B1,
+    int_type_cnf: bool,
+    int_enb_cnf: bool,
+    type_cnf: bool,
+    per_int_cap: bool,
+    size_cap: bool,
+    val_set_cnf: bool,
+    #[skip] __: B1,
+    mode_32_cnf: bool,
+    int_route_cnf: B5,
+    fst_en_cnf: bool,
+    fsb_int_del_cap: bool,
+    #[skip] __: B16,
+    int_route_cap: u32,
 }
 
 #[repr(C)]
