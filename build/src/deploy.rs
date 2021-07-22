@@ -1,3 +1,4 @@
+use crate::util::display_cmd_hook;
 use crate::{build_main, DeployOpts, Project};
 
 use std::path::{Path, PathBuf};
@@ -7,10 +8,6 @@ use std::str::{FromStr};
 use duct::cmd;
 
 use tempfile::Builder;
-
-fn display_cmd(cmd: &mut Command) -> std::io::Result<()> {
-    Ok(crate::display_cmd(cmd))
-}
 
 fn check_config(config: &[Project]) {
     for proj in config {
@@ -29,7 +26,7 @@ struct Loopdev {
 
 fn remove_loop(loopdev: impl AsRef<Path>) {
     cmd!("sudo", "losetup", "-d", loopdev.as_ref())
-        .before_spawn(display_cmd)
+        .before_spawn(display_cmd_hook)
         .run()
         .unwrap();
 }
@@ -39,14 +36,14 @@ impl Loopdev {
         let file = file.as_ref();
         let mount = mount.as_ref();
 
-        let loopdev = cmd!("losetup", "-f").before_spawn(display_cmd).read()?;
+        let loopdev = cmd!("losetup", "-f").before_spawn(display_cmd_hook).read()?;
         let looppart = format!("{}p1", loopdev);
 
         let err_guard = crate::ErrorGuard::new(|| remove_loop(&loopdev));
 
-        cmd!("sudo", "losetup", "-P", &loopdev, file).before_spawn(display_cmd).run()?;
-        cmd!("sudo", "mkfs.ext2", &looppart).before_spawn(display_cmd).run()?;
-        cmd!("sudo", "mount", &looppart, mount).before_spawn(display_cmd).run()?;
+        cmd!("sudo", "losetup", "-P", &loopdev, file).before_spawn(display_cmd_hook).run()?;
+        cmd!("sudo", "mkfs.ext2", &looppart).before_spawn(display_cmd_hook).run()?;
+        cmd!("sudo", "mount", &looppart, mount).before_spawn(display_cmd_hook).run()?;
 
         err_guard.defuse();
 
@@ -63,7 +60,7 @@ impl Loopdev {
 
 impl Drop for Loopdev {
     fn drop(&mut self) {
-        cmd!("sudo", "umount", &self.mount).before_spawn(display_cmd).run().unwrap();
+        cmd!("sudo", "umount", &self.mount).before_spawn(display_cmd_hook).run().unwrap();
         remove_loop(&self.loopdev);
     }
 }
@@ -101,12 +98,12 @@ pub fn deploy(
         format!("bs={}", crate::DEPLOY_BLOCK_SIZE),
         format!("count={}", image_size / crate::DEPLOY_BLOCK_SIZE),
     )
-    .before_spawn(display_cmd)
+    .before_spawn(display_cmd_hook)
     .run()?;
 
     cmd!("fdisk", file)
         .stdin_bytes(&b"n\n\n\n\n\nw\n"[..])
-        .before_spawn(display_cmd)
+        .before_spawn(display_cmd_hook)
         .run()?;
 
     let mount = Builder::new().prefix("chos").tempdir()?;
@@ -120,7 +117,7 @@ pub fn deploy(
         format!("--boot-directory={}/boot", mount_path),
         loopdev.loopdev(),
     )
-    .before_spawn(display_cmd)
+    .before_spawn(display_cmd_hook)
     .run()?;
 
     for proj in config {

@@ -33,6 +33,7 @@ dependencies = [
  "chos-boot-defs",
  "chos-lib",
  "chos-x64",
+ "modular-bitfield",
  "multiboot2",
  "paste",
  "spin",

@@ -174,3 +174,14 @@ impl<T: IArcAdapter, P: Pool<T>> fmt::Pointer for IArc<T, P> {
 impl<T: IArcAdapter, P: Unpin + Pool<T>> Unpin for IArc<T, P> {}
 unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Sync> Sync for IArc<T, P> {}
 unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Send> Send for IArc<T, P> {}
+
+impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::Pointer for IArc<T, P> {
+    type Metadata = P;
+    type Target = T;
+    fn into_raw(this: Self) -> (*const Self::Target, Self::Metadata) {
+        Self::into_raw_with_allocator(this)
+    }
+    unsafe fn from_raw(ptr: *const Self::Target, meta: Self::Metadata) -> Self {
+        Self::from_raw_in(ptr, meta)
+    }
+}

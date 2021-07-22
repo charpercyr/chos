@@ -1,5 +1,7 @@
 use core::ptr::null;
 
+use crate::paging::VAddr;
+
 #[repr(C, packed)]
 struct Frame {
     next: *const Frame,
@@ -12,14 +14,14 @@ pub struct Backtrace {
 }
 
 impl Iterator for Backtrace {
-    type Item = *const ();
+    type Item = VAddr;
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
             if self.frame != null() {
                 let ptr = (*self.frame).ip;
                 self.frame = (*self.frame).next;
-                Some(ptr)
+                Some(VAddr::new_unchecked(ptr as u64))
             } else {
                 None
             }

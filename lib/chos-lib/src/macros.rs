@@ -31,10 +31,15 @@ macro_rules! container_of {
 
 #[macro_export]
 macro_rules! intrusive_adapter {
-    ($(#[$attr:meta])* $(pub $(($($vis:tt)*))?)? struct $name:ident = $ptr:ty : $value:ty { $field:ident : $fty:ty }) => {
+    ($(#[$attr:meta])* $(pub $(($($vis:tt)*))?)? struct $name:ident $(<$($lif:lifetime),* $(,)?>)? = $ptr:ty : $value:ty { $field:ident : $fty:ty }) => {
         $(#[$attr])*
-        $(pub $(($($vis)*))*)* struct $name;
-        impl $crate::intrusive::Adapter for $name {
+        $(pub $(($($vis)*))*)* struct $name $(<$($lif,)*>)* ($($(core::marker::PhantomData<& $lif ()>,)*)*);
+        impl $(<$($lif,)*>)* $name $(<$($lif,)*>)* {
+            pub const fn new() -> Self {
+                Self($($(core::marker::PhantomData::<& $lif ()>,)*)*)
+            }
+        }
+        impl $(<$($lif,)*>)* $crate::intrusive::Adapter for $name $(<$($lif,)*>)* {
             type Value = $value;
             type Pointer = $ptr;
             type Link = $fty;

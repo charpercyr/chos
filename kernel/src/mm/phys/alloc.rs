@@ -266,6 +266,20 @@ impl Region {
         let block_lists = Self::block_lists(base, self.biggest_shift);
         self.deallocate_inner(block_lists, bitmap, page, shift)
     }
+
+    unsafe fn remap(&mut self, offset: isize) {
+        let block_lists = Self::block_lists((self as *mut Self).cast(), self.biggest_shift);
+        for block_list in block_lists {
+            let mut cur = block_list.blocks;
+            while cur != null_mut() {
+                let next = (*cur).next;
+                (*cur).next = (*cur).next.cast::<u8>().offset(offset).cast();
+                (*cur).prev = (*cur).prev.cast::<u8>().offset(offset).cast();
+                cur = next;
+            }
+            block_list.blocks = block_list.blocks.cast::<u8>().offset(offset).cast();
+        }
+    }
 }
 static mut REGIONS: Option<*mut Region> = None;
 
@@ -293,7 +307,12 @@ pub unsafe fn add_regions(it: impl IntoIterator<Item = (PAddr, u64, VAddr)>) {
 pub unsafe fn remap_regions(mut f: impl FnMut(*mut (), u64) -> *mut ()) {
     let mut cur = &mut REGIONS;
     while let Some(region) = cur {
-        *region = f(region.cast(), (**region).total_pages * PAGE_SIZE64).cast();
+        let old_addr = region.cast();
+        let new_addr = f(old_addr, (**region).total_pages * PAGE_SIZE64);
+        let offset = new_addr.cast::<u8>().offset_from(old_addr.cast());
+        debug_assert_eq!(offset % PAGE_SIZE as isize, 0, "");
+        *region = new_addr.cast();
+        (**region).remap(offset);
         cur = &mut (**region).next;
     }
 }

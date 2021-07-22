@@ -1,12 +1,16 @@
 #![no_std]
 #![feature(allocator_api)]
 #![feature(asm)]
+#![feature(const_fn_trait_bound)]
 #![feature(const_fn_transmute)]
+#![feature(default_alloc_error_handler)]
 #![feature(decl_macro)]
 #![feature(maybe_uninit_slice)]
 #![feature(never_type)]
 #![feature(option_result_unwrap_unchecked)]
 #![feature(thread_local)]
+
+extern crate alloc;
 
 mod arch;
 mod log;
@@ -65,26 +69,7 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     log::use_early_debug(info.early_log);
     setup_early_memory_allocator(info);
 
-    use mm::phys::alloc::{allocate_pages, deallocate_pages};
-
-    unsafe {
-        let p1 = allocate_pages(0).unwrap();
-        let p2 = allocate_pages(0).unwrap();
-        let p3 = allocate_pages(0).unwrap();
-        let p4 = allocate_pages(0).unwrap();
-        // let p5 = allocate_pages(0).unwrap();
-        deallocate_pages(p1, 0);
-        deallocate_pages(p2, 0);
-        deallocate_pages(p3, 0);
-        deallocate_pages(p4, 0);
-        // deallocate_pages(p5, 0);
-        debug!("{:p}", p1);
-        debug!("{:p}", p2);
-        debug!("{:p}", p3);
-        debug!("{:p}", p4);
-        // debug!("{:p}", p5);
-    }
-    
+    let _ = alloc::boxed::Box::new(0);
 
     exit_qemu(QemuStatus::Success);
 }

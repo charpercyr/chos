@@ -28,6 +28,9 @@ use opts::*;
 mod run;
 use run::*;
 
+mod testing;
+use testing::*;
+
 mod util;
 use util::*;
 
@@ -116,6 +119,10 @@ fn main() {
         Opts::Run(opts) => {
             let config = get_projects(&opts.build).unwrap();
             run_main(&opts, &config);
+        },
+        Opts::Test(opts) => {
+            let config = get_projects(&opts.build).unwrap();
+            test_main(&opts, &config)
         }
         Opts::Clean => clean_main(),
     }

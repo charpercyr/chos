@@ -18,7 +18,7 @@ fn panic(info: &PanicInfo) -> ! {
         if !in_panic {
             unsafe_println!("BACKTRACE");
             for frame in backtrace().take(200) {
-                if let Some((sym, offset)) = super::symbols::find_symbol(frame as usize) {
+                if let Some((sym, offset)) = super::symbols::find_symbol(frame.as_u64() as usize) {
                     unsafe_println!("  {:016p} [{:#} + 0x{:x}]", frame, demangle(sym), offset);
                 } else {
                     unsafe_println!("  {:016p} [?]", frame);

@@ -23,6 +23,12 @@ pub struct PageFlush {
 }
 
 impl PageFlush {
+    fn new(inner: PageFlushInner) -> Self {
+        Self {
+            inner,
+        }
+    }
+
     pub fn flush(self) {
         unsafe {
             match self.inner {

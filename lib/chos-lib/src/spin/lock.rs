@@ -6,11 +6,11 @@ use core::intrinsics::likely;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
-pub struct RawLock {
+pub struct RawSpinLock {
     lock: AtomicBool,
 }
 
-impl RawLock {
+impl RawSpinLock {
     pub const fn new() -> Self {
         Self {
             lock: AtomicBool::new(false),
@@ -51,21 +51,38 @@ impl RawLock {
     }
 }
 
-impl fmt::Debug for RawLock {
+impl fmt::Debug for RawSpinLock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("RawLock")
     }
 }
 
+pub unsafe trait RawLock {
+    fn lock(&self);
+    unsafe fn unlock(&self);
+}
+
+pub unsafe trait RawTryLock {
+    fn try_lock(&self) -> bool;
+    fn try_lock_tries(&self, tries: usize) -> bool {
+        for _ in 0..tries {
+            if likely(self.try_lock()) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 pub struct Lock<T: ?Sized> {
-    lock: RawLock,
+    lock: RawSpinLock,
     value: UnsafeCell<T>,
 }
 
 impl<T> Lock<T> {
     pub const fn new(value: T) -> Self {
         Self {
-            lock: RawLock::new(),
+            lock: RawSpinLock::new(),
             value: UnsafeCell::new(value),
         }
     }

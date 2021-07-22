@@ -12,9 +12,6 @@
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 
-#[cfg(feature = "alloc")]
-extern crate alloc;
-
 mod macros;
 pub use macros::*;
 
@@ -40,15 +37,8 @@ pub use volatile::*;
 
 pub use chos_lib_macros::forward_fmt;
 
-#[cfg(test)]
-extern crate std;
+#[cfg(any(test, feature = "alloc"))]
+extern crate alloc;
 
 #[cfg(test)]
-mod tests {
-    use std::prelude::v1::*;
-    #[test]
-    fn my_test() {
-        let v = Vec::<usize>::new();
-        assert!(v.len() == 0);
-    }
-}
+extern crate std;

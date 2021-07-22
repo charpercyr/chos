@@ -39,6 +39,14 @@ pub struct RunOpts {
 }
 
 #[derive(StructOpt, Debug)]
+pub struct TestOpts {
+    #[structopt(flatten)]
+    pub build: BuildOpts,
+    #[structopt(long, short = "p")]
+    pub packages: Option<Vec<String>>,
+}
+
+#[derive(StructOpt, Debug)]
 pub enum Opts {
     /// Build project
     #[structopt(visible_alias = "b")]
@@ -49,6 +57,9 @@ pub enum Opts {
     /// Build and run project
     #[structopt(visible_alias = "r")]
     Run(RunOpts),
+    /// Test project
+    #[structopt(visible_alias = "t")]
+    Test(TestOpts),
     /// Clean project
     #[structopt(visible_alias = "c")]
     Clean,
