@@ -2,7 +2,6 @@ use crate::util::display_cmd_hook;
 use crate::{build_main, DeployOpts, Project};
 
 use std::path::{Path, PathBuf};
-use std::process::{Command};
 use std::str::{FromStr};
 
 use duct::cmd;

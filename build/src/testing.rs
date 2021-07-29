@@ -1,4 +1,4 @@
-use crate::{build::build_main, opts::TestOpts, project::Project, util::display_cmd_hook};
+use crate::{opts::TestOpts, project::Project, util::display_cmd_hook};
 
 use duct::cmd;
 

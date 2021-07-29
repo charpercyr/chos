@@ -1,5 +1,5 @@
 
-use core::alloc::AllocError;
+use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
 use core::ops::Deref;
@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use super::Pool;
 
 #[cfg(feature = "alloc")]
-use alloc::alloc::{Global, handle_alloc_error, Layout};
+use alloc::alloc::{Global, handle_alloc_error};
 
 pub struct IArcCount {
     count: AtomicUsize,
@@ -47,6 +47,14 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
             alloc,
             value: PhantomData,
         })
+    }
+
+    pub fn new_in(value: T, alloc: P) -> Self {
+        let r = Self::try_new_in(value, alloc);
+        #[cfg(feature = "alloc")]
+        { r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>())) }
+        #[cfg(not(feature = "alloc"))]
+        { r.unwrap_or_else(|_| panic!("Could not allocate {} bytes", Layout::new::<T>().size())) }
     }
 
     pub fn into_raw_with_allocator(this: Self) -> (*const T, P) {

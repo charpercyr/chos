@@ -25,7 +25,7 @@ macro_rules! container_of {
     ($ptr:expr, $field:ident, $container:ty) => {{
         let ptr = $ptr as *const u8;
         let ptr = ptr.sub($crate::offset_of!($field, $container));
-        ptr as *const $container
+        ptr as *mut $container
     }};
 }
 

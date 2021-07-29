@@ -1,12 +1,12 @@
 
 pub mod alloc;
 
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
+use super::{PAddr, VAddr};
 
-use core::alloc::AllocError;
+use core::alloc::{AllocError};
 use core::ptr::NonNull;
 
-use super::{PAddr, VAddr};
+use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
 
 pub struct Page {
     refcount: IArcCount,
@@ -14,28 +14,28 @@ pub struct Page {
     vaddr: VAddr,
     paddr: PAddr,
 }
-
 impl IArcAdapter for Page {
     fn count(&self) -> &IArcCount {
         &self.refcount
     }
 }
 
-struct PagePoolImpl;
-chos_lib::pool!(PagePool: Page => &PagePoolImpl);
+pub type PagePtr = IArc<Page, PageAlloc>;
 
-unsafe impl Pool<Page> for PagePoolImpl {
+pub struct PageAlloc;
+
+unsafe impl Pool<Page> for PageAlloc {
     unsafe fn allocate(&self) -> Result<NonNull<Page>, AllocError> {
-        Err(AllocError)
+        todo!()
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<Page>) {
-        
+        todo!()
     }
 }
 
-pub type PagePtr = IArc<Page, PagePool>;
+chos_lib::pool!(PageAdapter: Page => &PageAlloc);
 
-pub unsafe fn allocate_pages(order: u32) -> Result<PagePtr, AllocError> {
-    Err(AllocError)
+pub unsafe fn allocate_pages(order: u32) -> PagePtr {
+    todo!()
 }

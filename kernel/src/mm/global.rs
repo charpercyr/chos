@@ -1,13 +1,13 @@
 
-use alloc::alloc::GlobalAlloc;
+use alloc::alloc::{GlobalAlloc, Layout};
 
 struct KAlloc;
 
 unsafe impl GlobalAlloc for KAlloc {
-    unsafe fn alloc(&self, _layout: core::alloc::Layout) -> *mut u8 {
+    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
         core::ptr::null_mut()
     }
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
     }
 }
 
@@ -15,6 +15,6 @@ unsafe impl GlobalAlloc for KAlloc {
 static KALLOC: KAlloc = KAlloc;
 
 #[no_mangle]
-fn rust_oom() -> ! {
-    panic!("Out of memory");
+fn rust_oom(layout: Layout) -> ! {
+    panic!("Out of memory, tried to allocate {} bytes (align = {})", layout.size(), layout.align());
 }

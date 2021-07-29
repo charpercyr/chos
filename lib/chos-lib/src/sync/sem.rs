@@ -1,11 +1,11 @@
 use core::hint::spin_loop;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-pub struct Sem {
+pub struct SpinSem {
     count: AtomicUsize,
 }
 
-impl Sem {
+impl SpinSem {
     pub const fn new(count: usize) -> Self {
         Self {
             count: AtomicUsize::new(count),

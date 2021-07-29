@@ -5,6 +5,8 @@ use duct::cmd;
 
 use tempfile::Builder;
 
+const KERNEL_EXIT_SUCCESS: i32 = 33;
+
 pub fn run_main(opts: &RunOpts, config: &[Project]) {
     if opts.build.arch != "x86_64" {
         panic!("Run not supported for {}", opts.build.arch);
@@ -31,10 +33,13 @@ pub fn run_main(opts: &RunOpts, config: &[Project]) {
         args.push("-S");
     }
 
-    cmd(format!("qemu-system-{}", opts.build.arch), args)
+    let qemu = cmd(format!("qemu-system-{}", opts.build.arch), args)
         .before_spawn(crate::display_cmd_hook)
         .unchecked()
         .stderr_null()
         .run()
         .unwrap();
+    if qemu.status.code().unwrap() != KERNEL_EXIT_SUCCESS {
+        panic!("Qemu failed with exit code {}", qemu.status.code().unwrap());
+    }
 }

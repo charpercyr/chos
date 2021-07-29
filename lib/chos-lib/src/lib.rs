@@ -11,6 +11,7 @@
 #![feature(const_unreachable_unchecked)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
+#![feature(negative_impls)]
 
 mod macros;
 pub use macros::*;
@@ -26,11 +27,11 @@ pub mod iter;
 
 pub mod pool;
 
-pub mod spin;
-
 pub mod str;
 
 pub mod stride;
+
+pub mod sync;
 
 mod volatile;
 pub use volatile::*;

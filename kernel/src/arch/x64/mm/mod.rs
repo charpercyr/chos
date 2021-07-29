@@ -8,6 +8,7 @@ pub use chos_x64::paging::{
     VAddr,
 };
 
+#[derive(Debug)]
 enum PageFlushInner {
     None,
     PageRange {
@@ -18,6 +19,7 @@ enum PageFlushInner {
 }
 
 #[must_use = "You must either call flush or discard"]
+#[derive(Debug)]
 pub struct PageFlush {
     inner: PageFlushInner,
 }
@@ -45,9 +47,9 @@ impl PageFlush {
                     }
                 },
                 PageFlushInner::Full => asm! {
-                    "mov %cr3, %rax",
-                    "mov %rax, %cr3",
-                    out("rax") _,
+                    "mov %cr3, {tmp}",
+                    "mov {tmp}, %cr3",
+                    tmp = out(reg) _,
                     options(nomem, nostack, att_syntax),
                 }
             }
@@ -56,3 +58,6 @@ impl PageFlush {
 
     pub fn discard(self) {}
 }
+
+impl !Send for PageFlush {}
+impl !Sync for PageFlush {}

@@ -2,13 +2,13 @@
 use core::{convert::TryInto, sync::atomic::{AtomicBool, Ordering::Relaxed}};
 use core::time::Duration;
 
-use chos_lib::spin::Sem;
+use chos_lib::sync::sem::SpinSem;
 
 use x86_64::structures::idt::InterruptStackFrame;
 
 use super::acpi::hpet::HPET;
 
-static DONE: Sem = Sem::new(0);
+static DONE: SpinSem = SpinSem::new(0);
 
 const IOAPIC_TIMER_ROUTE: u8 = 8;
 

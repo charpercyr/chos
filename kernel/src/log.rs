@@ -1,9 +1,9 @@
 
 use core::fmt::Arguments;
 
-use chos_lib::spin::Lock;
+use chos_lib::sync::lock::Spinlock;
 
-pub static LOG: Lock<Option<fn(Arguments)>> = Lock::new(None);
+pub static LOG: Spinlock<Option<fn(Arguments)>> = Spinlock::new(None);
 pub fn use_early_debug(f: fn(Arguments)) {
     let mut log = LOG.lock();
     *log = Some(f);
