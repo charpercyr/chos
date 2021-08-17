@@ -20,5 +20,5 @@ mod mm;
 mod panic;
 
 fn kernel_main(id: u8) -> ! {
-    
+    loop {}
 }
