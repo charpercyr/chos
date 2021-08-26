@@ -12,7 +12,8 @@ struct GeneralCapabilities {
     rev_id: u8,
     num_tim_cap: B5,
     count_size_cap: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     leg_rt_cap: bool,
     vendor_id: u16,
     counter_clk_period: u32,
@@ -23,25 +24,29 @@ struct GeneralCapabilities {
 struct Configuration {
     enable: bool,
     leg_rt: bool,
-    #[skip] __: B62,
+    #[skip]
+    __: B62,
 }
 
 #[bitfield(bits = 64)]
 #[derive(Copy, Clone, Debug)]
 struct TimerConfiguration {
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     int_type_cnf: bool,
     int_enb_cnf: bool,
     type_cnf: bool,
     per_int_cap: bool,
     size_cap: bool,
     val_set_cnf: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     mode_32_cnf: bool,
     int_route_cnf: B5,
     fst_en_cnf: bool,
     fsb_int_del_cap: bool,
-    #[skip] __: B16,
+    #[skip]
+    __: B16,
     int_route_cap: u32,
 }
 
@@ -65,10 +70,10 @@ struct TimerRegisters {
 impl fmt::Debug for Registers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Registers")
-            .field("capabilities", &self.capabilities )
-            .field("configuration", &self.configuration )
-            .field("interrupt_status", &self.interrupt_status )
-            .field("counter", &self.main_counter_value )
+            .field("capabilities", &self.capabilities)
+            .field("configuration", &self.configuration)
+            .field("interrupt_status", &self.interrupt_status)
+            .field("counter", &self.main_counter_value)
             .finish()
     }
 }
@@ -167,7 +172,7 @@ impl Timer<'_> {
         self.set_enabled(true);
     }
 
-    pub unsafe  fn disable(&mut self) {
+    pub unsafe fn disable(&mut self) {
         self.set_enabled(false);
     }
 }

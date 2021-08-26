@@ -29,11 +29,9 @@ static MPSTART_STACK_STRIDE: usize = 0x4000;
 
 unsafe fn start_processor(apic: &mut Apic, lapic_id: u8) {
     let mpstart_page = MPSTART_RELOC_ADDRESS as usize / 4096;
-    apic.start_ap(
-        lapic_id,
-        mpstart_page,
-        |us| super::timer::delay(Duration::from_micros(us as _)).unwrap(),
-    );
+    apic.start_ap(lapic_id, mpstart_page, |us| {
+        super::timer::delay(Duration::from_micros(us as _)).unwrap()
+    });
 }
 
 pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) -> usize {
@@ -65,8 +63,10 @@ pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) 
     MPSTART_APIC_BASE = madt.lapic_address as usize;
     MPSTART_BARRIER = MaybeUninit::new(spin::Barrier::new(count));
 
-    MPSTART_PDT4 = x86_64::registers::control::Cr3::read().0.start_address().as_u64() as usize;
-    
+    MPSTART_PDT4 = x86_64::registers::control::Cr3::read()
+        .0
+        .start_address()
+        .as_u64() as usize;
 
     for lapic_id in entries {
         if lapic_id != this_apic_id as u8 {

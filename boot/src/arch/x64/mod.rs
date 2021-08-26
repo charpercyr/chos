@@ -2,8 +2,8 @@ mod acpi;
 mod asm;
 mod cmdline;
 mod intr;
-mod log;
 mod kernel;
+mod log;
 mod mpstart;
 mod panic;
 mod symbols;
@@ -11,7 +11,7 @@ mod timer;
 
 use crate::{arch::x64::intr::apic, println};
 use acpi::RSDT;
-use chos_boot_defs::{KernelBootInfo, KernelEntry, virt};
+use chos_boot_defs::{virt, KernelBootInfo, KernelEntry};
 use chos_x64::paging::PageTable;
 use cmdline::iter_cmdline;
 
@@ -44,11 +44,18 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     log::initialize(logdev);
 
+    println!("############");
+    println!("### BOOT ###");
+    println!("############");
+
     if let Some(sections) = mbh.elf_sections_tag() {
         symbols::init_symbols(sections);
     }
 
-    let rsdt = mbh.rsdp_v1_tag().expect("No RSDT from Multiboot").rsdt_address();
+    let rsdt = mbh
+        .rsdp_v1_tag()
+        .expect("No RSDT from Multiboot")
+        .rsdt_address();
     let rsdt = unsafe { &*(rsdt as *const RSDT) };
     let madt = rsdt.madt().unwrap();
     let hpet = rsdt.hpet().unwrap();
@@ -62,9 +69,11 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             false
         }
     }) {
-        let kernel = unsafe { core::slice::from_raw_parts(
-            kernel.start_address() as *const u8,
-            (kernel.end_address() - kernel.start_address()) as usize)
+        let kernel = unsafe {
+            core::slice::from_raw_parts(
+                kernel.start_address() as *const u8,
+                (kernel.end_address() - kernel.start_address()) as usize,
+            )
         };
         chos_elf::Elf::new(kernel).expect("Invalid kernel ELF")
     } else {
@@ -74,7 +83,12 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
     println!("Memory map");
     for e in memory_map.all_memory_areas() {
-        println!("  {:012x}-{:012x} {:?}", e.start_address(), e.end_address(), e.typ());
+        println!(
+            "  {:012x}-{:012x} {:?}",
+            e.start_address(),
+            e.end_address(),
+            e.typ()
+        );
     }
     let mem_info = unsafe { kernel::map_kernel(&kernel, memory_map) };
 
@@ -96,16 +110,18 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     };
 
     timer::initialize(hpet);
-    unsafe { mpstart::start_mp(
-        madt,
-        |id, mp_info| {
-            let mp_info: &MpInfo = &*mp_info.cast();
-            (*mp_info.page_table).set_page_table();
-            mp_info.barrier.wait();
-            (mp_info.entry)(&mp_info.kbi, id);
-        },
-        &mp_info as *const _ as _,
-    ) };
+    unsafe {
+        mpstart::start_mp(
+            madt,
+            |id, mp_info| {
+                let mp_info: &MpInfo = &*mp_info.cast();
+                (*mp_info.page_table).set_page_table();
+                mp_info.barrier.wait();
+                (mp_info.entry)(&mp_info.kbi, id);
+            },
+            &mp_info as *const _ as _,
+        )
+    };
     mp_info.barrier.wait();
 
     entry(&mp_info.kbi, unsafe { apic().id() });

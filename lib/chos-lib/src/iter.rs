@@ -1,12 +1,11 @@
-
 pub trait IteratorExt: Iterator {
     /// Combined min and max operation on a iterator of tuples
     /// Finds the min of the first element, and finds the max of the second element
     fn min_max<A, B>(mut self) -> Option<Self::Item>
-        where
-            Self: Sized + Iterator<Item = (A, B)>,
-            A: Ord,
-            B: Ord,
+    where
+        Self: Sized + Iterator<Item = (A, B)>,
+        A: Ord,
+        B: Ord,
     {
         let mut mm = self.next()?;
         for (a, b) in self {

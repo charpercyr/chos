@@ -1,4 +1,4 @@
-use core::mem::{MaybeUninit, align_of, size_of};
+use core::mem::{align_of, size_of, MaybeUninit};
 use core::ptr::{null_mut, write, write_bytes};
 use core::slice;
 
@@ -38,21 +38,24 @@ impl Region {
         let bitmap_size = total_bitmap_size(total_pages);
         let biggest_order = log2u64(total_pages - 1); // First page is never a data page
         let meta_pages = Self::meta_pages(biggest_order, bitmap_size);
-        write(region, Region {
-            next: None,
-            paddr,
-            total_pages,
-            meta_pages,
-            free_pages: total_pages - meta_pages,
-            bitmap_size,
-            biggest_order,
-        });
+        write(
+            region,
+            Region {
+                next: None,
+                paddr,
+                total_pages,
+                meta_pages,
+                free_pages: total_pages - meta_pages,
+                bitmap_size,
+                biggest_order,
+            },
+        );
 
         // Initialize Block Lists
         let mut remaining_bits = bitmap_size;
         let mut bitmap_base = 0;
         for block in Self::block_lists_uninit(region.cast(), biggest_order) {
-            *block = MaybeUninit::new(BlockList { 
+            *block = MaybeUninit::new(BlockList {
                 blocks: null_mut(),
                 bitmap_offset: bitmap_base,
             });
@@ -74,10 +77,13 @@ impl Region {
             let block_list = &mut block_lists[order as usize];
             debug_assert_eq!(block_list.blocks, null_mut());
             let block_hdr = Self::get_page_ptr(region, current_page).cast::<BlockHeader>();
-            write(block_hdr, BlockHeader {
-                next: null_mut(),
-                prev: null_mut(),
-            });
+            write(
+                block_hdr,
+                BlockHeader {
+                    next: null_mut(),
+                    prev: null_mut(),
+                },
+            );
             if order < biggest_order {
                 let bit = block_list.bitmap_offset + (current_page >> (order + 1)) as usize;
                 let byte = bit / (size_of::<BitmapRepr>() * 8);
@@ -95,7 +101,7 @@ impl Region {
         // debug!("Bitmap {:x?}", Self::bitmap(region.cast(), biggest_order, bitmap_size));
         region
     }
-    
+
     fn block_lists_offset() -> usize {
         let off = size_of::<Self>();
         off.align_up(align_of::<BlockHeader>())
@@ -105,7 +111,10 @@ impl Region {
         biggest_order as usize + 1
     }
 
-    unsafe fn block_lists_uninit<'a>(base: *mut u8, biggest_order: u32) -> &'a mut [MaybeUninit<BlockList>] {
+    unsafe fn block_lists_uninit<'a>(
+        base: *mut u8,
+        biggest_order: u32,
+    ) -> &'a mut [MaybeUninit<BlockList>] {
         let ptr = base.add(Self::block_lists_offset());
         slice::from_raw_parts_mut(ptr.cast(), Self::block_lists_len(biggest_order))
     }
@@ -124,12 +133,20 @@ impl Region {
         bitmap_size.ceil_div(size_of::<BitmapRepr>() as u64 * 8) as usize
     }
 
-    unsafe fn bitmap_uninit<'a>(base: *mut u8, biggest_order: u32, bitmap_size: u64) -> &'a mut [MaybeUninit<BitmapRepr>] {
+    unsafe fn bitmap_uninit<'a>(
+        base: *mut u8,
+        biggest_order: u32,
+        bitmap_size: u64,
+    ) -> &'a mut [MaybeUninit<BitmapRepr>] {
         let ptr = base.add(Self::bitmap_offset(biggest_order));
         slice::from_raw_parts_mut(ptr.cast(), Self::bitmap_len(bitmap_size))
     }
 
-    unsafe fn bitmap<'a>(base: *mut u8, biggest_order: u32, bitmap_size: u64) -> &'a mut [BitmapRepr] {
+    unsafe fn bitmap<'a>(
+        base: *mut u8,
+        biggest_order: u32,
+        bitmap_size: u64,
+    ) -> &'a mut [BitmapRepr] {
         MaybeUninit::slice_assume_init_mut(Self::bitmap_uninit(base, biggest_order, bitmap_size))
     }
 
@@ -140,7 +157,9 @@ impl Region {
     }
 
     unsafe fn get_page_ptr(region: *mut Self, n: u64) -> *mut u8 {
-        region.cast::<u8>().add(((n + (*region).meta_pages) * PAGE_SIZE64) as usize)
+        region
+            .cast::<u8>()
+            .add(((n + (*region).meta_pages) * PAGE_SIZE64) as usize)
     }
 
     unsafe fn contains(&self, addr: PAddr) -> bool {
@@ -161,10 +180,13 @@ impl Region {
             let block = self.allocate(order + 1)?;
             let other = block.add(PAGE_SIZE64 << order);
             let other = other.as_u64() as *mut BlockHeader;
-            write(other, BlockHeader {
-                next: block_list.blocks,
-                prev: null_mut(),
-            });
+            write(
+                other,
+                BlockHeader {
+                    next: block_list.blocks,
+                    prev: null_mut(),
+                },
+            );
             if (*other).next != null_mut() {
                 (*(*other).next).prev = other;
             }
@@ -193,11 +215,17 @@ impl Region {
         Some(paddr)
     }
 
-    unsafe fn merge_blocks(&mut self, block_lists: &mut [BlockList], bitmap: &mut [BitmapRepr], page: u64, order: u32) {
+    unsafe fn merge_blocks(
+        &mut self,
+        block_lists: &mut [BlockList],
+        bitmap: &mut [BitmapRepr],
+        page: u64,
+        order: u32,
+    ) {
         assert!(order < self.biggest_order);
         let base = self as *mut Self as u64;
         let block_list = &mut block_lists[order as usize];
-        
+
         let mut other = None;
         let mut cur = block_list.blocks;
         while cur != null_mut() {
@@ -225,7 +253,13 @@ impl Region {
         self.deallocate_inner(block_lists, bitmap, page, order + 1);
     }
 
-    unsafe fn deallocate_inner(&mut self, block_lists: &mut [BlockList], bitmap: &mut [BitmapRepr], page: u64, order: u32) {
+    unsafe fn deallocate_inner(
+        &mut self,
+        block_lists: &mut [BlockList],
+        bitmap: &mut [BitmapRepr],
+        page: u64,
+        order: u32,
+    ) {
         let base = self as *mut Self as u64;
 
         let mut merged: bool = false;
@@ -245,10 +279,13 @@ impl Region {
         if !merged {
             let block_list = &mut block_lists[order as usize];
             let block = (base + (page + self.meta_pages) * PAGE_SIZE64) as *mut BlockHeader;
-            write(block, BlockHeader {
-                next: null_mut(),
-                prev: null_mut(),
-            });
+            write(
+                block,
+                BlockHeader {
+                    next: null_mut(),
+                    prev: null_mut(),
+                },
+            );
             (*block).next = block_list.blocks;
             if (*block).next != null_mut() {
                 (*(*block).next).prev = block;
@@ -292,7 +329,11 @@ fn total_bitmap_size(pages: u64) -> u64 {
 }
 
 pub unsafe fn add_region(paddr: PAddr, size: u64, vaddr: VAddr) {
-    assert_eq!(size % PAGE_SIZE64, 0, "Size must be a multiple of page size");
+    assert_eq!(
+        size % PAGE_SIZE64,
+        0,
+        "Size must be a multiple of page size"
+    );
     let region = Region::create_region(paddr, size / PAGE_SIZE64, vaddr);
     (*region).next = REGIONS;
     REGIONS = Some(region);
@@ -331,7 +372,10 @@ unsafe fn find_map_regions<R, F: FnMut(&mut Region) -> Option<R>>(mut f: F) -> O
 
 unsafe fn debug_alloc(msg: &str) {
     debug!("{}\n{:#?}", msg, (*REGIONS.unwrap_unchecked()));
-    let block_lists = Region::block_lists(REGIONS.unwrap_unchecked().cast(),(*REGIONS.unwrap_unchecked()).biggest_order);
+    let block_lists = Region::block_lists(
+        REGIONS.unwrap_unchecked().cast(),
+        (*REGIONS.unwrap_unchecked()).biggest_order,
+    );
     for (i, b) in block_lists.iter().enumerate() {
         let mut cur = b.blocks;
         debug!("  [{:02}]", i);
@@ -351,23 +395,25 @@ pub unsafe fn allocate_pages(order: u32) -> Option<PAddr> {
         }
         None
     });
-    debug_alloc("ALLOC");
     res
 }
 
 pub unsafe fn deallocate_pages(page: PAddr, order: u32) {
     assert!(page.is_page_aligned());
     find_map_regions(|region| {
-        region.contains(page).then(|| region.deallocate(page, order))
+        region
+            .contains(page)
+            .then(|| region.deallocate(page, order))
     });
-    debug_alloc("DEALLOC");
 }
 
 pub fn free_pages() -> u64 {
     let mut pages = 0;
-    unsafe { find_map_regions::<(), _>(|region| {
-        pages += region.free_pages;
-        None
-    }) };
+    unsafe {
+        find_map_regions::<(), _>(|region| {
+            pages += region.free_pages;
+            None
+        })
+    };
     pages
 }

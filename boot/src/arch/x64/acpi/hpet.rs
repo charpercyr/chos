@@ -1,6 +1,4 @@
-
 use super::SDTHeader;
-
 
 #[derive(Debug, Copy, Clone)]
 #[repr(C, packed)]

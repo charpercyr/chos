@@ -1,4 +1,3 @@
-
 pub mod list;
 
 pub trait Adapter {
@@ -75,7 +74,7 @@ impl<T: ?Sized> UnsafeRef<T> {
 impl<T: ?Sized> Pointer for UnsafeRef<T> {
     type Metadata = ();
     type Target = T;
-    
+
     fn into_raw(this: Self) -> (*const Self::Target, Self::Metadata) {
         (this.as_ptr(), ())
     }
@@ -91,7 +90,7 @@ mod _alloc {
     use alloc::boxed::Box;
     use alloc::rc::Rc;
     use alloc::sync::Arc;
-    
+
     impl<T: ?Sized, A: Allocator> Pointer for Box<T, A> {
         type Metadata = A;
         type Target = T;
@@ -103,7 +102,7 @@ mod _alloc {
             Self::from_raw_in(ptr as *mut _, meta)
         }
     }
-    
+
     impl<T: ?Sized> Pointer for Rc<T> {
         type Metadata = ();
         type Target = T;
@@ -114,7 +113,7 @@ mod _alloc {
             Self::from_raw(ptr)
         }
     }
-    
+
     impl<T: ?Sized> Pointer for Arc<T> {
         type Metadata = ();
         type Target = T;

@@ -1,4 +1,3 @@
-
 use cfg_if::cfg_if;
 
 macro_rules! match_arch {

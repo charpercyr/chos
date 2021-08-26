@@ -1,5 +1,4 @@
-
-use crate::{StrTab, Symtab, SymtabEntry, raw::Elf64GnuHash};
+use crate::{raw::Elf64GnuHash, StrTab, Symtab, SymtabEntry};
 
 use core::mem::size_of;
 use core::slice::from_raw_parts;
@@ -31,11 +30,18 @@ impl<'a> GnuHash<'a> {
     }
 
     // From https://flapenguin.me/elf-dt-gnu-hash
-    pub fn lookup(&self, name: &str, strtab: &'a StrTab<'a>, symtab: &'a Symtab<'a>) -> Option<SymtabEntry<'a>> {
+    pub fn lookup(
+        &self,
+        name: &str,
+        strtab: &'a StrTab<'a>,
+        symtab: &'a Symtab<'a>,
+    ) -> Option<SymtabEntry<'a>> {
         let namehash = gnu_hash(name);
 
         let word = self.bloom[(namehash as usize / 64) % self.hdr.bloom_size as usize];
-        let mask = (1u64.wrapping_shl(namehash % self.hdr.bloom_size)) | (1u64.wrapping_shl((namehash.wrapping_shr(self.hdr.bloom_shift)) % self.hdr.bloom_size));
+        let mask = (1u64.wrapping_shl(namehash % self.hdr.bloom_size))
+            | (1u64
+                .wrapping_shl((namehash.wrapping_shr(self.hdr.bloom_shift)) % self.hdr.bloom_size));
 
         if (word & mask) != mask {
             return None;
@@ -50,7 +56,7 @@ impl<'a> GnuHash<'a> {
             let hash = self.chain[(symidx - self.hdr.symoffset) as usize];
             let sym_entry = symtab.get(symidx as usize);
             if let Some(symname) = sym_entry.name(strtab) {
-                if (namehash|1) == (hash|1) && name == symname {
+                if (namehash | 1) == (hash | 1) && name == symname {
                     return Some(sym_entry);
                 }
             }

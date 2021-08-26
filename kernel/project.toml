@@ -6,3 +6,9 @@ include = [
 
 [project]
 deploy = "/chos/chos.elf"
+
+[project.debug]
+flags = ["--features=log-debug"]
+
+[project.release]
+flags = ["--features=log-info"]

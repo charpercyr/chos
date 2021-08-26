@@ -1,4 +1,3 @@
-
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
@@ -18,19 +17,19 @@ macro_rules! impl_addr_fns {
             pub const fn as_u64(self) -> u64 {
                 self.0
             }
-        
+
             pub const fn is_page_aligned(self) -> bool {
                 self.0 & PAGE_MASK == 0
             }
-        
+
             pub const fn align_page(self) -> Self {
                 Self(self.0 & !PAGE_MASK)
             }
-        
+
             pub const fn align_page_up(self) -> Self {
                 Self((self.0 + PAGE_SIZE64 - 1) / PAGE_SIZE64 * PAGE_SIZE64)
             }
-        
+
             pub const fn page(self) -> u64 {
                 self.0 >> 12
             }
@@ -43,11 +42,11 @@ macro_rules! impl_addr_fns {
                 }
             }
 
-            pub unsafe fn add(self, o: u64) -> Self {
+            pub const unsafe fn add(self, o: u64) -> Self {
                 Self(self.0 + o)
             }
 
-            pub unsafe fn sub(self, o: u64) -> Self {
+            pub const unsafe fn sub(self, o: u64) -> Self {
                 Self(self.0 - o)
             }
         }
@@ -87,7 +86,11 @@ impl VAddr {
     }
 
     pub const fn make_canonical(mut v: u64) -> Self {
-        v |= if v & (1 << 47) != 0 { 0xffff_0000_0000_0000 } else { 0 };
+        v |= if v & (1 << 47) != 0 {
+            0xffff_0000_0000_0000
+        } else {
+            0
+        };
         Self(v)
     }
 
@@ -103,6 +106,10 @@ impl VAddr {
         let p3 = ((addr & (0x1ff << 30)) >> 30) as u16;
         let p4 = ((addr & (0x1ff << 39)) >> 39) as u16;
         (p4, p3, p2, p1, off)
+    }
+
+    pub const fn add_canonical(self, o: u64) -> VAddr {
+        VAddr::make_canonical(self.0 + o)
     }
 }
 impl_addr_fns!(VAddr);
@@ -149,7 +156,7 @@ impl PageEntry {
         assert!(addr.is_page_aligned(), "Address is not page aligned");
         self.set_addr(addr.page());
     }
-    
+
     pub fn with_phys_addr(self, addr: PAddr) -> Self {
         assert!(addr.is_page_aligned(), "Address is not page aligned");
         self.with_addr(addr.page())

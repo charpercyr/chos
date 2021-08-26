@@ -1,4 +1,3 @@
-
 #[macro_export]
 macro_rules! check_kernel_entry {
     ($entry:expr) => {

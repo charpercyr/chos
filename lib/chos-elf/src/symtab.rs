@@ -1,7 +1,6 @@
-
+use crate::raw::Elf64Sym;
 use crate::GnuHash;
 use crate::StrTab;
-use crate::raw::Elf64Sym;
 
 use core::mem::size_of;
 use core::slice::{from_raw_parts, Iter};

@@ -1,4 +1,3 @@
-
 use chos_lib::int::CeilDiv;
 use chos_x64::paging::{PAddr, PageEntry, PageTable, VAddr};
 
@@ -16,27 +15,42 @@ fn init_page_entry(e: &mut PageEntry, paddr: PAddr, write: bool, exec: bool) {
         .with_phys_addr(paddr)
         .with_global(true)
         .with_writable(write)
-        .with_present(true)
-    ;
+        .with_present(true);
 }
 
 impl Mapper {
     pub unsafe fn new(alloc: &mut PAlloc) -> Self {
         let p4 = alloc.alloc_page_table();
-        Self {
-            p4: &mut *p4,
-        }
+        Self { p4: &mut *p4 }
     }
 
-    pub unsafe fn map(&mut self, paddr: PAddr, vaddr: VAddr, write: bool, exec: bool, alloc: &mut PAlloc) {
-        assert!(paddr.is_page_aligned(), "Physical address must be page aligned");
-        assert!(vaddr.is_page_aligned(), "Virtual address must be page aligned");
+    pub unsafe fn map(
+        &mut self,
+        paddr: PAddr,
+        vaddr: VAddr,
+        write: bool,
+        exec: bool,
+        alloc: &mut PAlloc,
+    ) {
+        assert!(
+            paddr.is_page_aligned(),
+            "Physical address must be page aligned"
+        );
+        assert!(
+            vaddr.is_page_aligned(),
+            "Virtual address must be page aligned"
+        );
         let (p4i, p3i, p2i, p1i, _) = vaddr.split();
 
         let p3 = &mut self.p4[p4i];
         let p3 = if !p3.present() {
             let p3 = alloc.alloc_page_table();
-            init_page_entry(&mut self.p4[p4i], PAddr::new(p3 as *mut _ as u64), true, true);
+            init_page_entry(
+                &mut self.p4[p4i],
+                PAddr::new(p3 as *mut _ as u64),
+                true,
+                true,
+            );
             p3
         } else {
             &mut *(p3.phys_addr().as_u64() as *mut PageTable)
@@ -68,7 +82,11 @@ impl Mapper {
 
         let p3 = alloc.alloc_page_table();
         init_page_entry(&mut self.p4[0], PAddr::new(p3 as *mut _ as u64), true, true);
-        let mem_size = map.all_memory_areas().map(|e| e.end_address()).max().expect("Memory map is empty");
+        let mem_size = map
+            .all_memory_areas()
+            .map(|e| e.end_address())
+            .max()
+            .expect("Memory map is empty");
         let g_count = mem_size.ceil_div(GB);
         for i in 0..g_count {
             init_page_entry(&mut p3[i as u16], PAddr::new(i * GB), true, true);

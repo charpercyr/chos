@@ -1,4 +1,3 @@
-
 use core::hint::spin_loop;
 
 use chos_lib::{NoAccess, ReadOnly, ReadWrite, WriteOnly};
@@ -40,23 +39,13 @@ pub struct CommandRegisters {
 }
 
 pub enum Command {
-    Normal {
-        vector: u8,
-    },
-    LowPriority {
-        vector: u8,
-    },
-    SMI {
-        vector: u8,
-    },
-    NMI {
-        vector: u8,
-    },
+    Normal { vector: u8 },
+    LowPriority { vector: u8 },
+    SMI { vector: u8 },
+    NMI { vector: u8 },
     Init,
     InitDeassert,
-    Sipi {
-        page_number: u8,
-    },
+    Sipi { page_number: u8 },
 }
 
 impl CommandRegisters {
@@ -74,33 +63,33 @@ impl CommandRegisters {
             Normal { vector: v } => {
                 vector = v as _;
                 cmd = 0;
-            },
+            }
             LowPriority { vector: v } => {
                 vector = v as _;
                 cmd = 1;
-            },
-            SMI { vector: v} => {
+            }
+            SMI { vector: v } => {
                 vector = v as _;
                 cmd = 2;
-            },
-            NMI { vector: v} => {
+            }
+            NMI { vector: v } => {
                 vector = v as _;
                 cmd = 4;
-            },
+            }
             Init => {
                 cmd = 5;
                 init = 0b01;
-            },
+            }
             InitDeassert => {
                 cmd = 5;
                 init = 0b10;
-            },
+            }
             Sipi { page_number } => {
                 vector = page_number as _;
                 cmd = 6;
             }
         };
-        
+
         let destination = ((destination as u32) & 0xf) << 24;
         let cmd = vector | (cmd << 8) | (init << 14);
 

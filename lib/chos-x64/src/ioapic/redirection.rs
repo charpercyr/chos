@@ -1,7 +1,6 @@
-
 use core::fmt;
 
-use modular_bitfield::{bitfield, BitfieldSpecifier, specifiers::*};
+use modular_bitfield::{bitfield, specifiers::*, BitfieldSpecifier};
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
 #[bits = 1]
@@ -46,7 +45,8 @@ struct RedirectionEntryInner {
     remote_irr: bool,
     trigger_mode: TriggerMode,
     mask: bool,
-    #[skip] __: B39,
+    #[skip]
+    __: B39,
     destination: u8,
 }
 
@@ -109,7 +109,7 @@ impl RedirectionEntry {
             Destination::Physical(v) => {
                 mode = false;
                 dest = v;
-            },
+            }
             Destination::Logical(v) => {
                 mode = true;
                 dest = v;

@@ -5,10 +5,12 @@ use rustc_demangle::demangle;
 use chos_x64::apic::Apic;
 use chos_x64::ioapic::{self, IOApic};
 
+use x86_64::instructions::interrupts::without_interrupts;
 use x86_64::instructions::port::PortWriteOnly;
 use x86_64::registers::control::Cr2;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode, HandlerFunc};
-use x86_64::instructions::interrupts::without_interrupts;
+use x86_64::structures::idt::{
+    HandlerFunc, InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode,
+};
 
 use super::acpi::madt::{self, MADT};
 
@@ -66,14 +68,17 @@ pub fn initalize(madt: &MADT) {
     idt.double_fault.set_handler_fn(intr_double_fault);
     idt.page_fault.set_handler_fn(intr_page_fault);
 
-    let ioapic = madt.entries().find_map(|e| {
-        if let madt::Entry::IOAPIC(ioapic) = e {
-            Some(ioapic)
-        } else {
-            None
-        }
-    }).expect("Expect at least 1 IOApic");
-    
+    let ioapic = madt
+        .entries()
+        .find_map(|e| {
+            if let madt::Entry::IOAPIC(ioapic) = e {
+                Some(ioapic)
+            } else {
+                None
+            }
+        })
+        .expect("Expect at least 1 IOApic");
+
     let apic;
     unsafe {
         APIC = MaybeUninit::new(Apic::with_address(madt.lapic_address as usize));
@@ -88,7 +93,7 @@ pub fn initalize(madt: &MADT) {
     }
 
     idt.load();
-    
+
     x86_64::instructions::interrupts::enable();
 }
 
@@ -99,7 +104,11 @@ pub unsafe fn apic() -> &'static mut Apic {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IOApicAllocFailed;
 
-pub fn try_ioapic_alloc<R, F: FnOnce(&mut ioapic::RedirectionEntry) -> R>(n: u8, f: F, handler: HandlerFunc) -> Result<R, IOApicAllocFailed> {
+pub fn try_ioapic_alloc<R, F: FnOnce(&mut ioapic::RedirectionEntry) -> R>(
+    n: u8,
+    f: F,
+    handler: HandlerFunc,
+) -> Result<R, IOApicAllocFailed> {
     without_interrupts(move || {
         let ioapic = unsafe { IO_APIC.assume_init_mut() };
         if n >= ioapic.max_red_entries() {

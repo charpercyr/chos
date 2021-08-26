@@ -1,4 +1,3 @@
-
 use core::hint::unreachable_unchecked;
 
 pub trait CeilDiv {
@@ -25,14 +24,7 @@ macro_rules! ceil_div_impl {
     };
 }
 
-ceil_div_impl!(
-    u8, i8,
-    u16, i16,
-    u32, i32,
-    u64, i64,
-    u128, i128,
-    usize, isize,
-);
+ceil_div_impl!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize,);
 
 pub const fn log2u64(value: u64) -> u32 {
     debug_assert!(value != 0, "Cannot calculate log of 0");

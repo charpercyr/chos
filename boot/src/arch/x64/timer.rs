@@ -1,6 +1,8 @@
-
-use core::{convert::TryInto, sync::atomic::{AtomicBool, Ordering::Relaxed}};
 use core::time::Duration;
+use core::{
+    convert::TryInto,
+    sync::atomic::{AtomicBool, Ordering::Relaxed},
+};
 
 use chos_lib::sync::sem::SpinSem;
 
@@ -22,7 +24,8 @@ extern "x86-interrupt" fn timer_callback(_: InterruptStackFrame) {
 static mut HPET: Option<chos_x64::hpet::HPET> = None;
 
 pub fn initialize(hpet_table: &HPET) {
-    super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback).expect("Could not allocate IOApic interrupt 8");
+    super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback)
+        .expect("Could not allocate IOApic interrupt 8");
     unsafe {
         HPET = Some(chos_x64::hpet::HPET::with_address(hpet_table.address));
     };
@@ -37,7 +40,9 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
     if let Err(_) = IN_PROGRESS.compare_exchange(false, true, Relaxed, Relaxed) {
         return Err(DelayInProgressError);
     }
-    let hpet = unsafe { &mut HPET }.as_mut().expect("Timer not initialized");
+    let hpet = unsafe { &mut HPET }
+        .as_mut()
+        .expect("Timer not initialized");
     let period = hpet.period() as u128;
     let mut tim0 = hpet.get_timer(0);
 

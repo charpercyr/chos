@@ -1,4 +1,3 @@
-
 mod spin;
 pub use spin::*;
 
@@ -52,12 +51,20 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
         LockGuard { lock: self }
     }
 
-    pub fn try_lock(&self) -> Option<LockGuard<'_, L, T>> where L: RawTryLock {
+    pub fn try_lock(&self) -> Option<LockGuard<'_, L, T>>
+    where
+        L: RawTryLock,
+    {
         self.lock.try_lock().then(|| LockGuard { lock: self })
     }
 
-    pub fn try_lock_tries(&self, tries: usize) -> Option<LockGuard<'_, L, T>> where L: RawTryLock {
-        self.lock.try_lock_tries(tries).then(|| LockGuard { lock: self })
+    pub fn try_lock_tries(&self, tries: usize) -> Option<LockGuard<'_, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.lock
+            .try_lock_tries(tries)
+            .then(|| LockGuard { lock: self })
     }
 
     pub fn get_mut(&mut self) -> &mut T {
@@ -68,8 +75,8 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
 pub struct LockGuard<'a, L: RawLock, T: ?Sized> {
     lock: &'a Lock<L, T>,
 }
-impl<L: RawLock, T: ?Sized> !Send for LockGuard<'_, L , T> {}
-unsafe impl<L: RawLock + Sync, T: ?Sized+ Sync> Sync for LockGuard<'_, L , T> {}
+impl<L: RawLock, T: ?Sized> !Send for LockGuard<'_, L, T> {}
+unsafe impl<L: RawLock + Sync, T: ?Sized + Sync> Sync for LockGuard<'_, L, T> {}
 
 impl<L: RawLock, T: ?Sized> Drop for LockGuard<'_, L, T> {
     fn drop(&mut self) {

@@ -17,7 +17,10 @@ impl<'a> Program<'a> {
     }
 
     pub fn dynamic(&'a self, elf: &'a Elf<'a>) -> Option<Dynamic<'a>> {
-        self.iter().find(|p| p.typ() == ProgramEntryType::Dynamic).map(|d| d.as_dynamic(elf)).flatten()
+        self.iter()
+            .find(|p| p.typ() == ProgramEntryType::Dynamic)
+            .map(|d| d.as_dynamic(elf))
+            .flatten()
     }
 }
 crate::elf_table!('a, Program, entries, ProgramEntry, ProgramEntryIter, StrideSliceIter<'a, Elf64Phdr>);

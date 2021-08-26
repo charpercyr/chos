@@ -1,7 +1,6 @@
-
 use core::cell::{Cell, UnsafeCell};
-use core::mem::{MaybeUninit};
-use core::ptr::{NonNull, replace};
+use core::mem::MaybeUninit;
+use core::ptr::{replace, NonNull};
 
 use super::{Adapter, LinkOps, Pointer};
 
@@ -121,11 +120,17 @@ impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = 
             let link = NonNull::new_unchecked(link as *mut A::Link);
             if let Some(tail) = &mut self.tail {
                 if !insert_after(link, *tail) {
-                    return Err(A::Pointer::from_raw(self.adapter.get_value(link.as_ptr()), meta));
+                    return Err(A::Pointer::from_raw(
+                        self.adapter.get_value(link.as_ptr()),
+                        meta,
+                    ));
                 }
             } else {
                 if !link.as_ref().acquire() {
-                    return Err(A::Pointer::from_raw(self.adapter.get_value(link.as_ptr()), meta));
+                    return Err(A::Pointer::from_raw(
+                        self.adapter.get_value(link.as_ptr()),
+                        meta,
+                    ));
                 }
             }
             link.as_ref().set_meta(meta);
@@ -153,10 +158,7 @@ impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = 
 
     pub fn back_mut(&mut self) -> ListCursorMut<'_, M, A> {
         let cur = self.tail;
-        ListCursorMut {
-            list: self,
-            cur,
-        }
+        ListCursorMut { list: self, cur }
     }
 
     fn update_head(&mut self, node: NonNull<A::Link>) {
@@ -227,7 +229,12 @@ unsafe fn unlink<L: ListLinkOps>(node: NonNull<L>) {
 
 macro_rules! cursor_common_impl {
     ($list:ident, $cursor:ident) => {
-        impl<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> $cursor<'a, M, A> {
+        impl<
+                'a,
+                M,
+                A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+            > $cursor<'a, M, A>
+        {
             pub fn get(&self) -> Option<&'a A::Value> {
                 Some(unsafe { &*self.list.adapter.get_value(self.cur?.as_ptr()) })
             }
@@ -253,7 +260,9 @@ macro_rules! cursor_common_impl {
 
 macro_rules! list_common_impl {
     ($list:ident, $cursor:ident, $cursor_mut:ident, $iter:ident) => {
-        impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> $list<M, A> {
+        impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>>
+            $list<M, A>
+        {
             pub fn try_push_front(&mut self, ptr: A::Pointer) -> Result<(), A::Pointer> {
                 unsafe {
                     let (value, meta) = A::Pointer::into_raw(ptr);
@@ -261,11 +270,17 @@ macro_rules! list_common_impl {
                     let link = NonNull::new_unchecked(link as *mut A::Link);
                     if let Some(head) = &mut self.head {
                         if !insert_before(link, *head) {
-                            return Err(A::Pointer::from_raw(self.adapter.get_value(link.as_ptr()), meta));
+                            return Err(A::Pointer::from_raw(
+                                self.adapter.get_value(link.as_ptr()),
+                                meta,
+                            ));
                         }
                     } else {
                         if !link.as_ref().acquire() {
-                            return Err(A::Pointer::from_raw(self.adapter.get_value(link.as_ptr()), meta));
+                            return Err(A::Pointer::from_raw(
+                                self.adapter.get_value(link.as_ptr()),
+                                meta,
+                            ));
                         }
                     }
                     link.as_ref().set_meta(meta);
@@ -273,7 +288,7 @@ macro_rules! list_common_impl {
                 }
                 Ok(())
             }
-        
+
             pub fn push_front(&mut self, ptr: A::Pointer) {
                 if let Err(_) = self.try_push_front(ptr) {
                     panic!("Could not insert: already linked");
@@ -313,7 +328,10 @@ macro_rules! list_common_impl {
                 }
             }
 
-            pub unsafe fn cursor_mut_from_pointer(&mut self, ptr: *const A::Value) -> $cursor<'_, M, A> {
+            pub unsafe fn cursor_mut_from_pointer(
+                &mut self,
+                ptr: *const A::Value,
+            ) -> $cursor<'_, M, A> {
                 let cur = self.adapter.get_link(ptr);
                 $cursor {
                     list: self,
@@ -322,25 +340,40 @@ macro_rules! list_common_impl {
             }
         }
 
-        impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> Drop for $list<M, A> {
+        impl<M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> Drop
+            for $list<M, A>
+        {
             fn drop(&mut self) {
                 while let Some(_) = self.pop_front() {
                     // Drop all pointers still in the list
                 }
             }
         }
-        
-        pub struct $cursor<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> {
+
+        pub struct $cursor<
+            'a,
+            M,
+            A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+        > {
             list: &'a $list<M, A>,
             cur: Option<NonNull<A::Link>>,
         }
 
-        pub struct $cursor_mut<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> {
+        pub struct $cursor_mut<
+            'a,
+            M,
+            A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+        > {
             list: &'a mut $list<M, A>,
             cur: Option<NonNull<A::Link>>,
         }
 
-        impl<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> $cursor_mut<'a, M, A> {
+        impl<
+                'a,
+                M,
+                A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+            > $cursor_mut<'a, M, A>
+        {
             pub fn unlink(self) -> Option<A::Pointer> {
                 self.cur.map(|cur| unsafe {
                     self.list.update_unlink(cur);
@@ -354,11 +387,20 @@ macro_rules! list_common_impl {
         cursor_common_impl!($list, $cursor);
         cursor_common_impl!($list, $cursor_mut);
 
-        pub struct $iter<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> {
+        pub struct $iter<
+            'a,
+            M,
+            A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+        > {
             cursor: $cursor<'a, M, A>,
         }
 
-        impl<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> Iterator for $iter<'a, M, A> {
+        impl<
+                'a,
+                M,
+                A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+            > Iterator for $iter<'a, M, A>
+        {
             type Item = &'a A::Value;
             fn next(&mut self) -> Option<Self::Item> {
                 let res = self.cursor.get();
@@ -367,7 +409,12 @@ macro_rules! list_common_impl {
             }
         }
 
-        impl<'a, M, A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>> IntoIterator for &'a $list<M, A> {
+        impl<
+                'a,
+                M,
+                A: Adapter<Pointer: Pointer<Metadata = M>, Link: ListLinkOps<Metadata = M>>,
+            > IntoIterator for &'a $list<M, A>
+        {
             type Item = &'a A::Value;
             type IntoIter = $iter<'a, M, A>;
             fn into_iter(self) -> Self::IntoIter {

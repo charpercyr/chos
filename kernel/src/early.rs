@@ -1,5 +1,3 @@
-
-
 use chos_boot_defs::{check_kernel_entry, KernelBootInfo};
 
 use chos_x64::qemu::{exit_qemu, QemuStatus};
@@ -30,7 +28,7 @@ fn setup_early_memory_allocator(info: &KernelBootInfo) {
     if let Some(mem) = mbh.memory_map_tag() {
         let iter = mem.all_memory_areas().filter_map(|area| {
             is_early_memory(area, info).then(|| {
-                crate::debug!(
+                info!(
                     "Using {:#016x} - {:#016x} as early memory",
                     area.start_address(),
                     area.end_address()
@@ -53,9 +51,12 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     }
     unsafe { panic::set_panic_logger(info.early_log) };
     log::use_early_debug(info.early_log);
-    setup_early_memory_allocator(info);
 
-    let _ = alloc::boxed::Box::new([0u8; 1024]);
+    info!("####################");
+    info!("### EARLY KERNEL ###");
+    info!("####################");
+
+    setup_early_memory_allocator(info);
 
     exit_qemu(QemuStatus::Success);
 }

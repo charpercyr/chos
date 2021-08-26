@@ -1,11 +1,10 @@
-
+use crate::raw::Elf64Dyn;
 use crate::Elf;
 use crate::GnuHash;
 use crate::LookupStrategy;
 use crate::Rela;
 use crate::StrTab;
 use crate::Symtab;
-use crate::raw::Elf64Dyn;
 
 use core::mem::size_of;
 use core::slice::{from_raw_parts, Iter};
@@ -66,36 +65,53 @@ impl<'a> Dynamic<'a> {
                 _ => (),
             }
             if let (Some(strtab), Some(strtabsz)) = (strtab, strtabsz) {
-                return Some(StrTab::new(elf.get_buffer(strtab as usize, strtabsz as usize)))
+                return Some(StrTab::new(
+                    elf.get_buffer(strtab as usize, strtabsz as usize),
+                ));
             }
         }
         None
     }
 
     pub fn symtab(&'a self, elf: &'a Elf<'a>) -> Option<Symtab<'a>> {
-        self.iter().find(|e| e.typ() == DynamicEntryType::SymTab).map(|e| {
-            for s in elf.sections() {
-                if s.offset() == e.val() {
-                    let mut strat = LookupStrategy::Linear;
-                    if let Some(gnu_hash) = self.gnu_hash(elf) {
-                        strat = LookupStrategy::GnuHash(gnu_hash);
+        self.iter()
+            .find(|e| e.typ() == DynamicEntryType::SymTab)
+            .map(|e| {
+                for s in elf.sections() {
+                    if s.offset() == e.val() {
+                        let mut strat = LookupStrategy::Linear;
+                        if let Some(gnu_hash) = self.gnu_hash(elf) {
+                            strat = LookupStrategy::GnuHash(gnu_hash);
+                        }
+                        return unsafe {
+                            Some(Symtab::new(
+                                elf.get_buffer(s.offset() as usize, s.size() as usize),
+                                strat,
+                            ))
+                        };
                     }
-                    return unsafe { Some(Symtab::new(elf.get_buffer(s.offset() as usize, s.size() as usize), strat)) };
                 }
-            }
-            None
-        }).flatten()
+                None
+            })
+            .flatten()
     }
 
     pub fn gnu_hash(&'a self, elf: &'a Elf<'a>) -> Option<GnuHash<'a>> {
-        self.iter().find(|e| e.typ() == DynamicEntryType::GnuHash).map(|e| {
-            for s in elf.sections() {
-                if s.offset() == e.val() {
-                    return unsafe { Some(GnuHash::new(elf.get_buffer(s.offset() as usize, s.size() as usize))) }
+        self.iter()
+            .find(|e| e.typ() == DynamicEntryType::GnuHash)
+            .map(|e| {
+                for s in elf.sections() {
+                    if s.offset() == e.val() {
+                        return unsafe {
+                            Some(GnuHash::new(
+                                elf.get_buffer(s.offset() as usize, s.size() as usize),
+                            ))
+                        };
+                    }
                 }
-            }
-            None
-        }).flatten()
+                None
+            })
+            .flatten()
     }
 }
 crate::elf_table!('a, Dynamic, entries, DynamicEntry, DynamicEntryIter, Iter<'a, Elf64Dyn>);

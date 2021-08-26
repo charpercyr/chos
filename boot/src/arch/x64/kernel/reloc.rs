@@ -6,7 +6,11 @@ use chos_elf::{Elf, Rela, RelaEntry, Symtab, SymtabEntry, SymtabEntryType};
 use chos_boot_defs::virt::KERNEL_CODE_BASE as BASE;
 
 fn check_symbol(idx: usize, sym: SymtabEntry) {
-    assert!(sym.value() != 0 || sym.typ() != SymtabEntryType::NoType, "Symbol [{}] is not defined", idx);
+    assert!(
+        sym.value() != 0 || sym.typ() != SymtabEntryType::NoType,
+        "Symbol [{}] is not defined",
+        idx
+    );
 }
 
 fn symbol_value(idx: usize, sym: SymtabEntry) -> i64 {
@@ -32,10 +36,7 @@ pub unsafe fn do_relocation(symtab: &Symtab, e: &RelaEntry) {
             off,
             symbol_offset_value(e.sym() as usize, symtab.get(e.sym() as usize)),
         ),
-        Relative => write_volatile(
-            off,
-            transmute::<_, i64>(BASE) + e.addend(),
-        ),
+        Relative => write_volatile(off, transmute::<_, i64>(BASE) + e.addend()),
         DtpMod64 => write_volatile(off, 0),
         DtpOff64 => write_volatile(
             off,
@@ -54,7 +55,7 @@ unsafe fn apply_rela(symtab: &Symtab, rela: &Rela) {
 pub unsafe fn apply_relocations(elf: &Elf) {
     if let Some(dyna) = elf.program().dynamic(elf) {
         if let Some(symtab) = dyna.symtab(elf) {
-            if let Some(rela) = dyna.relaplt(elf)  {
+            if let Some(rela) = dyna.relaplt(elf) {
                 apply_rela(&symtab, &rela);
             }
             if let Some(rela) = dyna.rela(elf) {

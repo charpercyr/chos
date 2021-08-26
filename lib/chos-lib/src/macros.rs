@@ -1,6 +1,5 @@
-
 #[macro_export]
-macro_rules! offset_of{
+macro_rules! offset_of {
     ($field:ident, $container:ty) => {{
         #[inline(always)]
         fn offset_of() -> usize {

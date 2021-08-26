@@ -1,7 +1,6 @@
-
 use core::mem::transmute;
 
-use chos_lib::{ReadWrite, WriteOnly, NoAccess};
+use chos_lib::{NoAccess, ReadWrite, WriteOnly};
 
 use static_assertions as sa;
 
@@ -61,7 +60,11 @@ impl IOApic {
         self.write(Self::ADDR_RED_BASE + 2 * n, low);
     }
 
-    pub unsafe fn update_redirection<R>(&mut self, n: u8, f: impl FnOnce(&mut RedirectionEntry) -> R) -> R {
+    pub unsafe fn update_redirection<R>(
+        &mut self,
+        n: u8,
+        f: impl FnOnce(&mut RedirectionEntry) -> R,
+    ) -> R {
         let mut entry = self.read_redirection(n);
         let res = f(&mut entry);
         self.write_redirection(n, entry);

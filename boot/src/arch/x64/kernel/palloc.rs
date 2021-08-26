@@ -1,8 +1,7 @@
-
 use core::mem::size_of;
 use core::ptr::write;
 
-use chos_x64::paging::{PAGE_SIZE, PAGE_SIZE64, PAddr, PageTable, VAddr};
+use chos_x64::paging::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
 
 use super::mapper::Mapper;
 
@@ -13,7 +12,11 @@ pub struct PAlloc {
 
 impl PAlloc {
     pub unsafe fn new(pbase: *mut u8) -> Self {
-        assert_eq!(pbase as usize % PAGE_SIZE, 0, "Physical base must be aligned to a physical page boundary");
+        assert_eq!(
+            pbase as usize % PAGE_SIZE,
+            0,
+            "Physical base must be aligned to a physical page boundary"
+        );
         Self {
             pbase: pbase.cast(),
             pcur: pbase.cast(),
@@ -36,7 +39,8 @@ impl PAlloc {
             crate::println!("Map PGT {:016x} -> {:016x}", cur as u64, vaddr.as_u64());
             mapper.map(PAddr::new(cur as u64), vaddr, true, false, self);
             cur = cur.add(1);
-            vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64).expect("Got invalid vaddr, this is very unlikely");
+            vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64)
+                .expect("Got invalid vaddr, this is very unlikely");
         }
     }
 

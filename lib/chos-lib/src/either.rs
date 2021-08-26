@@ -1,4 +1,3 @@
-
 use core::fmt::Debug;
 use core::hint::unreachable_unchecked;
 use core::pin::Pin;
@@ -33,7 +32,12 @@ impl<L, R> Either<L, R> {
         }
     }
 
-    pub fn either_with<T, C, LF: FnOnce(C, L) -> T, RF: FnOnce(C, R) -> T>(self, c: C, lf: LF, rf: RF) -> T {
+    pub fn either_with<T, C, LF: FnOnce(C, L) -> T, RF: FnOnce(C, R) -> T>(
+        self,
+        c: C,
+        lf: LF,
+        rf: RF,
+    ) -> T {
         match self {
             Left(l) => lf(c, l),
             Right(r) => rf(c, r),
@@ -104,7 +108,10 @@ impl<L, R> Either<L, R> {
         }
     }
 
-    pub fn unwrap_left(self) -> L where R: Debug {
+    pub fn unwrap_left(self) -> L
+    where
+        R: Debug,
+    {
         match self {
             Left(l) => l,
             Right(r) => panic!("Called Either::unwrap_left on a 'Right' value: {:?}", r),
@@ -132,7 +139,10 @@ impl<L, R> Either<L, R> {
         }
     }
 
-    pub fn unwrap_right(self) -> R where L: Debug {
+    pub fn unwrap_right(self) -> R
+    where
+        L: Debug,
+    {
         match self {
             Right(r) => r,
             Left(l) => panic!("Called Either::unwrap_right on a 'Left' value: {:?}", l),
@@ -160,14 +170,20 @@ impl<L, R> Either<L, R> {
         }
     }
 
-    pub fn expect_left(self, msg: &str) -> L where R: Debug {
+    pub fn expect_left(self, msg: &str) -> L
+    where
+        R: Debug,
+    {
         match self {
             Left(l) => l,
             Right(r) => panic!("{}: {:?}", msg, r),
         }
     }
 
-    pub fn expect_right(self, msg: &str) -> R where L: Debug {
+    pub fn expect_right(self, msg: &str) -> R
+    where
+        L: Debug,
+    {
         match self {
             Right(r) => r,
             Left(l) => panic!("{}: {:?}", msg, l),

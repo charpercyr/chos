@@ -1,9 +1,8 @@
-
 pub mod alloc;
 
 use super::{PAddr, VAddr};
 
-use core::alloc::{AllocError};
+use core::alloc::AllocError;
 use core::ptr::NonNull;
 
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
@@ -29,13 +28,13 @@ unsafe impl Pool<Page> for PageAlloc {
         todo!()
     }
 
-    unsafe fn deallocate(&self, ptr: NonNull<Page>) {
+    unsafe fn deallocate(&self, _: NonNull<Page>) {
         todo!()
     }
 }
 
 chos_lib::pool!(PageAdapter: Page => &PageAlloc);
 
-pub unsafe fn allocate_pages(order: u32) -> PagePtr {
+pub unsafe fn allocate_pages(_: u32) -> PagePtr {
     todo!()
 }

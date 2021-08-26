@@ -1,9 +1,8 @@
-
 mod mapper;
 mod palloc;
 mod reloc;
 
-use crate::arch::x64::kernel::mapper::{Mapper};
+use crate::arch::x64::kernel::mapper::Mapper;
 use crate::arch::x64::kernel::palloc::PAlloc;
 use crate::arch::x64::kernel::reloc::apply_relocations;
 use crate::println;
@@ -12,13 +11,13 @@ use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::str::from_utf8_unchecked;
 use core::u8;
 
-use chos_boot_defs::{KernelMemEntry, KernelMemInfo, phys, virt};
+use chos_boot_defs::{phys, virt, KernelMemEntry, KernelMemInfo};
 
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
 
 use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
-use chos_x64::paging::{PAddr, PAGE_SIZE, VAddr};
+use chos_x64::paging::{PAddr, VAddr, PAGE_SIZE};
 use multiboot2::MemoryMapTag;
 
 pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
@@ -58,15 +57,22 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             phys::KERNEL_DATA_BASE.as_u64() + p.vaddr(),
             phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()
         );
-        copy_nonoverlapping(data.as_ptr(), (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) as *mut u8, p.file_size() as usize);
+        copy_nonoverlapping(
+            data.as_ptr(),
+            (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) as *mut u8,
+            p.file_size() as usize,
+        );
         if p.file_size() < p.mem_size() {
             println!(
                 "ZERO {:08x} - {:08x}",
                 phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size(),
                 phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size(),
-
             );
-            write_bytes((phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()) as *mut u8, 0, (p.mem_size() - p.file_size()) as usize);
+            write_bytes(
+                (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()) as *mut u8,
+                0,
+                (p.mem_size() - p.file_size()) as usize,
+            );
         }
     }
 
@@ -77,9 +83,11 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     for p in iter {
         assert_eq!(p.align() as usize, PAGE_SIZE);
         let pstart = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let pend = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align()) * p.align();
+        let pend = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
+            * p.align();
         let vstart = (virt::KERNEL_CODE_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let vend = (virt::KERNEL_CODE_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align()) * p.align();
+        let vend = (virt::KERNEL_CODE_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
+            * p.align();
         let mut perms = [b'-'; 3];
         let flags = p.flags();
         if flags.contains(ProgramEntryFlags::READ) {
@@ -92,12 +100,21 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             perms[2] = b'x';
         }
         let perms = from_utf8_unchecked(&perms);
-        println!("MAP {:08x} - {:08x} to {:016x} - {:016x} {}", pstart, pend, vstart, vend, perms);
+        println!(
+            "MAP {:08x} - {:08x} to {:016x} - {:016x} {}",
+            pstart, pend, vstart, vend, perms
+        );
         let pages = (pend - pstart) / p.align();
         for i in 0..pages {
             let paddr = pstart + i * PAGE_SIZE as u64;
             let vaddr = vstart + i * PAGE_SIZE as u64;
-            mapper.map(PAddr::new(paddr), VAddr::new(vaddr).unwrap(), flags.contains(ProgramEntryFlags::WRITE), flags.contains(ProgramEntryFlags::EXEC), &mut palloc);
+            mapper.map(
+                PAddr::new(paddr),
+                VAddr::new(vaddr).unwrap(),
+                flags.contains(ProgramEntryFlags::WRITE),
+                flags.contains(ProgramEntryFlags::EXEC),
+                &mut palloc,
+            );
         }
     }
     palloc.map_self(virt::KERNEL_PT_BASE, &mut mapper);
@@ -116,6 +133,6 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             phys: phys::KERNEL_DATA_BASE.add(pmap_end).sub(pmap_start),
             virt: virt::KERNEL_PT_BASE,
             size: palloc.total_size(),
-        }
+        },
     }
 }

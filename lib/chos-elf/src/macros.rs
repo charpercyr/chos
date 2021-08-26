@@ -1,4 +1,3 @@
-
 #[macro_export]
 macro_rules! elf_table {
     ($lif:lifetime, $ty:ident, $entries:ident, $entry:ident, $iter:ident, $inner_iter:ty) => {

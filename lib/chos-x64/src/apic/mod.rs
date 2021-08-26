@@ -17,7 +17,9 @@ impl Apic {
     pub unsafe fn initialize(&mut self, spurious: u8) {
         let value = spurious as u32;
 
-        self.registers.lvt_corrected_machine_check_interrupt.disable();
+        self.registers
+            .lvt_corrected_machine_check_interrupt
+            .disable();
         self.registers.lvt_error.disable();
         self.registers.lvt_lint0.disable();
         self.registers.lvt_lint1.disable();
@@ -25,7 +27,9 @@ impl Apic {
         self.registers.lvt_thermal_sensor.disable();
         self.registers.lvt_timer.disable();
 
-        self.registers.spurious_interrupt_vector.write(value | (1 << 8));
+        self.registers
+            .spurious_interrupt_vector
+            .write(value | (1 << 8));
     }
 
     pub fn base(&self) -> VirtAddr {
@@ -73,7 +77,9 @@ unsafe fn start_ap(
     for _ in 0..2 {
         cmd.send_command_nowait(
             lapic_id,
-            Command::Sipi { page_number: code_page as u8 },
+            Command::Sipi {
+                page_number: code_page as u8,
+            },
         );
         delay_us(200);
         cmd.wait_for_delivery();

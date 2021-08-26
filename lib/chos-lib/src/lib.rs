@@ -1,5 +1,4 @@
 #![no_std]
-
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]

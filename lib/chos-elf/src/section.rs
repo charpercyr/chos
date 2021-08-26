@@ -1,5 +1,4 @@
-
-use crate::{Elf, LookupStrategy, StrTab, Symtab, raw::Elf64Shdr};
+use crate::{raw::Elf64Shdr, Elf, LookupStrategy, StrTab, Symtab};
 
 use bitflags::bitflags;
 
@@ -57,7 +56,7 @@ impl<'a> SectionEntry<'a> {
     pub fn addr(&self) -> u64 {
         self.hdr.addr
     }
-    
+
     pub fn offset(&self) -> u64 {
         self.hdr.off
     }
@@ -84,7 +83,12 @@ impl<'a> SectionEntry<'a> {
 
     pub fn as_symtab(&'a self, elf: &Elf<'a>) -> Option<Symtab<'a>> {
         if self.typ() == SectionEntryType::Symtab || self.typ() == SectionEntryType::DynSym {
-            unsafe { Some(Symtab::new(elf.get_buffer(self.hdr.off as usize, self.hdr.size as usize), LookupStrategy::Linear)) }
+            unsafe {
+                Some(Symtab::new(
+                    elf.get_buffer(self.hdr.off as usize, self.hdr.size as usize),
+                    LookupStrategy::Linear,
+                ))
+            }
         } else {
             None
         }
@@ -92,7 +96,9 @@ impl<'a> SectionEntry<'a> {
 
     pub fn as_strtab(&'a self, elf: &'a Elf<'a>) -> Option<StrTab<'a>> {
         if self.typ() == SectionEntryType::Strtab {
-            Some(StrTab::new(elf.get_buffer(self.hdr.off as usize, self.hdr.size as usize)))
+            Some(StrTab::new(
+                elf.get_buffer(self.hdr.off as usize, self.hdr.size as usize),
+            ))
         } else {
             None
         }

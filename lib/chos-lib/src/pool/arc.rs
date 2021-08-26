@@ -1,4 +1,3 @@
-
 use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
@@ -9,7 +8,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use super::Pool;
 
 #[cfg(feature = "alloc")]
-use alloc::alloc::{Global, handle_alloc_error};
+use alloc::alloc::{handle_alloc_error, Global};
 
 pub struct IArcCount {
     count: AtomicUsize,
@@ -52,9 +51,13 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
     pub fn new_in(value: T, alloc: P) -> Self {
         let r = Self::try_new_in(value, alloc);
         #[cfg(feature = "alloc")]
-        { r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>())) }
+        {
+            r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
+        }
         #[cfg(not(feature = "alloc"))]
-        { r.unwrap_or_else(|_| panic!("Could not allocate {} bytes", Layout::new::<T>().size())) }
+        {
+            r.unwrap_or_else(|_| panic!("Could not allocate {} bytes", Layout::new::<T>().size()))
+        }
     }
 
     pub fn into_raw_with_allocator(this: Self) -> (*const T, P) {
@@ -77,7 +80,8 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
     }
 
     pub fn get_mut(this: &mut Self) -> Option<&mut T> {
-        this.is_unique().then(move || unsafe { Self::get_mut_unchecked(this) })
+        this.is_unique()
+            .then(move || unsafe { Self::get_mut_unchecked(this) })
     }
 
     pub unsafe fn get_mut_unchecked(this: &mut Self) -> &mut T {
@@ -166,12 +170,7 @@ macro_rules! fmt {
     };
 }
 
-fmt!(
-    Debug, Display,
-    Binary, Octal,
-    LowerHex, UpperHex,
-    LowerExp, UpperExp,
-);
+fmt!(Debug, Display, Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp,);
 
 impl<T: IArcAdapter, P: Pool<T>> fmt::Pointer for IArc<T, P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

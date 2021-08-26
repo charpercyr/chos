@@ -1,4 +1,3 @@
-
 mod arc;
 pub use arc::*;
 
@@ -24,7 +23,9 @@ macro_rules! pool {
     ($name:ident => $r:expr) => {
         pub struct $name;
         unsafe impl<T> $crate::pool::Pool<T> for $name {
-            unsafe fn allocate(&self) -> core::result::Result<core::ptr::NonNull<T>, core::alloc::AllocError> {
+            unsafe fn allocate(
+                &self,
+            ) -> core::result::Result<core::ptr::NonNull<T>, core::alloc::AllocError> {
                 $crate::pool::Pool::<T>::allocate($r)
             }
             unsafe fn deallocate(&self, ptr: core::ptr::NonNull<T>) {
@@ -35,7 +36,9 @@ macro_rules! pool {
     ($name:ident: $ty:ident => $r:expr) => {
         pub struct $name;
         unsafe impl $crate::pool::Pool<$ty> for $name {
-            unsafe fn allocate(&self) -> core::result::Result<core::ptr::NonNull<$ty>, core::alloc::AllocError> {
+            unsafe fn allocate(
+                &self,
+            ) -> core::result::Result<core::ptr::NonNull<$ty>, core::alloc::AllocError> {
                 $crate::pool::Pool::<$ty>::allocate($r)
             }
             unsafe fn deallocate(&self, ptr: core::ptr::NonNull<$ty>) {

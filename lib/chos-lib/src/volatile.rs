@@ -1,6 +1,6 @@
-use core::{intrinsics::volatile_copy_memory};
+use core::intrinsics::volatile_copy_memory;
 use core::marker::PhantomData;
-use core::mem::{forget, ManuallyDrop, transmute};
+use core::mem::{forget, transmute, ManuallyDrop};
 use core::ptr;
 
 pub trait WriteAccess {}
@@ -63,7 +63,6 @@ impl<T, P> Volatile<T, P> {
     }
 }
 
-
 impl<T, P> From<T> for Volatile<T, P> {
     fn from(value: T) -> Self {
         Self(value, PhantomData)
@@ -98,7 +97,7 @@ impl<T, P, const N: usize> PaddedVolatile<T, P, N> {
         Self {
             inner: PaddedVolatileInner {
                 volatile: ManuallyDrop::new(Volatile::new(value)),
-            }
+            },
         }
     }
 

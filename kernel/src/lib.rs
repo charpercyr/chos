@@ -19,6 +19,6 @@ mod log;
 mod mm;
 mod panic;
 
-fn kernel_main(id: u8) -> ! {
+fn kernel_main(_: u8) -> ! {
     loop {}
 }
