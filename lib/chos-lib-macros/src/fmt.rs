@@ -3,10 +3,8 @@ use std::collections::HashSet;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{
-    parse::{Parse, ParseStream},
-    Expr, Generics, Ident, Token, Type, WhereClause,
-};
+use syn::parse::{Parse, ParseStream};
+use syn::{Expr, Generics, Ident, Token, Type, WhereClause};
 
 fn all_fmts(span: Span) -> HashSet<Ident> {
     [

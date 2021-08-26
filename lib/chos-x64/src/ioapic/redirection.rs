@@ -1,6 +1,7 @@
 use core::fmt;
 
-use modular_bitfield::{bitfield, specifiers::*, BitfieldSpecifier};
+use modular_bitfield::specifiers::*;
+use modular_bitfield::{bitfield, BitfieldSpecifier};
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
 #[bits = 1]

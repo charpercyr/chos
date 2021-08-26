@@ -429,8 +429,9 @@ list_common_impl!(List, ListCursor, ListCursorMut, ListIter);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::prelude::v1::*;
+
+    use super::*;
 
     struct A {
         link: Link<()>,

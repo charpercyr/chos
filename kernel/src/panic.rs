@@ -1,4 +1,5 @@
-use core::{fmt::Arguments, panic::PanicInfo};
+use core::fmt::Arguments;
+use core::panic::PanicInfo;
 
 use chos_x64::qemu::exit_qemu;
 

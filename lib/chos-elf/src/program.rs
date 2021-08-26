@@ -1,8 +1,8 @@
-use crate::{raw::Elf64Phdr, Dynamic, Elf};
-
 use bitflags::bitflags;
-
 use chos_lib::stride::{from_raw_parts, StrideSlice, StrideSliceIter};
+
+use crate::raw::Elf64Phdr;
+use crate::{Dynamic, Elf};
 
 #[derive(Clone, Copy)]
 pub struct Program<'a> {

@@ -1,10 +1,10 @@
 mod spin;
-pub use spin::*;
-
 use core::cell::UnsafeCell;
 use core::hint::spin_loop;
 use core::intrinsics::likely;
 use core::ops::{Deref, DerefMut};
+
+pub use spin::*;
 
 pub unsafe trait RawLock {
     const INIT: Self;

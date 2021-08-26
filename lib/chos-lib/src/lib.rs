@@ -33,12 +33,13 @@ pub mod stride;
 pub mod sync;
 
 mod volatile;
-pub use volatile::*;
-
 pub use chos_lib_macros::forward_fmt;
+pub use volatile::*;
 
 #[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
 #[cfg(test)]
 extern crate std;
+
+pub use cfg_if;

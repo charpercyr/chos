@@ -1,5 +1,4 @@
-use core::fmt;
-use core::hint;
+use core::{fmt, hint};
 
 use x86_64::instructions::port::Port;
 

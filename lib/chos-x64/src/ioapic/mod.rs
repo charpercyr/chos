@@ -1,7 +1,6 @@
 use core::mem::transmute;
 
 use chos_lib::{NoAccess, ReadWrite, WriteOnly};
-
 use static_assertions as sa;
 
 mod redirection;

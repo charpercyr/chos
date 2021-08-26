@@ -31,6 +31,7 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "chos-boot-defs",
+ "chos-config",
  "chos-lib",
  "chos-x64",
  "modular-bitfield",
@@ -46,6 +47,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "chos-boot-defs",
+ "chos-config",
  "chos-elf",
  "chos-lib",
  "chos-x64",
@@ -62,6 +64,14 @@ dependencies = [
 name = "chos-boot-defs"
 version = "0.1.0"
 dependencies = [
+ "chos-x64",
+]
+
+[[package]]
+name = "chos-config"
+version = "0.1.0"
+dependencies = [
+ "chos-lib",
  "chos-x64",
 ]
 

@@ -1,7 +1,5 @@
 use chos_boot_defs::{check_kernel_entry, KernelBootInfo};
-
 use chos_x64::qemu::{exit_qemu, QemuStatus};
-
 use multiboot2::MemoryArea;
 
 use super::*;
@@ -55,6 +53,17 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     info!("####################");
     info!("### EARLY KERNEL ###");
     info!("####################");
+
+    use chos_config::arch::mm::virt;
+
+    debug!("PHYSICAL_MAP_BASE   {:?}", virt::PHYSICAL_MAP_BASE);
+    debug!("PAGING_BASE         {:?}", virt::PAGING_BASE);
+    debug!("DEVICE_BASE         {:?}", virt::DEVICE_BASE);
+    debug!("STATIC_BASE         {:?}", virt::STATIC_BASE);
+    debug!("HEAP_BASE           {:?}", virt::HEAP_BASE);
+    debug!("PERCPU_STATIC_BASE  {:?}", virt::PERCPU_STATIC_BASE);
+    debug!("PERCPU_HEAP_BASE    {:?}", virt::PERCPU_HEAP_BASE);
+    debug!("STACK_BASE          {:?}", virt::STACK_BASE);
 
     setup_early_memory_allocator(info);
 

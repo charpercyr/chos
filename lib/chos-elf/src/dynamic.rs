@@ -1,13 +1,8 @@
-use crate::raw::Elf64Dyn;
-use crate::Elf;
-use crate::GnuHash;
-use crate::LookupStrategy;
-use crate::Rela;
-use crate::StrTab;
-use crate::Symtab;
-
 use core::mem::size_of;
 use core::slice::{from_raw_parts, Iter};
+
+use crate::raw::Elf64Dyn;
+use crate::{Elf, GnuHash, LookupStrategy, Rela, StrTab, Symtab};
 
 #[derive(Clone, Copy)]
 pub struct Dynamic<'a> {

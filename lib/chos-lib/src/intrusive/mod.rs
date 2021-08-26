@@ -85,11 +85,12 @@ impl<T: ?Sized> Pointer for UnsafeRef<T> {
 
 #[cfg(feature = "alloc")]
 mod _alloc {
-    use super::*;
     use alloc::alloc::Allocator;
     use alloc::boxed::Box;
     use alloc::rc::Rc;
     use alloc::sync::Arc;
+
+    use super::*;
 
     impl<T: ?Sized, A: Allocator> Pointer for Box<T, A> {
         type Metadata = A;

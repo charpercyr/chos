@@ -23,11 +23,12 @@ mod strtab;
 pub use strtab::*;
 
 mod symtab;
+use core::mem::size_of;
+use core::usize;
+
 pub use symtab::*;
 
 use self::raw::Elf64Hdr;
-
-use core::{mem::size_of, usize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ElfErrorKind {

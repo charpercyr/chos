@@ -2,23 +2,22 @@ mod mapper;
 mod palloc;
 mod reloc;
 
-use crate::arch::x64::kernel::mapper::Mapper;
-use crate::arch::x64::kernel::palloc::PAlloc;
-use crate::arch::x64::kernel::reloc::apply_relocations;
-use crate::println;
-
 use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::str::from_utf8_unchecked;
 use core::u8;
 
-use chos_boot_defs::{phys, virt, KernelMemEntry, KernelMemInfo};
-
+use chos_boot_defs::{phys, KernelMemEntry, KernelMemInfo};
+use chos_config::arch::mm::virt;
+use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
-
-use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_x64::paging::{PAddr, VAddr, PAGE_SIZE};
 use multiboot2::MemoryMapTag;
+
+use crate::arch::x64::kernel::mapper::Mapper;
+use crate::arch::x64::kernel::palloc::PAlloc;
+use crate::arch::x64::kernel::reloc::apply_relocations;
+use crate::println;
 
 pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     let iter = kernel
@@ -85,8 +84,9 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         let pstart = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
         let pend = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
             * p.align();
-        let vstart = (virt::KERNEL_CODE_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let vend = (virt::KERNEL_CODE_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
+        let vstart = (virt::STATIC_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
+        let vend = (virt::STATIC_BASE.as_u64() + p.vaddr() + p.mem_size())
+            .ceil_div(p.align())
             * p.align();
         let mut perms = [b'-'; 3];
         let flags = p.flags();
@@ -117,7 +117,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             );
         }
     }
-    palloc.map_self(virt::KERNEL_PT_BASE, &mut mapper);
+    palloc.map_self(virt::PAGING_BASE, &mut mapper);
 
     mapper.p4.set_page_table();
 
@@ -126,12 +126,12 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     KernelMemInfo {
         code: KernelMemEntry {
             phys: phys::KERNEL_DATA_BASE,
-            virt: virt::KERNEL_CODE_BASE,
+            virt: virt::STATIC_BASE,
             size: (pmap_end - pmap_start) as usize,
         },
         pt: KernelMemEntry {
             phys: phys::KERNEL_DATA_BASE.add(pmap_end).sub(pmap_start),
-            virt: virt::KERNEL_PT_BASE,
+            virt: virt::PAGING_BASE,
             size: palloc.total_size(),
         },
     }

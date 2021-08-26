@@ -1,9 +1,8 @@
 use core::panic::PanicInfo;
 
-use rustc_demangle::demangle;
-
 use chos_x64::backtrace;
 use chos_x64::qemu::*;
+use rustc_demangle::demangle;
 
 use crate::unsafe_println;
 

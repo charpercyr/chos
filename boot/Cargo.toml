@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 bitflags = "1.2.1"
 chos-boot-defs = { path = "../lib/chos-boot-defs" }
+chos-config = { path = "../lib/chos-config" }
 chos-elf = { path = "../lib/chos-elf" }
 chos-lib = { path = "../lib/chos-lib", default-features = false }
 modular-bitfield = "0.11.2"

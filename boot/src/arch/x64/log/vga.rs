@@ -1,7 +1,7 @@
-use chos_lib::{copy_volatile, Volatile};
-
 use core::fmt;
 use core::mem::transmute;
+
+use chos_lib::{copy_volatile, Volatile};
 
 #[allow(dead_code)]
 #[repr(u8)]

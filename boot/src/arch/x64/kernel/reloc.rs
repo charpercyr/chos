@@ -1,9 +1,8 @@
 use core::mem::transmute;
 use core::ptr::write_volatile;
 
+use chos_config::arch::mm::virt::STATIC_BASE as BASE;
 use chos_elf::{Elf, Rela, RelaEntry, Symtab, SymtabEntry, SymtabEntryType};
-
-use chos_boot_defs::virt::KERNEL_CODE_BASE as BASE;
 
 fn check_symbol(idx: usize, sym: SymtabEntry) {
     assert!(

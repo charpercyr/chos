@@ -1,7 +1,8 @@
-use crate::{raw::Elf64GnuHash, StrTab, Symtab, SymtabEntry};
-
 use core::mem::size_of;
 use core::slice::from_raw_parts;
+
+use crate::raw::Elf64GnuHash;
+use crate::{StrTab, Symtab, SymtabEntry};
 
 #[derive(Clone, Copy)]
 pub struct GnuHash<'a> {

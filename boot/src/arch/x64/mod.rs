@@ -9,15 +9,16 @@ mod panic;
 mod symbols;
 mod timer;
 
-use crate::{arch::x64::intr::apic, println};
 use acpi::RSDT;
-use chos_boot_defs::{virt, KernelBootInfo, KernelEntry};
+use chos_boot_defs::{KernelBootInfo, KernelEntry};
+use chos_config::arch::mm::virt;
 use chos_x64::paging::PageTable;
 use cmdline::iter_cmdline;
-
+use multiboot2 as mb;
 use spin::Barrier;
 
-use multiboot2 as mb;
+use crate::arch::x64::intr::apic;
+use crate::println;
 
 struct MpInfo {
     entry: KernelEntry,
@@ -92,7 +93,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     }
     let mem_info = unsafe { kernel::map_kernel(&kernel, memory_map) };
 
-    let entry = kernel.raw().entry + virt::KERNEL_CODE_BASE.as_u64();
+    let entry = kernel.raw().entry + virt::STATIC_BASE.as_u64();
     let entry: KernelEntry = unsafe { core::mem::transmute(entry) };
 
     let apic_count = madt.apic_count();

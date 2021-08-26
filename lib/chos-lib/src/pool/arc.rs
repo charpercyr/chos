@@ -1,3 +1,5 @@
+#[cfg(feature = "alloc")]
+use alloc::alloc::{handle_alloc_error, Global};
 use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
@@ -6,9 +8,6 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::Pool;
-
-#[cfg(feature = "alloc")]
-use alloc::alloc::{handle_alloc_error, Global};
 
 pub struct IArcCount {
     count: AtomicUsize,

@@ -1,6 +1,5 @@
 use chos_lib::int::CeilDiv;
 use chos_x64::paging::{PAddr, PageEntry, PageTable, VAddr};
-
 use multiboot2::MemoryMapTag;
 
 use super::palloc::PAlloc;

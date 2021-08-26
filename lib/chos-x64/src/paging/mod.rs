@@ -2,7 +2,8 @@ use core::fmt;
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
 
-use modular_bitfield::{bitfield, specifiers::*};
+use modular_bitfield::bitfield;
+use modular_bitfield::specifiers::*;
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 

@@ -1,8 +1,8 @@
 mod arc;
-pub use arc::*;
-
 use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
+
+pub use arc::*;
 
 pub unsafe trait Pool<T> {
     unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError>;

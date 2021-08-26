@@ -1,9 +1,8 @@
 use core::mem::MaybeUninit;
 use core::slice::from_raw_parts;
 
-use multiboot2 as mb;
-
 use chos_elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType};
+use multiboot2 as mb;
 
 static mut ELF_INITIALIZED: bool = false;
 static mut SYMBOL_TABLE: MaybeUninit<Symtab<'static>> = MaybeUninit::uninit();

@@ -12,13 +12,6 @@ pub mod phys {
     pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0100_0000);
 }
 
-pub mod virt {
-    use super::VAddr;
-
-    pub const KERNEL_CODE_BASE: VAddr = unsafe { VAddr::new_unchecked(0xffff_8000_4000_0000) };
-    pub const KERNEL_PT_BASE: VAddr = unsafe { VAddr::new_unchecked(0xffff_8000_8000_0000) };
-}
-
 #[derive(Copy, Clone, Debug)]
 pub struct KernelMemEntry {
     pub virt: VAddr,

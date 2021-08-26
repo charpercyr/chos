@@ -1,11 +1,9 @@
+use core::convert::TryInto;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering::Relaxed;
 use core::time::Duration;
-use core::{
-    convert::TryInto,
-    sync::atomic::{AtomicBool, Ordering::Relaxed},
-};
 
 use chos_lib::sync::sem::SpinSem;
-
 use x86_64::structures::idt::InterruptStackFrame;
 
 use super::acpi::hpet::HPET;
