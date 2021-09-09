@@ -11,13 +11,13 @@ use chos_config::arch::mm::virt;
 use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
+use chos_lib::log::info;
 use chos_x64::paging::{PAddr, VAddr, PAGE_SIZE};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::Mapper;
 use crate::arch::x64::kernel::palloc::PAlloc;
 use crate::arch::x64::kernel::reloc::apply_relocations;
-use crate::println;
 
 pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     let iter = kernel
@@ -39,8 +39,8 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         pmap_end + phys::KERNEL_DATA_BASE.as_u64(),
     );
 
-    println!("ELF @ {:08x}", kernel.raw() as *const _ as usize);
-    println!("INIT {:08x} - {:08x}", pmap_start, pmap_end);
+    info!("ELF @ {:08x}", kernel.raw() as *const _ as usize);
+    info!("INIT {:08x} - {:08x}", pmap_start, pmap_end);
     write_bytes(
         pmap_start as *mut u8,
         0xcc,
@@ -49,7 +49,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
 
     for p in iter.clone() {
         let data = kernel.get_buffer(p.offset() as usize, p.file_size() as usize);
-        println!(
+        info!(
             "COPY {:08x} - {:08x} to {:08x} - {:08x}",
             data.as_ptr() as u64,
             data.as_ptr() as u64 + p.file_size(),
@@ -62,7 +62,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             p.file_size() as usize,
         );
         if p.file_size() < p.mem_size() {
-            println!(
+            info!(
                 "ZERO {:08x} - {:08x}",
                 phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size(),
                 phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size(),
@@ -85,9 +85,8 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         let pend = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
             * p.align();
         let vstart = (virt::STATIC_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let vend = (virt::STATIC_BASE.as_u64() + p.vaddr() + p.mem_size())
-            .ceil_div(p.align())
-            * p.align();
+        let vend =
+            (virt::STATIC_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align()) * p.align();
         let mut perms = [b'-'; 3];
         let flags = p.flags();
         if flags.contains(ProgramEntryFlags::READ) {
@@ -100,7 +99,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             perms[2] = b'x';
         }
         let perms = from_utf8_unchecked(&perms);
-        println!(
+        info!(
             "MAP {:08x} - {:08x} to {:016x} - {:016x} {}",
             pstart, pend, vstart, vend, perms
         );

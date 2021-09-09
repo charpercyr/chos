@@ -2,6 +2,8 @@ use chos_boot_defs::{check_kernel_entry, KernelBootInfo};
 use chos_x64::qemu::{exit_qemu, QemuStatus};
 use multiboot2::MemoryArea;
 
+use chos_lib::log::*;
+
 use super::*;
 
 fn hlt_loop() -> ! {
@@ -47,8 +49,7 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     if id != 0 {
         hlt_loop();
     }
-    unsafe { panic::set_panic_logger(info.early_log) };
-    log::use_early_debug(info.early_log);
+    unsafe { chos_lib::log::set_handler(info.early_log) };
 
     info!("####################");
     info!("### EARLY KERNEL ###");

@@ -1,6 +1,8 @@
 use chos_lib::int::CeilDiv;
-use chos_x64::paging::{PAddr, PageEntry, PageTable, VAddr};
+use chos_x64::paging::{PAGE_SIZE64, PAddr, PageEntry, PageTable, VAddr};
 use multiboot2::MemoryMapTag;
+
+use chos_lib::log::info;
 
 use super::palloc::PAlloc;
 
@@ -90,7 +92,7 @@ impl Mapper {
         for i in 0..g_count {
             init_page_entry(&mut p3[i as u16], PAddr::new(i * GB), true, true);
             p3[i as u16].set_huge_page(true);
-            crate::println!("Identity map {:016x} - {:016x}", i * GB, (i + 1) * GB);
+            info!("Identity map {:016x} - {:016x}", i * GB, (i + 1) * GB);
         }
     }
 }

@@ -1,7 +1,7 @@
 mod serial;
 mod vga;
 
-use core::fmt::Write;
+use core::fmt::{Arguments, Pointer, Write};
 
 use spin::Mutex;
 
@@ -31,32 +31,14 @@ pub fn initialize(dev: Device) {
     };
     dev.init();
     *output = Some(dev);
+    unsafe { chos_lib::log::set_handler(log) };
 }
 
-#[macro_export]
-macro_rules! print {
-    ($($args:tt)*) => {{
-        let _guard = $crate::arch::x64::log::LOCK.lock();
-        #[allow(unused_unsafe)]
-        if let Some(out) = unsafe { $crate::arch::x64::log::OUTPUT.as_mut() } {
-            #[allow(unused_imports)]
-            use core::fmt::Write;
-            write!(*out, $($args)*).unwrap();
-        }
-    }};
-}
-
-#[macro_export]
-macro_rules! println {
-    ($($args:tt)*) => {{
-        let _guard = $crate::arch::x64::log::LOCK.lock();
-        #[allow(unused_unsafe)]
-        if let Some(out) = unsafe { $crate::arch::x64::log::OUTPUT.as_mut() } {
-            #[allow(unused_imports)]
-            use core::fmt::Write;
-            writeln!(*out, $($args)*).unwrap();
-        }
-    }};
+pub fn log(args: Arguments<'_>, is_unsafe: bool) {
+    let _guard = (!is_unsafe).then(|| LOCK.lock());
+    if let Some(output) = unsafe { &mut OUTPUT } {  
+        writeln!(*output, "{}", args).unwrap();
+    }
 }
 
 #[macro_export]
@@ -88,12 +70,12 @@ pub fn hexdump(b: &[u8]) {
     let mut i = 0;
     while i < len {
         let mut j = 0;
-        print!("{:016p}]", &b[i]);
+        chos_lib::log::info!("{:016p}]", &b[i]);
         while j < 16 && i < len {
-            print!(" {:02x}", b[i]);
+            chos_lib::log::info!(" {:02x}", b[i]);
             i += 1;
             j += 1;
         }
-        println!();
+        chos_lib::log::info!();
     }
 }

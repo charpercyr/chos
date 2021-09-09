@@ -3,10 +3,6 @@
 version = 3
 
 [[package]]
-name = "acpica"
-version = "0.1.0"
-
-[[package]]
 name = "bit_field"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

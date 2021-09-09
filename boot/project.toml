@@ -3,3 +3,9 @@
 include = [
     "arch/${ARCH}/project.toml"
 ]
+
+[project.debug]
+flags = ["--features=chos-lib/log-debug"]
+
+[project.release]
+flags = ["--features=chos-lib/log-info"]

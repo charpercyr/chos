@@ -12,13 +12,13 @@ mod timer;
 use acpi::RSDT;
 use chos_boot_defs::{KernelBootInfo, KernelEntry};
 use chos_config::arch::mm::virt;
+use chos_lib::log::info;
 use chos_x64::paging::PageTable;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 use spin::Barrier;
 
 use crate::arch::x64::intr::apic;
-use crate::println;
 
 struct MpInfo {
     entry: KernelEntry,
@@ -45,9 +45,9 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     log::initialize(logdev);
 
-    println!("############");
-    println!("### BOOT ###");
-    println!("############");
+    info!("############");
+    info!("### BOOT ###");
+    info!("############");
 
     if let Some(sections) = mbh.elf_sections_tag() {
         symbols::init_symbols(sections);
@@ -82,9 +82,9 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     };
 
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
-    println!("Memory map");
+    info!("Memory map");
     for e in memory_map.all_memory_areas() {
-        println!(
+        info!(
             "  {:012x}-{:012x} {:?}",
             e.start_address(),
             e.end_address(),
@@ -104,7 +104,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         kbi: KernelBootInfo {
             elf: &kernel as *const _ as usize,
             multiboot_header: mbp,
-            early_log: |args| println!("{}", args),
+            early_log: log::log,
             mem_info,
         },
         page_table: unsafe { PageTable::get_current_page_table() },

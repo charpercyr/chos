@@ -3,9 +3,9 @@ use core::ptr::{null_mut, write, write_bytes};
 use core::slice;
 
 use chos_lib::int::{log2u64, CeilDiv};
+use chos_lib::log::debug;
 
 use crate::arch::mm::*;
-use crate::debug;
 
 #[derive(Debug)]
 struct Region {

@@ -13,3 +13,8 @@ static_assertions = "1.1.0"
 
 [features]
 alloc = []
+log-critical = []
+log-error = ["log-critical"]
+log-warn = ["log-error"]
+log-info = ["log-warn"]
+log-debug = ["log-info"]

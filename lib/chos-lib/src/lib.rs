@@ -4,7 +4,6 @@
 #![feature(bool_to_option)]
 #![feature(core_intrinsics)]
 #![feature(const_fn_trait_bound)]
-#![feature(const_fn_transmute)]
 #![feature(const_mut_refs)]
 #![feature(const_panic)]
 #![feature(const_unreachable_unchecked)]
@@ -23,6 +22,10 @@ pub mod int;
 pub mod intrusive;
 
 pub mod iter;
+
+pub mod log;
+
+pub mod mm;
 
 pub mod pool;
 

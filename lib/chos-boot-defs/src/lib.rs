@@ -29,7 +29,7 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub multiboot_header: usize,
     pub elf: usize,
-    pub early_log: fn(Arguments),
+    pub early_log: fn(Arguments, bool),
     pub mem_info: KernelMemInfo,
 }
 

@@ -19,6 +19,9 @@ use deploy::*;
 mod config;
 use config::*;
 
+mod lint;
+use lint::*;
+
 mod project;
 use project::*;
 
@@ -123,7 +126,11 @@ fn main() {
         Opts::Test(opts) => {
             let config = get_projects(&opts.build).unwrap();
             test_main(&opts, &config)
-        }
+        },
+        Opts::Lint(opts) => {
+            let config = get_projects(&opts.build).unwrap();
+            lint_main(&opts, &config);
+        },
         Opts::Clean => clean_main(),
     }
 }

@@ -1,6 +1,7 @@
 use core::mem::size_of;
 use core::ptr::write;
 
+use chos_lib::log::info;
 use chos_x64::paging::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
 
 use super::mapper::Mapper;
@@ -36,7 +37,7 @@ impl PAlloc {
         let mut cur = self.pbase;
         // We might need to allocate more pages, so self.pcur might change during iteration
         while cur < self.pcur {
-            crate::println!("Map PGT {:016x} -> {:016x}", cur as u64, vaddr.as_u64());
+            info!("Map PGT {:016x} -> {:016x}", cur as u64, vaddr.as_u64());
             mapper.map(PAddr::new(cur as u64), vaddr, true, false, self);
             cur = cur.add(1);
             vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64)

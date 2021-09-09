@@ -8,7 +8,7 @@ include = [
 deploy = "/chos/chos.elf"
 
 [project.debug]
-flags = ["--features=log-debug"]
+flags = ["--features=chos-lib/log-debug"]
 
 [project.release]
-flags = ["--features=log-info"]
+flags = ["--features=chos-lib/log-info"]
