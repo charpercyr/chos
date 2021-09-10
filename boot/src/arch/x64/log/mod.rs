@@ -1,7 +1,7 @@
 mod serial;
 mod vga;
 
-use core::fmt::{Arguments, Pointer, Write};
+use core::fmt::{Arguments, Write};
 
 use spin::Mutex;
 
@@ -37,7 +37,7 @@ pub fn initialize(dev: Device) {
 pub fn log(args: Arguments<'_>, is_unsafe: bool) {
     let _guard = (!is_unsafe).then(|| LOCK.lock());
     if let Some(output) = unsafe { &mut OUTPUT } {  
-        writeln!(*output, "{}", args).unwrap();
+        write!(*output, "{}", args).unwrap();
     }
 }
 

@@ -1,7 +1,5 @@
 #![no_std]
 
-use core::fmt::Arguments;
-
 use chos_x64::paging::{PAddr, VAddr};
 
 mod macros;
@@ -29,7 +27,7 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub multiboot_header: usize,
     pub elf: usize,
-    pub early_log: fn(Arguments, bool),
+    pub early_log: chos_lib::log::LogHandler,
     pub mem_info: KernelMemInfo,
 }
 

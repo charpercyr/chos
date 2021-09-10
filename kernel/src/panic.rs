@@ -1,4 +1,3 @@
-use core::fmt::Arguments;
 use core::panic::PanicInfo;
 
 use chos_lib::log::*;
