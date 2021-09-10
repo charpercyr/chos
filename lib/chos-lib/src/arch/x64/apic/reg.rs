@@ -1,9 +1,9 @@
 use core::hint::spin_loop;
 
-use chos_lib::{NoAccess, ReadOnly, ReadWrite, WriteOnly};
+use crate::{NoAccess, ReadOnly, ReadWrite, WriteOnly};
 use static_assertions as sa;
 
-pub type Register<P> = chos_lib::PaddedVolatile<u32, P, 0x10>;
+pub type Register<P> = crate::PaddedVolatile<u32, P, 0x10>;
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);
 
 #[repr(transparent)]

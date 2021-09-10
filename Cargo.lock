@@ -29,7 +29,6 @@ dependencies = [
  "chos-boot-defs",
  "chos-config",
  "chos-lib",
- "chos-x64",
  "modular-bitfield",
  "multiboot2",
  "paste",
@@ -46,7 +45,6 @@ dependencies = [
  "chos-config",
  "chos-elf",
  "chos-lib",
- "chos-x64",
  "modular-bitfield",
  "multiboot2",
  "raw-cpuid",
@@ -61,7 +59,6 @@ name = "chos-boot-defs"
 version = "0.1.0"
 dependencies = [
  "chos-lib",
- "chos-x64",
 ]
 
 [[package]]
@@ -69,7 +66,6 @@ name = "chos-config"
 version = "0.1.0"
 dependencies = [
  "chos-lib",
- "chos-x64",
 ]
 
 [[package]]
@@ -87,7 +83,9 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "chos-lib-macros",
+ "modular-bitfield",
  "static_assertions",
+ "x86_64",
 ]
 
 [[package]]
@@ -97,16 +95,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "chos-x64"
-version = "0.1.0"
-dependencies = [
- "chos-lib",
- "modular-bitfield",
- "static_assertions",
- "x86_64",
 ]
 
 [[package]]

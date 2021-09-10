@@ -1,6 +1,6 @@
 use core::ptr::null;
 
-use crate::paging::VAddr;
+use super::paging::VAddr;
 
 #[repr(C, packed)]
 struct Frame {

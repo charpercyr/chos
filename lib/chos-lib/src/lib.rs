@@ -1,5 +1,7 @@
 #![no_std]
+
 #![feature(allocator_api)]
+#![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
 #![feature(core_intrinsics)]
@@ -10,6 +12,8 @@
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 #![feature(negative_impls)]
+
+pub mod arch;
 
 mod macros;
 pub use macros::*;

@@ -22,4 +22,3 @@ spin = "0.7.1"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.1"
-chos-x64 = { path = "../lib/chos-x64" }

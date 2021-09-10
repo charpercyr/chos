@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 use core::ptr::null;
 use core::time::Duration;
 
-use chos_x64::apic::Apic;
+use chos_lib::arch::x64::apic::Apic;
 
 use super::acpi::madt;
 

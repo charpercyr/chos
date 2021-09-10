@@ -1,4 +1,4 @@
-use chos_x64::include_asm;
+use chos_lib::include_asm;
 
 include_asm!(
     "kernel_start.S",

@@ -2,7 +2,7 @@ use core::mem::size_of;
 use core::ptr::write;
 
 use chos_lib::log::info;
-use chos_x64::paging::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
+use chos_lib::arch::x64::paging::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
 
 use super::mapper::Mapper;
 

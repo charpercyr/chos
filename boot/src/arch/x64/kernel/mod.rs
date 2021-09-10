@@ -12,7 +12,7 @@ use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
 use chos_lib::log::info;
-use chos_x64::paging::{PAddr, VAddr, PAGE_SIZE};
+use chos_lib::arch::x64::paging::{PAddr, VAddr, PAGE_SIZE};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::Mapper;

@@ -10,4 +10,3 @@ edition = "2018"
 chos-lib = { path = "../chos-lib" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-chos-x64 = { path = "../chos-x64" }

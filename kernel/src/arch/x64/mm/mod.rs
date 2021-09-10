@@ -1,5 +1,5 @@
 
-pub use chos_x64::paging::{
+pub use chos_lib::arch::x64::paging::{
     PAGE_SIZE,
     PAGE_SIZE64,
     PAGE_MASK,

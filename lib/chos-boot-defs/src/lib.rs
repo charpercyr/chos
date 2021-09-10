@@ -1,6 +1,6 @@
 #![no_std]
 
-use chos_x64::paging::{PAddr, VAddr};
+use chos_lib::arch::x64::paging::{PAddr, VAddr};
 
 mod macros;
 

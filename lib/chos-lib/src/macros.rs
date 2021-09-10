@@ -56,12 +56,21 @@ macro_rules! intrusive_adapter {
 
 #[macro_export]
 macro_rules! match_arch {
+    (GLOBAL $($arch:expr => $amod:ident),* $(,)?) => {
+        $(
+            $crate::cfg_if::cfg_if! {
+                if #[cfg(target_arch = $arch)] {
+                    pub mod $amod;
+                    pub use self::$amod::*;
+                }
+            }
+        )*
+    };
     ($($arch:expr => $amod:ident),* $(,)?) => {
         $(
             $crate::cfg_if::cfg_if! {
                 if #[cfg(target_arch = $arch)] {
-                    mod $amod;
-                    pub use self::$amod::*;
+                    pub mod $amod;
                 }
             }
         )*

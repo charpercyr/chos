@@ -13,7 +13,7 @@ use acpi::RSDT;
 use chos_boot_defs::{KernelBootInfo, KernelEntry};
 use chos_config::arch::mm::virt;
 use chos_lib::log::info;
-use chos_x64::paging::PageTable;
+use chos_lib::arch::x64::paging::PageTable;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 use spin::Barrier;

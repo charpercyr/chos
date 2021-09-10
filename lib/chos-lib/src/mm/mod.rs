@@ -25,7 +25,7 @@ pub unsafe trait FrameAlloc {
 }
 
 bitflags! {
-    struct MapFlags: u8 {
+    pub struct MapFlags: u8 {
         const WRITE =   0b0000_0001;
         const EXEC =    0b0000_0010;
 

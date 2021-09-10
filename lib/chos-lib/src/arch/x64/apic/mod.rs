@@ -57,7 +57,7 @@ impl Apic {
     }
 }
 
-unsafe fn wait_for_delivery(cmd: &mut Register<chos_lib::ReadWrite>) {
+unsafe fn wait_for_delivery(cmd: &mut Register<crate::ReadWrite>) {
     while cmd.read() & (1 << 12) != 0 {
         core::hint::spin_loop();
     }

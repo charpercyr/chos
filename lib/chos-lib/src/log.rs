@@ -22,59 +22,59 @@ pub unsafe fn log_impl(args: Arguments<'_>, is_unsafe: bool) {
 }
 
 pub macro print ($($args:tt)*) {
-    unsafe { chos_lib::log::log_impl(format_args!($($args)*), false) }
+    unsafe { crate::log::log_impl(format_args!($($args)*), false) }
 }
 
 pub macro println {
     ($fmt:expr, $($args:tt)*) => {
-        unsafe { chos_lib::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), false) }
+        unsafe { crate::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), false) }
     },
     ($fmt:expr $(,)?) => {
-        unsafe { chos_lib::log::log_impl(format_args!(concat!($fmt, "\n")), false) }
+        unsafe { crate::log::log_impl(format_args!(concat!($fmt, "\n")), false) }
     },
     () => {
-        unsafe { chos_lib::log::log_impl(format_args!("\n"), false) }
+        unsafe { crate::log::log_impl(format_args!("\n"), false) }
     },
 }
 
 pub macro print_unsafe ($($args:tt)*) {
-    chos_lib::log::log_impl(format_args!($($args)*), true)
+    crate::log::log_impl(format_args!($($args)*), true)
 }
 
 pub macro println_unsafe {
     ($fmt:expr, $($args:tt)*) => {
-        chos_lib::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), true)
+        crate::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), true)
     },
     ($fmt:expr $(,)?) => {
-        chos_lib::log::log_impl(format_args!(concat!($fmt, "\n")), true)
+        crate::log::log_impl(format_args!(concat!($fmt, "\n")), true)
     },
     () => {
-        chos_lib::log::log_impl(format_args!("\n"), true)
+        crate::log::log_impl(format_args!("\n"), true)
     },
 }
 
 pub macro __log_term_fmt {
     ($uns:expr, $term_fmt:expr, $fmt:expr, $($args:tt)*) => {
-        chos_lib::log::log_impl(
+        crate::log::log_impl(
             format_args!(concat!("\x1b[", $term_fmt, "m", $fmt, "\x1b[0m\n"), $($args)*),
             $uns,
         )
     },
     ($uns:expr, $term_fmt:expr, $fmt:expr) => {
-        chos_lib::log::__log_term_fmt!($uns, $term_fmt, $fmt, )
+        crate::log::__log_term_fmt!($uns, $term_fmt, $fmt, )
     },
     ($uns:expr, $term_fmt:expr, ) => {
-        chos_lib::log::__log_term_fmt!($uns, $term_fmt, "", )
+        crate::log::__log_term_fmt!($uns, $term_fmt, "", )
     },
 }
 
 cfg_if! {
     if #[cfg(feature = "log-debug")] {
         pub macro debug ($($args:tt)*) {
-            unsafe { chos_lib::log::__log_term_fmt!(false, "2", $($args)*) }
+            unsafe { crate::log::__log_term_fmt!(false, "2", $($args)*) }
         }
         pub macro unsafe_debug ($($args:tt)*) {
-            chos_lib::log::__log_term_fmt!(true, "2", $($args)*)
+            crate::log::__log_term_fmt!(true, "2", $($args)*)
         }
     } else {
         pub macro debug ($($args:tt)*) {}
@@ -85,10 +85,10 @@ cfg_if! {
 cfg_if!{
     if #[cfg(feature = "log-info")] {
         pub macro info ($($args:tt)*) {
-            unsafe { chos_lib::log::__log_term_fmt!(false, "", $($args)*) }
+            unsafe { crate::log::__log_term_fmt!(false, "", $($args)*) }
         }
         pub macro unsafe_info($($args:tt)*) {
-            chos_lib::log::__log_term_fmt!(true, "", $($args)*)
+            crate::log::__log_term_fmt!(true, "", $($args)*)
         }
     } else {
         pub macro info ($($args:tt)*) {}
@@ -99,10 +99,10 @@ cfg_if!{
 cfg_if!{
     if #[cfg(feature = "log-warn")] {
         pub macro warn ($($args:tt)*) {
-            unsafe { chos_lib::log::__log_term_fmt!(false, "1;33", $($args)*) }
+            unsafe { crate::log::__log_term_fmt!(false, "1;33", $($args)*) }
         }
         pub macro unsafe_warn($($args:tt)*) {
-            chos_lib::log::__log_term_fmt!(true, "1;33", $($args)*)
+            crate::log::__log_term_fmt!(true, "1;33", $($args)*)
         }
     } else {
         pub macro warn ($($args:tt)*) {}
@@ -113,10 +113,10 @@ cfg_if!{
 cfg_if!{
     if #[cfg(feature = "log-error")] {
         pub macro error ($($args:tt)*) {
-            unsafe { chos_lib::log::__log_term_fmt!(false, "1;31", $($args)*) }
+            unsafe { crate::log::__log_term_fmt!(false, "1;31", $($args)*) }
         }
         pub macro unsafe_error($($args:tt)*) {
-            chos_lib::log::__log_term_fmt!(true, "1;31", $($args)*)
+            crate::log::__log_term_fmt!(true, "1;31", $($args)*)
         }
     } else {
         pub macro error ($($args:tt)*) {}
@@ -127,10 +127,10 @@ cfg_if!{
 cfg_if!{
     if #[cfg(feature = "log-critical")] {
         pub macro critical ($($args:tt)*) {
-            unsafe { chos_lib::log::__log_term_fmt!(false, "1;37;41", $($args)*) }
+            unsafe { crate::log::__log_term_fmt!(false, "1;37;41", $($args)*) }
         }
         pub macro unsafe_critical($($args:tt)*) {
-            chos_lib::log::__log_term_fmt!(true, "1;37;41", $($args)*)
+            crate::log::__log_term_fmt!(true, "1;37;41", $($args)*)
         }
     } else {
         pub macro critical ($($args:tt)*) {}

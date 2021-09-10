@@ -2,7 +2,7 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
-use chos_lib::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
+use crate::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
 use modular_bitfield::bitfield;
 use modular_bitfield::specifiers::*;
 

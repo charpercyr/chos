@@ -1,5 +1,5 @@
 use chos_boot_defs::{check_kernel_entry, KernelBootInfo};
-use chos_x64::qemu::{exit_qemu, QemuStatus};
+use chos_lib::arch::x64::qemu::{exit_qemu, QemuStatus};
 use multiboot2::MemoryArea;
 
 use chos_lib::log::*;
