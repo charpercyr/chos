@@ -9,15 +9,15 @@ mod panic;
 mod symbols;
 mod timer;
 
-use acpi::RSDT;
-use chos_boot_defs::{KernelBootInfo, KernelEntry};
 use chos_config::arch::mm::virt;
+use chos_lib::boot::{KernelBootInfo, KernelEntry};
 use chos_lib::log::info;
-use chos_lib::arch::x64::paging::PageTable;
+use chos_lib::arch::x64::mm::PageTable;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 use spin::Barrier;
 
+use self::acpi::RSDT;
 use crate::arch::x64::intr::apic;
 
 struct MpInfo {

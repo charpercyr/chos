@@ -3,7 +3,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use core::time::Duration;
 
-use chos_lib::sync::sem::SpinSem;
+use chos_lib::sync::spin::sem::SpinSem;
 use x86_64::structures::idt::InterruptStackFrame;
 
 use super::acpi::hpet::HPET;

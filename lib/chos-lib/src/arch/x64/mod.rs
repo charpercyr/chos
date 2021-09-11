@@ -5,8 +5,7 @@ pub use bt::*;
 pub mod apic;
 pub mod hpet;
 pub mod ioapic;
-pub mod paging;
+pub mod intr;
+pub mod mm;
 pub mod qemu;
-
-#[macro_use]
-mod macros;
+pub mod regs;

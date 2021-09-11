@@ -1,14 +1,7 @@
-#![no_std]
 
-use chos_lib::arch::x64::paging::{PAddr, VAddr};
+use crate::arch::x64::mm::{PAddr, VAddr};
 
 mod macros;
-
-pub mod phys {
-    use super::PAddr;
-
-    pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0100_0000);
-}
 
 #[derive(Copy, Clone, Debug)]
 pub struct KernelMemEntry {
@@ -27,8 +20,15 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub multiboot_header: usize,
     pub elf: usize,
-    pub early_log: chos_lib::log::LogHandler,
+    pub early_log: crate::log::LogHandler,
     pub mem_info: KernelMemInfo,
 }
 
 pub type KernelEntry = fn(&KernelBootInfo, u8) -> !;
+
+#[macro_export]
+macro_rules! check_kernel_entry {
+    ($entry:expr) => {
+        const _: $crate::boot::KernelEntry = $entry;
+    };
+}

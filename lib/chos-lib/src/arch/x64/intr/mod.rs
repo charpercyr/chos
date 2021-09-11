@@ -1,5 +1,5 @@
 
-use super::reg::Flags;
+use super::regs::Flags;
 
 pub struct IntrStatus(Flags);
 

@@ -56,7 +56,7 @@ macro_rules! intrusive_adapter {
 
 #[macro_export]
 macro_rules! match_arch {
-    (GLOBAL $($arch:expr => $amod:ident),* $(,)?) => {
+    ($($arch:expr => $amod:ident),* $(,)?) => {
         $(
             $crate::cfg_if::cfg_if! {
                 if #[cfg(target_arch = $arch)] {
@@ -66,13 +66,16 @@ macro_rules! match_arch {
             }
         )*
     };
-    ($($arch:expr => $amod:ident),* $(,)?) => {
+}
+
+#[macro_export]
+macro_rules! include_asm {
+    ($($path:expr),* $(,)?) => {
         $(
-            $crate::cfg_if::cfg_if! {
-                if #[cfg(target_arch = $arch)] {
-                    pub mod $amod;
-                }
-            }
+            global_asm!(concat!(
+                ".att_syntax\n",
+                include_str!($path),
+            ));
         )*
     };
 }

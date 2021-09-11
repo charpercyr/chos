@@ -5,7 +5,7 @@ use core::slice;
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::debug;
 
-use crate::arch::mm::*;
+use chos_lib::arch::mm::*;
 
 #[derive(Debug)]
 struct Region {

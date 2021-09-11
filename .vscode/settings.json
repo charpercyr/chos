@@ -6,6 +6,7 @@
         "-Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem", "--verbose"
     ],
     "rust-analyzer.diagnostics.disabled": [
-        // "macro-error"
+        "macro-error",
+        "unresolved-macro-call"
     ],
 }

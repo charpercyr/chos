@@ -2,7 +2,7 @@ use core::hint::spin_loop;
 use core::intrinsics::likely;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use super::{Lock, LockGuard, RawLock, RawTryLock};
+use super::super::lock::{Lock, LockGuard, RawLock, RawTryLock};
 
 pub struct RawSpinLock {
     lock: AtomicBool,

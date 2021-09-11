@@ -1,6 +1,12 @@
 
+pub mod phys { 
+    use chos_lib::arch::mm::PAddr;
+
+    pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0100_0000);
+}
+
 pub mod virt {
-    use chos_lib::arch::x64::paging::VAddr;
+    use chos_lib::arch::mm::VAddr;
     
     pub const KERNEL_BASE: VAddr = VAddr::make_canonical(0xffff_8000_0000_0000);
     pub const MEMORY_ZONE_SIZE: u64 = 0x0080_0000_0000;

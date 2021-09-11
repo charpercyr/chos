@@ -1,4 +1,4 @@
-use chos_boot_defs::{check_kernel_entry, KernelBootInfo};
+use chos_lib::{check_kernel_entry, boot::KernelBootInfo};
 use chos_lib::arch::x64::qemu::{exit_qemu, QemuStatus};
 use multiboot2::MemoryArea;
 
@@ -34,9 +34,9 @@ fn setup_early_memory_allocator(info: &KernelBootInfo) {
                     area.end_address()
                 );
                 (
-                    arch::mm::PAddr::new(area.start_address()),
-                    area.size() / arch::mm::PAGE_SIZE64 * arch::mm::PAGE_SIZE64,
-                    arch::mm::VAddr::make_canonical(area.start_address()),
+                    chos_lib::arch::mm::PAddr::new(area.start_address()),
+                    area.size() / chos_lib::arch::mm::PAGE_SIZE64 * chos_lib::arch::mm::PAGE_SIZE64,
+                    chos_lib::arch::mm::VAddr::make_canonical(area.start_address()),
                 )
             })
         });

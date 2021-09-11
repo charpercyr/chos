@@ -6,13 +6,13 @@ use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::str::from_utf8_unchecked;
 use core::u8;
 
-use chos_boot_defs::{phys, KernelMemEntry, KernelMemInfo};
-use chos_config::arch::mm::virt;
 use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
+use chos_config::arch::x64::mm::{phys, virt};
+use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
 use chos_lib::log::info;
-use chos_lib::arch::x64::paging::{PAddr, VAddr, PAGE_SIZE};
+use chos_lib::arch::x64::mm::{PAddr, VAddr, PAGE_SIZE};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::Mapper;

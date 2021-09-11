@@ -15,8 +15,9 @@
 
 pub mod arch;
 
+pub mod boot;
+
 mod macros;
-pub use macros::*;
 
 mod either;
 pub use either::*;

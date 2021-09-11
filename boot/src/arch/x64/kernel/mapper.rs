@@ -1,5 +1,5 @@
 use chos_lib::int::CeilDiv;
-use chos_lib::arch::x64::paging::{PAddr, PageEntry, PageTable, VAddr};
+use chos_lib::arch::x64::mm::{PAddr, PageEntry, PageTable, VAddr};
 use multiboot2::MemoryMapTag;
 
 use chos_lib::log::info;

@@ -3,8 +3,6 @@ pub mod slab;
 
 mod global;
 
-pub use crate::arch::mm::*;
-
 pub enum VirtualMemoryZone {
     Physical,
     Paging,
