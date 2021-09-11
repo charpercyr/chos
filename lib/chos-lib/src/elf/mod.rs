@@ -1,4 +1,3 @@
-#![no_std]
 
 mod dynamic;
 pub use dynamic::*;

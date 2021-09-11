@@ -1,7 +1,7 @@
 use core::mem::size_of;
 use core::slice::{from_raw_parts, Iter};
 
-use crate::raw::Elf64Rela;
+use super::raw::Elf64Rela;
 
 #[derive(Clone, Copy)]
 pub struct Rela<'a> {

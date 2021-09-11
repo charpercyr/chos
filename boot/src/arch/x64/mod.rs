@@ -76,7 +76,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 (kernel.end_address() - kernel.start_address()) as usize,
             )
         };
-        chos_elf::Elf::new(kernel).expect("Invalid kernel ELF")
+        chos_lib::elf::Elf::new(kernel).expect("Invalid kernel ELF")
     } else {
         panic!("No kernel")
     };

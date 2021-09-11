@@ -41,7 +41,6 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "chos-config",
- "chos-elf",
  "chos-lib",
  "modular-bitfield",
  "multiboot2",
@@ -56,14 +55,6 @@ dependencies = [
 name = "chos-config"
 version = "0.1.0"
 dependencies = [
- "chos-lib",
-]
-
-[[package]]
-name = "chos-elf"
-version = "0.1.0"
-dependencies = [
- "bitflags",
  "chos-lib",
 ]
 

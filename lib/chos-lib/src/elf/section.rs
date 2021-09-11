@@ -1,10 +1,10 @@
 use core::mem::transmute;
 
 use bitflags::bitflags;
-use chos_lib::stride::{from_raw_parts, StrideSlice, StrideSliceIter};
 
-use crate::raw::Elf64Shdr;
-use crate::{Elf, LookupStrategy, StrTab, Symtab};
+use super::raw::Elf64Shdr;
+use super::{Elf, LookupStrategy, StrTab, Symtab};
+use crate::stride::{from_raw_parts, StrideSlice, StrideSliceIter};
 
 pub struct Sections<'a> {
     entries: StrideSlice<'a, Elf64Shdr>,

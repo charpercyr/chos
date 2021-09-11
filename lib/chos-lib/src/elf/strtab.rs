@@ -1,4 +1,4 @@
-use chos_lib::str::from_cstring_utf8_bounded;
+use crate::str::from_cstring_utf8_bounded;
 
 #[derive(Clone, Copy)]
 pub struct StrTab<'a> {

@@ -1,8 +1,8 @@
 use core::mem::size_of;
 use core::slice::{from_raw_parts, Iter};
 
-use crate::raw::Elf64Sym;
-use crate::{GnuHash, StrTab};
+use super::raw::Elf64Sym;
+use super::{GnuHash, StrTab};
 
 #[derive(Copy, Clone)]
 pub enum LookupStrategy<'a> {

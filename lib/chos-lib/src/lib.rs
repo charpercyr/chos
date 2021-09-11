@@ -22,6 +22,8 @@ mod macros;
 mod either;
 pub use either::*;
 
+pub mod elf;
+
 pub mod int;
 
 pub mod intrusive;

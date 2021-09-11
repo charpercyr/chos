@@ -6,7 +6,7 @@ use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::str::from_utf8_unchecked;
 use core::u8;
 
-use chos_elf::{Elf, ProgramEntryFlags, ProgramEntryType};
+use chos_lib::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_config::arch::x64::mm::{phys, virt};
 use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
 use chos_lib::int::CeilDiv;

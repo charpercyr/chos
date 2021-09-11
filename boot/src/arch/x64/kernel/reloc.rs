@@ -2,7 +2,7 @@ use core::mem::transmute;
 use core::ptr::write_volatile;
 
 use chos_config::arch::mm::virt::STATIC_BASE as BASE;
-use chos_elf::{Elf, Rela, RelaEntry, Symtab, SymtabEntry, SymtabEntryType};
+use chos_lib::elf::{Elf, Rela, RelaEntry, Symtab, SymtabEntry, SymtabEntryType};
 
 fn check_symbol(idx: usize, sym: SymtabEntry) {
     assert!(
@@ -23,7 +23,7 @@ fn symbol_offset_value(idx: usize, sym: SymtabEntry) -> i64 {
 }
 
 pub unsafe fn do_relocation(symtab: &Symtab, e: &RelaEntry) {
-    use chos_elf::X64RelaType::*;
+    use chos_lib::elf::X64RelaType::*;
     let off = (e.offset() + BASE.as_u64()) as *mut i64;
     match e.x64_typ() {
         None => (),
