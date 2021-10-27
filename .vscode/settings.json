@@ -3,10 +3,11 @@
     "rust-analyzer.checkOnSave.allTargets": false,
     "rust-analyzer.cargo.allFeatures": true,
     "rust-analyzer.checkOnSave.extraArgs": [
-        "-Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem", "--verbose"
+        "-Zbuild-std=core,alloc", "-Zbuild-std-features=compiler-builtins-mem", "--verbose"
     ],
     "rust-analyzer.diagnostics.disabled": [
         "macro-error",
         "unresolved-macro-call"
     ],
+    "rust-analyzer.rustfmt.extraArgs": ["--config-path", "/home/chrou/chos/rustfmt.toml"],
 }

@@ -1,13 +1,60 @@
-
-use core::fmt::Arguments;
+use core::fmt::{self, Arguments};
 
 use cfg_if::cfg_if;
 
-pub type LogHandler = unsafe fn(Arguments<'_>, bool);
+#[derive(Debug, Clone, Copy)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Critical,
+    Always,
+}
 
-static mut LOG_HANDLER: Option<LogHandler> = None;
+pub trait LogHandler {
+    fn log(&self, args: Arguments<'_>, lvl: LogLevel);
+    unsafe fn log_unsafe(&self, args: Arguments<'_>, lvl: LogLevel);
+}
 
-pub unsafe fn set_handler(handler: LogHandler) {
+pub struct TermColorLogHandler<H> {
+    h: H,
+}
+impl<H> TermColorLogHandler<H> {
+    pub const fn new(h: H) -> Self {
+        Self { h }
+    }
+    fn apply_fmt<F>(&self, f: F, args: Arguments<'_>, lvl: LogLevel)
+    where
+        F: Fn(&H, Arguments<'_>, LogLevel),
+    {
+        let fmt = match lvl {
+            LogLevel::Debug => "2",
+            LogLevel::Info => "",
+            LogLevel::Warn => "1;33",
+            LogLevel::Error => "1;31",
+            LogLevel::Critical => "1;37;41",
+            LogLevel::Always => "",
+        };
+        f(
+            &self.h,
+            format_args!("\x1b[{fmt}m{args}\x1b[0m", fmt = fmt, args = args),
+            lvl,
+        );
+    }
+}
+impl<H: LogHandler> LogHandler for TermColorLogHandler<H> {
+    fn log(&self, args: Arguments<'_>, lvl: LogLevel) {
+        self.apply_fmt(H::log, args, lvl)
+    }
+    unsafe fn log_unsafe(&self, args: Arguments<'_>, lvl: LogLevel) {
+        self.apply_fmt(|this, args, lvl| H::log_unsafe(this, args, lvl), args, lvl)
+    }
+}
+
+static mut LOG_HANDLER: Option<&'static dyn LogHandler> = None;
+
+pub unsafe fn set_handler(handler: &'static dyn LogHandler) {
     LOG_HANDLER = Some(handler);
 }
 
@@ -15,71 +62,65 @@ pub unsafe fn clear_handler() {
     LOG_HANDLER = None;
 }
 
-pub unsafe fn log_impl(args: Arguments<'_>, is_unsafe: bool) {
-    if let Some(log) = LOG_HANDLER {
-        log(args, is_unsafe);
+pub fn log_impl(args: Arguments<'_>, lvl: LogLevel) {
+    if let Some(handler) = unsafe { LOG_HANDLER } {
+        handler.log(args, lvl);
+    }
+}
+
+pub unsafe fn unsafe_log_impl(args: Arguments<'_>, lvl: LogLevel) {
+    if let Some(handler) = LOG_HANDLER {
+        handler.log(args, lvl);
     }
 }
 
 pub macro print ($($args:tt)*) {
-    #[allow(unused_unsafe)]
-    unsafe { $crate::log::log_impl(format_args!($($args)*), false) }
-}
-
-pub macro println {
-    ($fmt:expr, $($args:tt)*) => {
-        #[allow(unused_unsafe)]
-        unsafe { $crate::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), false) }
-    },
-    ($fmt:expr $(,)?) => {
-        #[allow(unused_unsafe)]
-        unsafe { $crate::log::log_impl(format_args!(concat!($fmt, "\n")), false) }
-    },
-    () => {
-        #[allow(unused_unsafe)]
-        unsafe { $crate::log::log_impl(format_args!("\n"), false) }
-    },
+    $crate::log::log_impl(format_args!($($args)*))
 }
 
 pub macro print_unsafe ($($args:tt)*) {
-    $crate::log::log_impl(format_args!($($args)*), true)
+    $crate::log::unsafe_log_impl(format_args!($($args)*), $crate::log::LogLevel::Info)
 }
 
-pub macro println_unsafe {
-    ($fmt:expr, $($args:tt)*) => {
-        $crate::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), true)
+pub macro log_impl {
+    ($lvl:expr, $fmt:expr, $($args:tt)*) => {
+        $crate::log::log_impl(format_args!(concat!($fmt, "\n"), $($args)*), $lvl)
     },
-    ($fmt:expr $(,)?) => {
-        $crate::log::log_impl(format_args!(concat!($fmt, "\n")), true)
+    ($lvl:expr, $fmt:expr $(,)?) => {
+        $crate::log::log_impl(format_args!(concat!($fmt, "\n")), $lvl)
     },
-    () => {
-        $crate::log::log_impl(format_args!("\n"), true)
+    ($lvl:expr $(,)?) => {
+        $crate::log::log_impl(format_args!("\n"), $lvl)
     },
 }
 
-pub macro log_term_fmt {
-    ($uns:expr, $term_fmt:expr, $fmt:expr, $($args:tt)*) => {
-        $crate::log::log_impl(
-            format_args!(concat!("\x1b[", $term_fmt, "m", $fmt, "\x1b[0m\n"), $($args)*),
-            $uns,
-        )
+pub macro log_unsafe_impl {
+    ($lvl:expr, $fmt:expr, $($args:tt)*) => {
+        $crate::log::unsafe_log_impl(format_args!(concat!($fmt, "\n"), $($args)*), $lvl)
     },
-    ($uns:expr, $term_fmt:expr, $fmt:expr) => {
-        $crate::log::log_term_fmt!($uns, $term_fmt, $fmt, )
+    ($lvl:expr, $fmt:expr $(,)?) => {
+        $crate::log::unsafe_log_impl(format_args!(concat!($fmt, "\n")), $lvl)
     },
-    ($uns:expr, $term_fmt:expr, ) => {
-        $crate::log::log_term_fmt!($uns, $term_fmt, "", )
+    ($lvl:expr $(,)?) => {
+        $crate::log::unsafe_log_impl(format_args!("\n"), $lvl)
     },
+}
+
+pub macro println ($($args:tt)*) {
+    $crate::log::log_impl!($crate::log::LogLevel::Always, $($args)*)
+}
+
+pub macro unsafe_println ($($args:tt)*) {
+    $crate::log::log_unsafe_impl!($crate::log::LogLevel::Always, $($args)*)
 }
 
 cfg_if! {
     if #[cfg(feature = "log-debug")] {
         pub macro debug ($($args:tt)*) {
-            #[allow(unused_unsafe)]
-            unsafe { $crate::log::log_term_fmt!(false, "2", $($args)*) }
+            $crate::log::log_impl!($crate::log::LogLevel::Debug, $($args)*)
         }
         pub macro unsafe_debug ($($args:tt)*) {
-            $crate::log::log_term_fmt!(true, "2", $($args)*)
+            $crate::log::log_unsafe_impl!($crate::log::LogLevel::Debug, $($args)*)
         }
     } else {
         pub macro debug ($($args:tt)*) {}
@@ -87,14 +128,13 @@ cfg_if! {
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(feature = "log-info")] {
         pub macro info ($($args:tt)*) {
-            #[allow(unused_unsafe)]
-            unsafe { $crate::log::log_term_fmt!(false, "", $($args)*) }
+            $crate::log::log_impl!($crate::log::LogLevel::Info, $($args)*)
         }
-        pub macro unsafe_info($($args:tt)*) {
-            $crate::log::log_term_fmt!(true, "", $($args)*)
+        pub macro unsafe_info ($($args:tt)*) {
+            $crate::log::log_unsafe_impl!($crate::log::LogLevel::Info, $($args)*)
         }
     } else {
         pub macro info ($($args:tt)*) {}
@@ -102,14 +142,13 @@ cfg_if!{
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(feature = "log-warn")] {
         pub macro warn ($($args:tt)*) {
-            #[allow(unused_unsafe)]
-            unsafe { $crate::log::log_term_fmt!(false, "1;33", $($args)*) }
+            $crate::log::log_impl!($crate::log::LogLevel::Warn, $($args)*)
         }
-        pub macro unsafe_warn($($args:tt)*) {
-            $crate::log::log_term_fmt!(true, "1;33", $($args)*)
+        pub macro unsafe_warn ($($args:tt)*) {
+            $crate::log::log_unsafe_impl!($crate::log::LogLevel::Warn, $($args)*)
         }
     } else {
         pub macro warn ($($args:tt)*) {}
@@ -117,14 +156,13 @@ cfg_if!{
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(feature = "log-error")] {
         pub macro error ($($args:tt)*) {
-            #[allow(unused_unsafe)]
-            unsafe { $crate::log::log_term_fmt!(false, "1;31", $($args)*) }
+            $crate::log::log_impl!($crate::log::LogLevel::Error, $($args)*)
         }
-        pub macro unsafe_error($($args:tt)*) {
-            $crate::log::log_term_fmt!(true, "1;31", $($args)*)
+        pub macro unsafe_error ($($args:tt)*) {
+            $crate::log::log_unsafe_impl!($crate::log::LogLevel::Error, $($args)*)
         }
     } else {
         pub macro error ($($args:tt)*) {}
@@ -132,17 +170,42 @@ cfg_if!{
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(feature = "log-critical")] {
         pub macro critical ($($args:tt)*) {
-            #[allow(unused_unsafe)]
-            unsafe { $crate::log::log_term_fmt!(false, "1;37;41", $($args)*) }
+            $crate::log::log_impl!($crate::log::LogLevel::Critical, $($args)*)
         }
-        pub macro unsafe_critical($($args:tt)*) {
-            $crate::log::log_term_fmt!(true, "1;37;41", $($args)*)
+        pub macro unsafe_critical ($($args:tt)*) {
+            $crate::log::log_unsafe_impl!($crate::log::LogLevel::Critical, $($args)*)
         }
     } else {
         pub macro critical ($($args:tt)*) {}
         pub macro unsafe_critical ($($args:tt)*) {}
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Bytes(pub u64);
+
+impl fmt::Display for Bytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut v = self.0;
+        const KB: u64 = 1024;
+        const MB: u64 = 1024 * KB;
+        const GB: u64 = 1024 * MB;
+        write!(f, "(")?;
+        if self.0 >= GB {
+            write!(f, "{}GB ", v / GB)?;
+            v -= v / GB * GB;
+        }
+        if self.0 >= MB {
+            write!(f, "{}MB ", v / MB)?;
+            v -= v / MB * MB;
+        }
+        if self.0 >= KB {
+            write!(f, "{}KB ", v / KB)?;
+            v -= v / KB * KB;
+        }
+        write!(f, "{}B)", v)
     }
 }

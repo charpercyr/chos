@@ -1,5 +1,5 @@
-
 use crate::arch::x64::mm::{PAddr, VAddr};
+use crate::log::LogHandler;
 
 mod macros;
 
@@ -20,7 +20,7 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub multiboot_header: usize,
     pub elf: usize,
-    pub early_log: crate::log::LogHandler,
+    pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
 }
 

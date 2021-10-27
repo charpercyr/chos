@@ -3,7 +3,6 @@
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
 #![feature(asm)]
-#![feature(const_panic)]
 #![feature(decl_macro)]
 #![feature(destructuring_assignment)]
 #![feature(fn_traits)]

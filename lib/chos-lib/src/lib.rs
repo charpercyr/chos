@@ -1,5 +1,7 @@
 #![no_std]
 
+#![allow(incomplete_features)]
+
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(associated_type_bounds)]
@@ -7,13 +9,15 @@
 #![feature(core_intrinsics)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
-#![feature(const_panic)]
-#![feature(const_unreachable_unchecked)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
+#![feature(inherent_associated_types)]
 #![feature(negative_impls)]
+#![feature(never_type)]
 
 pub mod arch;
+
+pub mod bitmap;
 
 pub mod boot;
 
@@ -26,6 +30,8 @@ pub mod elf;
 
 pub mod int;
 
+pub mod init;
+
 pub mod intrusive;
 
 pub mod iter;
@@ -35,6 +41,8 @@ pub mod log;
 pub mod mm;
 
 pub mod pool;
+
+pub mod ptr;
 
 pub mod str;
 

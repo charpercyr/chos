@@ -20,8 +20,8 @@ unsafe impl<A: Allocator, T> Pool<T> for A {
 
 #[macro_export]
 macro_rules! pool {
-    ($name:ident => $r:expr) => {
-        pub struct $name;
+    ($(pub $(($($vis:tt)*))?)? struct $name:ident => $r:expr) => {
+        $(pub $(($($vis)*))*)* struct $name;
         unsafe impl<T> $crate::pool::Pool<T> for $name {
             unsafe fn allocate(
                 &self,
@@ -32,9 +32,12 @@ macro_rules! pool {
                 $crate::pool::Pool::<T>::deallocate($r, ptr)
             }
         }
+        impl $crate::init::ConstInit for $name {
+            const INIT: Self = Self;
+        }
     };
-    ($name:ident: $ty:ident => $r:expr) => {
-        pub struct $name;
+    ($(pub $(($($vis:tt)*))?)? struct $name:ident: $ty:ident => $r:expr) => {
+        $(pub $(($($vis)*))*)* struct $name;
         unsafe impl $crate::pool::Pool<$ty> for $name {
             unsafe fn allocate(
                 &self,
@@ -44,6 +47,9 @@ macro_rules! pool {
             unsafe fn deallocate(&self, ptr: core::ptr::NonNull<$ty>) {
                 $crate::pool::Pool::<$ty>::deallocate($r, ptr)
             }
+        }
+        impl $crate::init::ConstInit for $name {
+            const INIT: Self = Self;
         }
     };
 }

@@ -4,7 +4,7 @@ use duct::cmd;
 
 use std::io;
 
-const LIBS: &'static [&'static str] = &["chos-elf", "chos-lib"];
+const LIBS: &'static [&'static str] = &["chos-lib"];
 
 fn test_package(name: &str) -> io::Result<()> {
     cmd!("cargo", "test", "-p", name,)

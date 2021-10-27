@@ -1,5 +1,6 @@
 pub mod hpet;
 pub mod madt;
+pub mod mcfg;
 
 use core::fmt;
 use core::marker::PhantomData;
@@ -74,6 +75,11 @@ impl RSDT {
 
     pub fn hpet(&self) -> Option<&hpet::HPET> {
         self.find_table(hpet::HPET::SIGNATURE)
+            .map(|hdr| unsafe { transmute(hdr) })
+    }
+
+    pub fn mcfg(&self) -> Option<&mcfg::MCFG> {
+        self.find_table(mcfg::MCFG::SIGNATURE)
             .map(|hdr| unsafe { transmute(hdr) })
     }
 

@@ -1,8 +1,9 @@
-use chos_lib::{check_kernel_entry, boot::KernelBootInfo};
+use chos_config::arch::mm::virt;
 use chos_lib::arch::x64::qemu::{exit_qemu, QemuStatus};
-use multiboot2::MemoryArea;
-
+use chos_lib::boot::KernelBootInfo;
+use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
+use multiboot2::MemoryArea;
 
 use super::*;
 
@@ -28,19 +29,19 @@ fn setup_early_memory_allocator(info: &KernelBootInfo) {
     if let Some(mem) = mbh.memory_map_tag() {
         let iter = mem.all_memory_areas().filter_map(|area| {
             is_early_memory(area, info).then(|| {
-                info!(
+                debug!(
                     "Using {:#016x} - {:#016x} as early memory",
                     area.start_address(),
                     area.end_address()
                 );
                 (
                     chos_lib::arch::mm::PAddr::new(area.start_address()),
-                    area.size() / chos_lib::arch::mm::PAGE_SIZE64 * chos_lib::arch::mm::PAGE_SIZE64,
-                    chos_lib::arch::mm::VAddr::make_canonical(area.start_address()),
+                    area.size(),
+                    mm::phys::RegionFlags::empty(),
                 )
             })
         });
-        unsafe { mm::phys::alloc::add_regions(iter) };
+        unsafe { mm::phys::add_regions(iter) };
     }
 }
 
@@ -55,8 +56,6 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     info!("### EARLY KERNEL ###");
     info!("####################");
 
-    use chos_config::arch::mm::virt;
-
     debug!("PHYSICAL_MAP_BASE   {:?}", virt::PHYSICAL_MAP_BASE);
     debug!("PAGING_BASE         {:?}", virt::PAGING_BASE);
     debug!("DEVICE_BASE         {:?}", virt::DEVICE_BASE);
@@ -67,6 +66,22 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     debug!("STACK_BASE          {:?}", virt::STACK_BASE);
 
     setup_early_memory_allocator(info);
+
+    unsafe {
+        const ORDER: u8 = 0;
+        use mm::phys::{alloc_pages, AllocFlags};
+        for _ in 0..10 {
+            match alloc_pages(ORDER, AllocFlags::empty()) {
+                Ok(page) => {
+                    info!("ALLOC {:?}", page);
+                    // core::mem::forget(page);
+                }
+                Err(e) => {
+                    error!("ALLOC FAILED: {:?}", e);
+                }
+            }
+        }
+    }
 
     exit_qemu(QemuStatus::Success);
 }

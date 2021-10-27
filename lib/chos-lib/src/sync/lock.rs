@@ -3,8 +3,9 @@ use core::hint::spin_loop;
 use core::intrinsics::likely;
 use core::ops::{Deref, DerefMut};
 
+use crate::init::ConstInit;
+
 pub unsafe trait RawLock {
-    const INIT: Self;
     fn lock(&self);
     unsafe fn unlock(&self);
 }
@@ -30,9 +31,19 @@ unsafe impl<L: RawLock + Send, T: Send + ?Sized> Send for Lock<L, T> {}
 unsafe impl<L: RawLock + Sync, T: Send + ?Sized> Sync for Lock<L, T> {}
 
 impl<L: RawLock, T> Lock<L, T> {
-    pub const fn new(value: T) -> Self {
+    pub const fn new(value: T) -> Self
+    where
+        L: ConstInit,
+    {
         Self {
             lock: L::INIT,
+            value: UnsafeCell::new(value),
+        }
+    }
+
+    pub const fn new_with_lock(value: T, lock: L) -> Self {
+        Self {
+            lock,
             value: UnsafeCell::new(value),
         }
     }

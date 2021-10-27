@@ -1,9 +1,15 @@
+
+mod mapper;
+pub use mapper::*;
+
 use core::fmt;
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
 
 use modular_bitfield::bitfield;
 use modular_bitfield::specifiers::*;
+
+use crate::mm::FrameSize;
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 
@@ -15,6 +21,10 @@ pub const PAGE_SIZE64: u64 = 1 << PAGE_SHIFT;
 macro_rules! impl_addr_fns {
     ($ty:ty) => {
         impl $ty {
+            pub const fn null() -> Self {
+                Self(0)
+            }
+
             pub const fn as_u64(self) -> u64 {
                 self.0
             }
@@ -58,11 +68,21 @@ macro_rules! impl_addr_fns {
             }
         }
 
+        impl fmt::Display for $ty {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{:#x}", self.0)
+            }
+        }
+
         impl fmt::Pointer for $ty {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(f, "{:#x}", self.0)
             }
         }
+
+        crate::forward_fmt!(
+            impl LowerHex, UpperHex for $ty => u64 : |this: &Self| this.0
+        );
     };
 }
 
@@ -99,6 +119,10 @@ impl VAddr {
         Self(v)
     }
 
+    pub fn from_ptr<T>(ptr: *const T) -> Self {
+        Self(ptr as u64)
+    }
+
     pub fn split(self) -> (u16, u16, u16, u16, u16) {
         let addr = self.0;
         let off = (addr & 0xfff) as u16;
@@ -111,6 +135,30 @@ impl VAddr {
 
     pub const fn add_canonical(self, o: u64) -> VAddr {
         VAddr::make_canonical(self.0 + o)
+    }
+
+    pub unsafe fn as_ptr<T>(self) -> *const T {
+        self.0 as _
+    }
+
+    pub unsafe fn as_ptr_mut<T>(self) -> *mut T {
+        self.0 as _
+    }
+    
+    pub unsafe fn as_ref<'a, T>(self) -> &'a T {
+        &*self.as_ptr()
+    }
+
+    pub unsafe fn as_mut<'a, T>(self) -> &'a mut T {
+        &mut *self.as_ptr_mut()
+    }
+
+    pub unsafe fn as_slice<'a, T>(self, len: usize) -> &'a [T] {
+        core::slice::from_raw_parts(self.as_ptr(), len)
+    }
+
+    pub unsafe fn as_slice_mut<'a, T>(self, len: usize) -> &'a mut [T] {
+        core::slice::from_raw_parts_mut(self.as_ptr_mut(), len)
     }
 }
 impl_addr_fns!(VAddr);
@@ -266,4 +314,25 @@ pub fn make_canonical(addr: u64) -> u64 {
     } else {
         addr & 0x0000_ffff_ffff_ffff
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FrameSize4K;
+impl FrameSize for FrameSize4K {
+    const PAGE_SIZE: u64 = 4096;
+    const DEBUG_STR: &'static str = "4K";
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FrameSize2M;
+impl FrameSize for FrameSize2M {
+    const PAGE_SIZE: u64 = 512 * 4096;
+    const DEBUG_STR: &'static str = "2M";
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FrameSize1G;
+impl FrameSize for FrameSize1G {
+    const PAGE_SIZE: u64 = 512 * 512 * 4096;
+    const DEBUG_STR: &'static str = "1G";
 }

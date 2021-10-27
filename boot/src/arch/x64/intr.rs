@@ -1,8 +1,8 @@
 use core::mem::MaybeUninit;
 
 use chos_lib::arch::x64::apic::Apic;
-use chos_lib::arch::x64::ioapic::{self, IOApic};
 use chos_lib::arch::x64::intr::without_interrupts;
+use chos_lib::arch::x64::ioapic::{self, IOApic};
 use rustc_demangle::demangle;
 use x86_64::instructions::port::PortWriteOnly;
 use x86_64::registers::control::Cr2;

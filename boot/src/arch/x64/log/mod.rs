@@ -3,13 +3,14 @@ mod vga;
 
 use core::fmt::{Arguments, Write};
 
-use spin::Mutex;
+use chos_lib::log::{LogHandler, TermColorLogHandler};
+use chos_lib::sync::spin::lock::Spinlock;
 
 pub trait Output: Write + Send {
     fn init(&mut self);
 }
 
-pub static LOCK: Mutex<()> = Mutex::new(());
+pub static LOCK: Spinlock<()> = Spinlock::new(());
 pub static mut OUTPUT: Option<&'static mut dyn Output> = None;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -31,12 +32,18 @@ pub fn initialize(dev: Device) {
     };
     dev.init();
     *output = Some(dev);
-    unsafe { chos_lib::log::set_handler(log) };
+    unsafe { chos_lib::log::set_handler(&BOOT_LOG_HANDLER) };
 }
 
-pub fn log(args: Arguments<'_>, is_unsafe: bool) {
-    let _guard = (!is_unsafe).then(|| LOCK.lock());
-    if let Some(output) = unsafe { &mut OUTPUT } {  
+fn log(args: Arguments<'_>) {
+    let _guard = LOCK.lock();
+    if let Some(output) = unsafe { &mut OUTPUT } {
+        write!(*output, "{}", args).unwrap();
+    }
+}
+
+unsafe fn log_unsafe(args: Arguments<'_>) {
+    if let Some(output) = &mut OUTPUT {
         write!(*output, "{}", args).unwrap();
     }
 }
@@ -79,3 +86,17 @@ pub fn hexdump(b: &[u8]) {
         chos_lib::log::info!();
     }
 }
+
+pub struct BootLogHandler;
+
+impl LogHandler for BootLogHandler {
+    fn log(&self, args: Arguments<'_>, _: chos_lib::log::LogLevel) {
+        self::log(args)
+    }
+    unsafe fn log_unsafe(&self, args: Arguments<'_>, _: chos_lib::log::LogLevel) {
+        self::log_unsafe(args)
+    }
+}
+
+pub const BOOT_LOG_HANDLER: TermColorLogHandler<BootLogHandler> =
+    TermColorLogHandler::new(BootLogHandler);

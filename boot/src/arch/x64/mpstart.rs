@@ -3,6 +3,7 @@ use core::ptr::null;
 use core::time::Duration;
 
 use chos_lib::arch::x64::apic::Apic;
+use chos_lib::sync::spin::barrier::Barrier;
 
 use super::acpi::madt;
 
@@ -18,7 +19,7 @@ type MpStartFn = fn(u8, *const ()) -> !;
 static mut MPSTART_FN: MaybeUninit<MpStartFn> = MaybeUninit::uninit();
 static mut MPSTART_USER: *const () = null();
 static mut MPSTART_APIC_BASE: usize = 0;
-static mut MPSTART_BARRIER: MaybeUninit<spin::Barrier> = MaybeUninit::uninit();
+static mut MPSTART_BARRIER: MaybeUninit<Barrier> = MaybeUninit::uninit();
 
 #[no_mangle]
 static mut MPSTART_PDT4: usize = 0;
@@ -61,7 +62,7 @@ pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) 
     MPSTART_FN = MaybeUninit::new(start_fn);
     MPSTART_USER = user;
     MPSTART_APIC_BASE = madt.lapic_address as usize;
-    MPSTART_BARRIER = MaybeUninit::new(spin::Barrier::new(count));
+    MPSTART_BARRIER = MaybeUninit::new(Barrier::new(count));
 
     MPSTART_PDT4 = x86_64::registers::control::Cr3::read()
         .0

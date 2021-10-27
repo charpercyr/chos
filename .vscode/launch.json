@@ -16,8 +16,20 @@
             "gdbpath": "rust-gdb",
             "autorun": [
                 // "b boot_main",
-                "add-symbol-file ./target/x86_64-chos/debug/chos.elf -o 0xffff800040000000",
+                "add-symbol-file ./target/x86_64-chos/debug/chos.elf -o 0xffff818000000000",
             ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug chos-lib Unit Tests",
+            "cargo": {
+                "args":[
+                    "test",
+                    "--no-run",
+                    "-p", "chos-lib"
+                ]
+            }
         }
     ]
 }

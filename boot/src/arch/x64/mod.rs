@@ -10,12 +10,12 @@ mod symbols;
 mod timer;
 
 use chos_config::arch::mm::virt;
-use chos_lib::boot::{KernelBootInfo, KernelEntry};
-use chos_lib::log::info;
 use chos_lib::arch::x64::mm::PageTable;
+use chos_lib::boot::{KernelBootInfo, KernelEntry};
+use chos_lib::log::{debug, info, println, Bytes};
+use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
-use spin::Barrier;
 
 use self::acpi::RSDT;
 use crate::arch::x64::intr::apic;
@@ -44,6 +44,18 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     }
 
     log::initialize(logdev);
+
+    println!(
+        r#"
+   .oooooo.   ooooo   ooooo   .oooooo.    .oooooo..o 
+  d8P'  `Y8b  `888'   `888'  d8P'  `Y8b  d8P'    `Y8 
+ 888           888     888  888      888 Y88bo.      
+ 888           888ooooo888  888      888  `"Y8888o.  
+ 888           888     888  888      888      `"Y88b 
+ `88b    ooo   888     888  `88b    d88' oo     .d8P 
+  `Y8bood8P'  o888o   o888o  `Y8bood8P'  8""88888P'  
+"#
+    );
 
     info!("############");
     info!("### BOOT ###");
@@ -82,15 +94,21 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     };
 
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
-    info!("Memory map");
+    debug!("Memory map");
+    let mut total_mem = 0;
     for e in memory_map.all_memory_areas() {
-        info!(
-            "  {:012x}-{:012x} {:?}",
+        debug!(
+            "  {:012x}-{:012x} {:?} {}",
             e.start_address(),
             e.end_address(),
-            e.typ()
+            e.typ(),
+            Bytes(e.end_address() - e.start_address()),
         );
+        if let mb::MemoryAreaType::Available = e.typ() {
+            total_mem += e.end_address() - e.start_address();
+        }
     }
+    debug!("Total available memory: {}", Bytes(total_mem));
     let mem_info = unsafe { kernel::map_kernel(&kernel, memory_map) };
 
     let entry = kernel.raw().entry + virt::STATIC_BASE.as_u64();
@@ -104,7 +122,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         kbi: KernelBootInfo {
             elf: &kernel as *const _ as usize,
             multiboot_header: mbp,
-            early_log: log::log,
+            early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
         },
         page_table: unsafe { PageTable::get_current_page_table() },

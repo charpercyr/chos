@@ -25,7 +25,9 @@ pub fn initialize(hpet_table: &HPET) {
     super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback)
         .expect("Could not allocate IOApic interrupt 8");
     unsafe {
-        HPET = Some(chos_lib::arch::x64::hpet::HPET::with_address(hpet_table.address));
+        HPET = Some(chos_lib::arch::x64::hpet::HPET::with_address(
+            hpet_table.address,
+        ));
     };
 }
 

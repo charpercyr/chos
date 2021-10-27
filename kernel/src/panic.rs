@@ -1,7 +1,7 @@
 use core::panic::PanicInfo;
 
-use chos_lib::log::*;
 use chos_lib::arch::x64::qemu::exit_qemu;
+use chos_lib::log::*;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

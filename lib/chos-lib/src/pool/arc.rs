@@ -1,5 +1,5 @@
 #[cfg(feature = "alloc")]
-use alloc::alloc::{handle_alloc_error, Global};
+use alloc::alloc::handle_alloc_error;
 use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
@@ -8,13 +8,14 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::Pool;
+use crate::init::ConstInit;
 
 pub struct IArcCount {
     count: AtomicUsize,
 }
 
-impl IArcCount {
-    pub const INIT: Self = Self {
+impl ConstInit for IArcCount {
+    const INIT: Self = Self {
         count: AtomicUsize::new(0),
     };
 }
@@ -101,13 +102,13 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
 }
 
 #[cfg(feature = "alloc")]
-impl<T: IArcAdapter> IArc<T, Global> {
+impl<T: IArcAdapter, P: Pool<T> + ConstInit> IArc<T, P> {
     pub fn new(value: T) -> Self {
-        Self::try_new_in(value, Global).unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
+        Self::try_new_in(value, P::INIT).unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
     }
 
     pub fn try_new(value: T) -> Result<Self, AllocError> {
-        Self::try_new_in(value, Global)
+        Self::try_new_in(value, P::INIT)
     }
 
     pub fn into_raw(this: Self) -> *const T {
@@ -119,7 +120,7 @@ impl<T: IArcAdapter> IArc<T, Global> {
     pub unsafe fn from_raw(raw: *const T) -> Self {
         Self {
             ptr: NonNull::new_unchecked(raw as *mut T),
-            alloc: Global,
+            alloc: P::INIT,
             value: PhantomData,
         }
     }
@@ -181,7 +182,7 @@ impl<T: IArcAdapter, P: Unpin + Pool<T>> Unpin for IArc<T, P> {}
 unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Sync> Sync for IArc<T, P> {}
 unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Send> Send for IArc<T, P> {}
 
-impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::Pointer for IArc<T, P> {
+impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::PointerOps for IArc<T, P> {
     type Metadata = P;
     type Target = T;
     fn into_raw(this: Self) -> (*const Self::Target, Self::Metadata) {

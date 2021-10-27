@@ -1,5 +1,4 @@
 #![feature(backtrace)]
-#![feature(command_access)]
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("Only works on Linux");

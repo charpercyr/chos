@@ -20,6 +20,16 @@ macro_rules! ceil_div_impl {
                     self.ceil_div(align) * align
                 }
             }
+
+            paste::item! {
+                pub const fn [<ceil_div $ty>](a: $ty, b: $ty) -> $ty {
+                    (a + b - 1) / b
+                }
+
+                pub const fn [<align_up $ty>](v: $ty, align: $ty) -> $ty {
+                    [<ceil_div $ty>](v, align) * align
+                }
+            }
         )*
     };
 }
@@ -27,12 +37,12 @@ macro_rules! ceil_div_impl {
 ceil_div_impl!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize,);
 
 pub const fn log2u64(value: u64) -> u32 {
-    debug_assert!(value != 0, "Cannot calculate log of 0");
+    assert!(value != 0, "Cannot calculate log of 0");
     63 - value.leading_zeros()
 }
 
 pub const fn ceil_log2u64(value: u64) -> u32 {
-    debug_assert!(value != 0, "Cannot calculate log of 0");
+    assert!(value != 0, "Cannot calculate log of 0");
     match value {
         0 => unsafe { unreachable_unchecked() },
         1 => 0,

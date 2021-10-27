@@ -1,14 +1,29 @@
 use core::mem::size_of;
 use core::ptr::write;
 
-use chos_lib::log::info;
+use chos_lib::arch::mm::FrameSize4K;
 use chos_lib::arch::x64::mm::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
+use chos_lib::log::{info, warn};
+use chos_lib::mm::*;
 
-use super::mapper::Mapper;
+use super::mapper::BootMapper;
 
 pub struct PAlloc {
     pbase: *mut PageTable,
     pcur: *mut PageTable,
+}
+
+unsafe impl FrameAllocator for PAlloc {
+    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Frame<S> {
+        let ptr = self.pcur;
+        self.pcur = self.pcur.add(1);
+        write(ptr, PageTable::empty());
+        Frame::new_unchecked(VAddr::new_unchecked(ptr as u64))
+    }
+
+    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: Frame<S>) {
+        warn!("Cannot dealloc with this allocator")
+    }
 }
 
 impl PAlloc {
@@ -33,12 +48,21 @@ impl PAlloc {
         }
     }
 
-    pub unsafe fn map_self(&mut self, mut vaddr: VAddr, mapper: &mut Mapper) {
+    pub unsafe fn map_self(&mut self, mut vaddr: VAddr, mapper: &mut BootMapper) {
         let mut cur = self.pbase;
         // We might need to allocate more pages, so self.pcur might change during iteration
         while cur < self.pcur {
             info!("Map PGT {:016x} -> {:016x}", cur as u64, vaddr.as_u64());
-            mapper.map(PAddr::new(cur as u64), vaddr, true, false, self);
+            mapper
+                .mapper
+                .map(
+                    Page::<FrameSize4K>::new_unchecked(PAddr::new(cur as u64)),
+                    Frame::new_unchecked(vaddr),
+                    MapFlags::WRITE,
+                    self,
+                )
+                .unwrap()
+                .ignore();
             cur = cur.add(1);
             vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64)
                 .expect("Got invalid vaddr, this is very unlikely");
