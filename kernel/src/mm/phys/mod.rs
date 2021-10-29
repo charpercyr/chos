@@ -1,7 +1,6 @@
 pub mod raw_alloc;
-use core::alloc::{AllocError, Layout};
-use core::mem::size_of;
-use core::ptr::{from_raw_parts_mut, NonNull};
+use core::alloc::AllocError;
+use core::ptr::NonNull;
 
 use chos_config::arch::mm::virt::PHYSICAL_MAP_BASE;
 use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
@@ -9,10 +8,12 @@ use chos_lib::init::ConstInit;
 use chos_lib::intrusive::list;
 use chos_lib::log::info;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
+use chos_lib::sync::fake::FakeLock;
+use chos_lib::sync::lock::Lock;
 use chos_lib::sync::spin::lock::Spinlock;
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
-use super::slab::{RawSlabAllocator, Slab, SlabAllocator};
+use super::slab::{ObjectAllocator, Slab, SlabAllocator};
 
 #[derive(Debug)]
 pub struct Page {
@@ -73,40 +74,40 @@ unsafe impl SlabAllocator for PageSlabAllocator {
 }
 
 struct PagePoolImpl {
-    slab: Spinlock<RawSlabAllocator<PageSlabAllocator>>,
+    alloc: Lock<FakeLock, ObjectAllocator<Page, PageSlabAllocator>>,
 }
 
 impl PagePoolImpl {
-    pub const fn new() -> Self {
+    pub const unsafe fn new() -> Self {
         Self {
-            slab: Spinlock::new(RawSlabAllocator::new(
-                PageSlabAllocator,
-                Layout::new::<Page>(),
-            )),
+            alloc: Lock::new_with_lock(ObjectAllocator::new(PageSlabAllocator), FakeLock::new()),
         }
     }
 }
 
 unsafe impl Pool<Page> for PagePoolImpl {
     unsafe fn allocate(&self) -> Result<NonNull<Page>, AllocError> {
-        let mut slab = self.slab.lock();
+        let mut slab = self.alloc.lock();
         slab.alloc().map(|p| p.cast())
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<Page>) {
-        let mut slab = self.slab.lock();
-        let metadata = size_of::<Page>();
-        let ptr = NonNull::new_unchecked(from_raw_parts_mut(ptr.as_ptr().cast(), metadata));
-        slab.dealloc(ptr)
+        let _guard = ALLOC_LOCK.lock();
+        let &Page { order, paddr, .. } = ptr.as_ref();
+        let mut slab = self.alloc.lock();
+        slab.dealloc(ptr);
+        raw_alloc::dealloc_pages(paddr, order);
     }
 }
 
-static PAGE_POOL: PagePoolImpl = PagePoolImpl::new();
+static PAGE_POOL: PagePoolImpl = unsafe { PagePoolImpl::new() };
+static ALLOC_LOCK: Spinlock<()> = Spinlock::INIT;
 chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 
 pub type PagePtr = IArc<Page, PagePool>;
 
 pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PagePtr, AllocError> {
+    let _guard = ALLOC_LOCK.lock();
     let paddr = raw_alloc::alloc_pages(order, flags)?;
     IArc::try_new(Page {
         count: IArcCount::INIT,
@@ -118,4 +119,13 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PagePtr, Alloc
         raw_alloc::dealloc_pages(paddr, order);
         e
     })
+}
+
+pub fn print_stats() {
+    let stats = {
+        let _guard = ALLOC_LOCK.lock();
+        let alloc = PAGE_POOL.alloc.lock();
+        *alloc.stats()
+    };
+    info!("Page Alloc stats: {:#?}", stats);
 }

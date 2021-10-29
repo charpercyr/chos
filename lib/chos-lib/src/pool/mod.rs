@@ -1,8 +1,12 @@
 mod arc;
+#[cfg(feature = "alloc")]
+use alloc::alloc::Global;
 use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
 
 pub use arc::*;
+
+use crate::init::ConstInit;
 
 pub unsafe trait Pool<T> {
     unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError>;
@@ -18,9 +22,28 @@ unsafe impl<A: Allocator, T> Pool<T> for A {
     }
 }
 
+#[cfg(feature = "alloc")]
+pub fn handle_alloc_error(layout: Layout) -> ! {
+    alloc::alloc::handle_alloc_error(layout)
+}
+#[cfg(not(feature = "alloc"))]
+pub fn handle_alloc_error(layout: Layout) -> ! {
+    panic!(
+        "Could not allocate (size={}, align={})",
+        layout.size(),
+        layout.align()
+    )
+}
+
+#[cfg(feature = "alloc")]
+unsafe impl<T> ConstPool<T> for Global {}
+
+pub unsafe trait ConstPool<T>: Pool<T> + ConstInit {}
+
 #[macro_export]
 macro_rules! pool {
     ($(pub $(($($vis:tt)*))?)? struct $name:ident => $r:expr) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         $(pub $(($($vis)*))*)* struct $name;
         unsafe impl<T> $crate::pool::Pool<T> for $name {
             unsafe fn allocate(
@@ -35,8 +58,10 @@ macro_rules! pool {
         impl $crate::init::ConstInit for $name {
             const INIT: Self = Self;
         }
+        unsafe impl<T> $crate::pool::ConstPool<T> for $name {}
     };
     ($(pub $(($($vis:tt)*))?)? struct $name:ident: $ty:ident => $r:expr) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         $(pub $(($($vis)*))*)* struct $name;
         unsafe impl $crate::pool::Pool<$ty> for $name {
             unsafe fn allocate(
@@ -51,5 +76,6 @@ macro_rules! pool {
         impl $crate::init::ConstInit for $name {
             const INIT: Self = Self;
         }
+        unsafe impl $crate::pool::ConstPool<$ty> for $name {}
     };
 }

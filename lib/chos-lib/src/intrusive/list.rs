@@ -3,9 +3,8 @@ use core::fmt;
 use core::mem::MaybeUninit;
 use core::ptr::{replace, NonNull};
 
-use crate::init::ConstInit;
-
 use super::{Adapter, LinkOps, PointerOps};
+use crate::init::ConstInit;
 
 pub struct Link<M> {
     next: Cell<Option<NonNull<Self>>>,

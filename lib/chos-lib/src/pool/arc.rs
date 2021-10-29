@@ -1,5 +1,3 @@
-#[cfg(feature = "alloc")]
-use alloc::alloc::handle_alloc_error;
 use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
@@ -7,7 +5,7 @@ use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::Pool;
+use super::{handle_alloc_error, Pool};
 use crate::init::ConstInit;
 
 pub struct IArcCount {
@@ -50,14 +48,7 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
 
     pub fn new_in(value: T, alloc: P) -> Self {
         let r = Self::try_new_in(value, alloc);
-        #[cfg(feature = "alloc")]
-        {
-            r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            r.unwrap_or_else(|_| panic!("Could not allocate {} bytes", Layout::new::<T>().size()))
-        }
+        r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
     }
 
     pub fn into_raw_with_allocator(this: Self) -> (*const T, P) {
@@ -102,9 +93,10 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
 }
 
 #[cfg(feature = "alloc")]
-impl<T: IArcAdapter, P: Pool<T> + ConstInit> IArc<T, P> {
+impl<T: IArcAdapter, P: super::ConstPool<T>> IArc<T, P> {
     pub fn new(value: T) -> Self {
-        Self::try_new_in(value, P::INIT).unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
+        return Self::try_new_in(value, P::INIT)
+            .unwrap_or_else(|_| super::handle_alloc_error(Layout::new::<T>()));
     }
 
     pub fn try_new(value: T) -> Result<Self, AllocError> {

@@ -4,11 +4,11 @@ use core::mem::{align_of, size_of};
 use core::ptr::{read, write, write_bytes, NonNull};
 use core::slice::from_raw_parts_mut;
 
+use bitvec::slice::BitSlice;
 use chos_lib::arch::mm::VAddr;
 use chos_lib::init::ConstInit;
-use chos_lib::int::{CeilDiv, align_upusize, ceil_divusize};
+use chos_lib::int::{align_upusize, ceil_divusize};
 use chos_lib::intrusive::{self as int, list, UnsafeRef};
-use chos_lib::bitmap::{self, Bitmap};
 
 pub trait Slab: Sized {
     const SIZE: usize;
@@ -37,9 +37,9 @@ struct SlabHeader<F: SlabAllocator> {
 impl<F: SlabAllocator> SlabHeader<F> {
     unsafe fn alloc(&mut self, meta: &SlabMeta) -> Result<NonNull<[u8]>, AllocError> {
         let bitmap = self.bitmap_mut(meta);
-        let i = bitmap.leading_ones() as usize;
+        let i = bitmap.leading_zeros();
         if i < meta.object_count {
-            bitmap.set_bit(i, true);
+            bitmap.set(i, false);
             Ok(self.get_object_ptr(meta, i))
         } else {
             return Err(AllocError);
@@ -55,32 +55,57 @@ impl<F: SlabAllocator> SlabHeader<F> {
             .as_ptr()
             .offset_from(first_object.cast().as_ptr()) as usize)
             / meta.layout.size();
-        bitmap.set_bit(idx, true);
+        bitmap.set(idx, true);
     }
 
-    fn is_empty(&self) -> bool {
-        false
+    fn is_empty(&self, meta: &SlabMeta) -> bool {
+        let bitmap = unsafe { self.bitmap(meta) };
+        bitmap.all()
     }
 
-    fn is_full(&self) -> bool {
-        false
+    fn is_full(&self, meta: &SlabMeta) -> bool {
+        let bitmap = unsafe { self.bitmap(meta) };
+        bitmap.not_any()
     }
 
-    unsafe fn bitmap_mut(&mut self, meta: &SlabMeta) -> &mut Bitmap {
+    unsafe fn bitmap(&self, meta: &SlabMeta) -> &BitSlice {
+        use bitvec::prelude::*;
+        let ptr = self as *const Self as *const u8;
+        let ptr = ptr.add(Self::bitmap_offset());
+        bitvec::slice::from_raw_parts(BitPtr::from_ptr(ptr.cast()).unwrap(), meta.object_count)
+            .unwrap()
+    }
+
+    unsafe fn bitmap_mut(&mut self, meta: &SlabMeta) -> &mut BitSlice {
+        use bitvec::prelude::*;
         let ptr = self as *mut Self as *mut u8;
-        let ptr = ptr.add(size_of::<Self>());
-        let ptr = ptr.add(ptr.align_offset(align_of::<usize>()));
-        Bitmap::from_raw_parts_mut(ptr.cast(), meta.object_count.ceil_div(size_of::<usize>()))
+        let ptr = ptr.add(Self::bitmap_offset());
+        bitvec::slice::from_raw_parts_mut(
+            BitPtr::from_mut_ptr(ptr.cast()).unwrap(),
+            meta.object_count,
+        )
+        .unwrap()
     }
 
     unsafe fn get_object_ptr(&self, meta: &SlabMeta, i: usize) -> NonNull<[u8]> {
         let ptr = self as *const Self as *mut u8;
-        let ptr = ptr.add(size_of::<Self>());
-        let ptr = ptr.add(ptr.align_offset(align_of::<usize>()));
-        let ptr = ptr.add(size_of::<usize>() * meta.object_count.ceil_div(size_of::<usize>()));
-        let ptr = ptr.add(ptr.align_offset(meta.layout.align()));
-        let ptr = ptr.add(i * meta.layout.size());
+        let ptr = ptr.add(Self::object_offset(meta, i));
         from_raw_parts_mut(ptr, meta.layout.size()).into()
+    }
+
+    const fn bitmap_offset() -> usize {
+        let off = size_of::<Self>();
+        let off = align_upusize(off, align_of::<usize>());
+        off
+    }
+
+    const fn object_offset(meta: &SlabMeta, i: usize) -> usize {
+        let off = Self::bitmap_offset();
+        let off =
+            off + size_of::<usize>() * ceil_divusize(meta.object_count, size_of::<usize>() * 8);
+        let off = align_upusize(off, align_of::<usize>());
+        let off = off + i * meta.layout.size();
+        off
     }
 }
 
@@ -101,26 +126,40 @@ impl<F: SlabAllocator> ConstInit for SlabAdapter<F> {
     const INIT: Self = Self(PhantomData);
 }
 
-pub struct RawSlabAllocator<F: SlabAllocator> {
+#[derive(Debug, Clone, Copy)]
+pub struct ObjectAllocatorStats {
+    pub empty_slabs: usize,
+    pub partial_slabs: usize,
+    pub full_slabs: usize,
+    pub free_objects: usize,
+    pub allocated_objects: usize,
+}
+
+pub struct RawObjectAllocator<F: SlabAllocator> {
     frame_alloc: F,
     meta: SlabMeta,
     empty: list::HList<SlabAdapter<F>>,
     partial: list::HList<SlabAdapter<F>>,
     full: list::HList<SlabAdapter<F>>,
+    stats: ObjectAllocatorStats,
 }
 
-impl<F: SlabAllocator> RawSlabAllocator<F> {
+impl<F: SlabAllocator> RawObjectAllocator<F> {
     pub const fn new(frame_alloc: F, layout: Layout) -> Self {
         assert!(2 * <F::Slab as Slab>::SIZE > 3 * layout.size());
         Self {
             frame_alloc,
-            meta: SlabMeta {
-                layout,
-                object_count: estimate_bitmap_bits::<F>(layout),
-            },
+            meta: slab_meta::<F>(layout),
             empty: list::HList::INIT,
             partial: list::HList::INIT,
             full: list::HList::INIT,
+            stats: ObjectAllocatorStats {
+                empty_slabs: 0,
+                partial_slabs: 0,
+                full_slabs: 0,
+                free_objects: 0,
+                allocated_objects: 0,
+            },
         }
     }
 
@@ -129,11 +168,15 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
         if let Some(uref) = self.partial.pop_front() {
             let slab = &mut *(uref.as_ptr() as *mut SlabHeader<F>);
             if let Ok(ptr) = slab.alloc(&self.meta) {
-                if slab.is_full() {
+                if slab.is_full(&self.meta) {
+                    self.stats.partial_slabs -= 1;
+                    self.stats.full_slabs += 1;
                     self.full.push_front(uref);
                 } else {
                     self.partial.push_front(uref);
                 }
+                self.stats.free_objects -= 1;
+                self.stats.allocated_objects += 1;
                 return Ok(ptr);
             }
         }
@@ -141,11 +184,16 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
         if let Some(uref) = self.empty.pop_front() {
             let slab = &mut *(uref.as_ptr() as *mut SlabHeader<F>);
             if let Ok(ptr) = slab.alloc(&self.meta) {
-                if slab.is_full() {
+                self.stats.empty_slabs -= 1;
+                if slab.is_full(&self.meta) {
+                    self.stats.full_slabs += 1;
                     self.full.push_front(uref);
                 } else {
+                    self.stats.partial_slabs += 1;
                     self.partial.push_front(uref);
                 }
+                self.stats.free_objects -= 1;
+                self.stats.allocated_objects += 1;
                 return Ok(ptr);
             }
         }
@@ -157,11 +205,15 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
             e
         })?;
         let uref = UnsafeRef::new(new_slab);
-        if new_slab.is_full() {
+        if new_slab.is_full(&self.meta) {
+            self.stats.full_slabs += 1;
             self.full.push_front(uref);
         } else {
+            self.stats.partial_slabs += 1;
             self.partial.push_front(uref);
         }
+        self.stats.free_objects += self.meta.object_count - 1;
+        self.stats.allocated_objects += 1;
         Ok(ptr)
     }
 
@@ -170,7 +222,7 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
         let vaddr = VAddr::new_unchecked(ptr.as_ptr() as *mut u8 as u64);
         let vaddr = <F::Slab as Slab>::frame_containing(vaddr).vaddr();
         let slab: &mut SlabHeader<F> = &mut *vaddr.as_ptr_mut();
-        let was_full = slab.is_full();
+        let was_full = slab.is_full(&self.meta);
         slab.dealloc(ptr, &self.meta);
         if was_full {
             let uref = self
@@ -178,13 +230,18 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
                 .cursor_mut_from_pointer(slab)
                 .unlink()
                 .expect("Should be a valid cursor");
-            if slab.is_empty() {
+            self.stats.full_slabs -= 1;
+            if slab.is_empty(&self.meta) {
+                self.stats.empty_slabs += 1;
                 self.empty.push_front(uref);
             } else {
+                self.stats.partial_slabs += 1;
                 self.partial.push_front(uref);
             }
         } else {
-            if slab.is_empty() {
+            if slab.is_empty(&self.meta) {
+                self.stats.partial_slabs -= 1;
+                self.stats.empty_slabs += 1;
                 let uref = self
                     .partial
                     .cursor_mut_from_pointer(slab)
@@ -193,12 +250,20 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
                 self.empty.push_front(uref);
             }
         }
+        self.stats.allocated_objects -= 1;
+        self.stats.free_objects += 1;
     }
 
     pub unsafe fn dealloc_empty_frames(&mut self) {
         while let Some(slab) = self.empty.pop_front() {
+            self.stats.free_objects -= self.meta.object_count;
             self.dealloc_slab(NonNull::new_unchecked(slab.as_ptr() as *mut _));
         }
+        self.stats.empty_slabs = 0;
+    }
+
+    pub fn stats(&self) -> &ObjectAllocatorStats {
+        &self.stats
     }
 
     unsafe fn alloc_new_slab(&mut self) -> Result<NonNull<SlabHeader<F>>, AllocError> {
@@ -213,7 +278,7 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
             },
         );
         let slab = &mut *ptr;
-        slab.bitmap_mut(&self.meta).set_all_in(..self.meta.object_count);
+        slab.bitmap_mut(&self.meta).set_all(true);
         Ok(NonNull::new_unchecked(ptr))
     }
 
@@ -223,13 +288,47 @@ impl<F: SlabAllocator> RawSlabAllocator<F> {
     }
 }
 
-pub const fn estimate_bitmap_bits<F: SlabAllocator>(layout: Layout) -> usize {
+pub struct ObjectAllocator<T, F: SlabAllocator> {
+    raw: RawObjectAllocator<F>,
+    phantom: PhantomData<T>,
+}
+
+impl<T, F: SlabAllocator> ObjectAllocator<T, F> {
+    pub const fn new(frame_alloc: F) -> Self {
+        Self {
+            raw: RawObjectAllocator::new(frame_alloc, Layout::new::<T>()),
+            phantom: PhantomData,
+        }
+    }
+
+    pub unsafe fn alloc(&mut self) -> Result<NonNull<T>, AllocError> {
+        self.raw.alloc().map(|ptr| ptr.cast())
+    }
+
+    pub unsafe fn dealloc(&mut self, ptr: NonNull<T>) {
+        self.raw
+            .dealloc(NonNull::from_raw_parts(ptr.cast(), size_of::<T>()))
+    }
+
+    pub fn stats(&self) -> &ObjectAllocatorStats {
+        self.raw.stats()
+    }
+}
+
+impl<T, F: SlabAllocator + ConstInit> ConstInit for ObjectAllocator<T, F> {
+    const INIT: Self = Self::new(ConstInit::INIT);
+}
+
+const fn slab_meta<F: SlabAllocator>(layout: Layout) -> SlabMeta {
     let header_bytes = align_upusize(size_of::<SlabHeader<F>>(), align_of::<usize>());
     let object_bytes = align_upusize(layout.size(), layout.align());
-    let mut object_count = ceil_divusize(<F::Slab as Slab>::SIZE - header_bytes, object_bytes + 1);
+    let mut meta = SlabMeta {
+        layout,
+        object_count: (<F::Slab as Slab>::SIZE - header_bytes) / object_bytes,
+    };
     // We might overestimate
-    while header_bytes + align_upusize(ceil_divusize(object_count, bitmap::REPR_BITS), layout.align()) + object_bytes * object_count > <F::Slab as Slab>::SIZE {
-        object_count -= 1;
+    while SlabHeader::<F>::object_offset(&meta, meta.object_count) > <F::Slab as Slab>::SIZE {
+        meta.object_count -= 1;
     }
-    object_count
+    meta
 }

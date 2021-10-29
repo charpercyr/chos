@@ -80,6 +80,13 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     }
 }
 
+impl<L: RawLock + ConstInit, T: ConstInit> ConstInit for Lock<L, T> {
+    const INIT: Self = Self {
+        lock: ConstInit::INIT,
+        value: ConstInit::INIT,
+    };
+}
+
 pub struct LockGuard<'a, L: RawLock, T: ?Sized> {
     lock: &'a Lock<L, T>,
 }

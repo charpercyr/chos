@@ -9,19 +9,19 @@ pub trait CeilDiv {
 macro_rules! ceil_div_impl {
     ($($ty:ty),* $(,)?) => {
         $(
-            impl CeilDiv for $ty {
-                #[inline]
-                fn ceil_div(self, rhs: Self) -> Self {
-                    (self + rhs - 1) / rhs
-                }
-
-                #[inline]
-                fn align_up(self, align: Self) -> Self {
-                    self.ceil_div(align) * align
-                }
-            }
-
             paste::item! {
+                impl CeilDiv for $ty {
+                    #[inline]
+                    fn ceil_div(self, rhs: Self) -> Self {
+                        [<ceil_div $ty>](self, rhs)
+                    }
+
+                    #[inline]
+                    fn align_up(self, align: Self) -> Self {
+                        [<align_up $ty>](self, align)
+                    }
+                }
+
                 pub const fn [<ceil_div $ty>](a: $ty, b: $ty) -> $ty {
                     (a + b - 1) / b
                 }

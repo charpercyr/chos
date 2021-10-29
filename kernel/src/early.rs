@@ -68,19 +68,12 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     setup_early_memory_allocator(info);
 
     unsafe {
-        const ORDER: u8 = 0;
-        use mm::phys::{alloc_pages, AllocFlags};
-        for _ in 0..10 {
-            match alloc_pages(ORDER, AllocFlags::empty()) {
-                Ok(page) => {
-                    info!("ALLOC {:?}", page);
-                    // core::mem::forget(page);
-                }
-                Err(e) => {
-                    error!("ALLOC FAILED: {:?}", e);
-                }
-            }
+        use mm::phys::*;
+        for _ in 0..256 {
+            let page = alloc_pages(0, AllocFlags::empty());
+            core::mem::forget(page);
         }
+        print_stats();
     }
 
     exit_qemu(QemuStatus::Success);

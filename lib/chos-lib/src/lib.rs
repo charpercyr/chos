@@ -1,7 +1,5 @@
 #![no_std]
-
 #![allow(incomplete_features)]
-
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(associated_type_bounds)]
@@ -16,8 +14,6 @@
 #![feature(never_type)]
 
 pub mod arch;
-
-pub mod bitmap;
 
 pub mod boot;
 

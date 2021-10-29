@@ -284,7 +284,7 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
     let page_bit = (page >> (order + 1)) + block.bitmap_offset;
     let word = page_bit / (size_of::<usize>() as u64);
     let bit = page_bit % (size_of::<usize>() as u64);
-    if bitmap[word as usize] & (1 << bit) != 0 {
+    if order < meta.biggest_order && bitmap[word as usize] & (1 << bit) != 0 {
         let mut cursor = block.blocks.front_mut();
         loop {
             if let Some(b) = cursor.get() {
