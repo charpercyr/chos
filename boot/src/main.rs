@@ -8,6 +8,7 @@
 #![feature(fn_traits)]
 #![feature(global_asm)]
 #![feature(inline_const)]
+#![feature(never_type)]
 #![feature(once_cell)]
 #![feature(unboxed_closures)]
 

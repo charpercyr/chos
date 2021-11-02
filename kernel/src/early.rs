@@ -1,4 +1,3 @@
-use chos_config::arch::mm::virt;
 use chos_lib::arch::x64::qemu::{exit_qemu, QemuStatus};
 use chos_lib::boot::KernelBootInfo;
 use chos_lib::check_kernel_entry;
@@ -56,25 +55,7 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     info!("### EARLY KERNEL ###");
     info!("####################");
 
-    debug!("PHYSICAL_MAP_BASE   {:?}", virt::PHYSICAL_MAP_BASE);
-    debug!("PAGING_BASE         {:?}", virt::PAGING_BASE);
-    debug!("DEVICE_BASE         {:?}", virt::DEVICE_BASE);
-    debug!("STATIC_BASE         {:?}", virt::STATIC_BASE);
-    debug!("HEAP_BASE           {:?}", virt::HEAP_BASE);
-    debug!("PERCPU_STATIC_BASE  {:?}", virt::PERCPU_STATIC_BASE);
-    debug!("PERCPU_HEAP_BASE    {:?}", virt::PERCPU_HEAP_BASE);
-    debug!("STACK_BASE          {:?}", virt::STACK_BASE);
-
     setup_early_memory_allocator(info);
-
-    unsafe {
-        use mm::phys::*;
-        for _ in 0..256 {
-            let page = alloc_pages(0, AllocFlags::empty());
-            core::mem::forget(page);
-        }
-        print_stats();
-    }
 
     exit_qemu(QemuStatus::Success);
 }

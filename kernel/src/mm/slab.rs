@@ -9,6 +9,8 @@ use chos_lib::arch::mm::VAddr;
 use chos_lib::init::ConstInit;
 use chos_lib::int::{align_upusize, ceil_divusize};
 use chos_lib::intrusive::{self as int, list, UnsafeRef};
+use chos_lib::pool::Pool;
+use chos_lib::sync::lock::{Lock, RawLock};
 
 pub trait Slab: Sized {
     const SIZE: usize;
@@ -288,12 +290,12 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
     }
 }
 
-pub struct ObjectAllocator<T, F: SlabAllocator> {
+pub struct ObjectAllocator<F: SlabAllocator, T> {
     raw: RawObjectAllocator<F>,
     phantom: PhantomData<T>,
 }
 
-impl<T, F: SlabAllocator> ObjectAllocator<T, F> {
+impl<T, F: SlabAllocator> ObjectAllocator<F, T> {
     pub const fn new(frame_alloc: F) -> Self {
         Self {
             raw: RawObjectAllocator::new(frame_alloc, Layout::new::<T>()),
@@ -315,7 +317,7 @@ impl<T, F: SlabAllocator> ObjectAllocator<T, F> {
     }
 }
 
-impl<T, F: SlabAllocator + ConstInit> ConstInit for ObjectAllocator<T, F> {
+impl<T, F: SlabAllocator + ConstInit> ConstInit for ObjectAllocator<F, T> {
     const INIT: Self = Self::new(ConstInit::INIT);
 }
 
@@ -331,4 +333,31 @@ const fn slab_meta<F: SlabAllocator>(layout: Layout) -> SlabMeta {
         meta.object_count -= 1;
     }
     meta
+}
+
+pub struct PoolObjectAllocator<L: RawLock, F: SlabAllocator, T> {
+    alloc: Lock<L, ObjectAllocator<F, T>>,
+}
+
+impl<L: RawLock, F: SlabAllocator, T> PoolObjectAllocator<L, F, T> {
+    pub const fn new(frame_alloc: F, lock: L) -> Self {
+        Self {
+            alloc: Lock::new_with_lock(ObjectAllocator::new(frame_alloc), lock),
+        }
+    }
+}
+
+impl<L: RawLock + ConstInit, F: SlabAllocator + ConstInit, T> ConstInit
+    for PoolObjectAllocator<L, F, T>
+{
+    const INIT: Self = Self::new(ConstInit::INIT, ConstInit::INIT);
+}
+
+unsafe impl<L: RawLock, F: SlabAllocator, T> Pool<T> for PoolObjectAllocator<L, F, T> {
+    unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError> {
+        self.alloc.lock().alloc()
+    }
+    unsafe fn deallocate(&self, ptr: NonNull<T>) {
+        self.alloc.lock().dealloc(ptr)
+    }
 }

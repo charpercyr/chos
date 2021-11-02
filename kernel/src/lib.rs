@@ -8,10 +8,10 @@
 #![feature(maybe_uninit_slice)]
 #![feature(negative_impls)]
 #![feature(never_type)]
-#![feature(option_result_unwrap_unchecked)]
 #![feature(ptr_metadata)]
 #![feature(thread_local)]
 #![warn(clippy::disallowed_method)]
+// #![warn(unsafe_op_in_unsafe_fn)]
 
 extern crate alloc;
 

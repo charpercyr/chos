@@ -3,7 +3,7 @@ use core::ptr::write;
 
 use chos_lib::arch::mm::FrameSize4K;
 use chos_lib::arch::x64::mm::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
-use chos_lib::log::{info, warn};
+use chos_lib::log::info;
 use chos_lib::mm::*;
 
 use super::mapper::BootMapper;
@@ -14,15 +14,16 @@ pub struct PAlloc {
 }
 
 unsafe impl FrameAllocator for PAlloc {
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Frame<S> {
+    type Error = !;
+    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<Frame<S>, !> {
         let ptr = self.pcur;
         self.pcur = self.pcur.add(1);
         write(ptr, PageTable::empty());
-        Frame::new_unchecked(VAddr::new_unchecked(ptr as u64))
+        Ok(Frame::new_unchecked(VAddr::new_unchecked(ptr as u64)))
     }
 
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: Frame<S>) {
-        warn!("Cannot dealloc with this allocator")
+    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: Frame<S>) -> Result<(), !> {
+        panic!("Cannot dealloc with this deallocator")
     }
 }
 

@@ -6,7 +6,6 @@ use chos_config::arch::mm::virt::PHYSICAL_MAP_BASE;
 use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
 use chos_lib::init::ConstInit;
 use chos_lib::intrusive::list;
-use chos_lib::log::info;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
 use chos_lib::sync::fake::FakeLock;
 use chos_lib::sync::lock::Lock;
@@ -74,7 +73,7 @@ unsafe impl SlabAllocator for PageSlabAllocator {
 }
 
 struct PagePoolImpl {
-    alloc: Lock<FakeLock, ObjectAllocator<Page, PageSlabAllocator>>,
+    alloc: Lock<FakeLock, ObjectAllocator<PageSlabAllocator, Page>>,
 }
 
 impl PagePoolImpl {
@@ -121,11 +120,3 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PagePtr, Alloc
     })
 }
 
-pub fn print_stats() {
-    let stats = {
-        let _guard = ALLOC_LOCK.lock();
-        let alloc = PAGE_POOL.alloc.lock();
-        *alloc.stats()
-    };
-    info!("Page Alloc stats: {:#?}", stats);
-}

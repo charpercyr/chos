@@ -10,6 +10,7 @@
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 #![feature(inherent_associated_types)]
+#![feature(maybe_uninit_extra)]
 #![feature(negative_impls)]
 #![feature(never_type)]
 

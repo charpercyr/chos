@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use core::marker::PhantomData;
 
 use bitflags::bitflags;
@@ -140,14 +141,15 @@ impl<S: FrameSize> Page<S> {
     }
 }
 
-pub trait FrameSize: Clone + Copy {
+pub trait FrameSize: Clone + Copy + Debug {
     const PAGE_SIZE: u64;
     const DEBUG_STR: &'static str;
 }
 
 pub unsafe trait FrameAllocator {
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Frame<S>;
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, frame: Frame<S>);
+    type Error;
+    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<Frame<S>, Self::Error>;
+    unsafe fn dealloc_frame<S: FrameSize>(&mut self, frame: Frame<S>) -> Result<(), Self::Error>;
 }
 
 bitflags! {
@@ -169,15 +171,23 @@ pub trait MapperFlush: Sized {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MapError {
+pub enum MapError<FE> {
     AlreadyMapped,
+    FrameAllocError(FE),
+}
+
+impl<FE> MapError<FE> {
+    pub const fn from_frame_alloc_error(fe: FE) -> Self {
+        Self::FrameAllocError(fe)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UnmapError {
+pub enum UnmapError<FE> {
     NotMapped,
     InvalidFrame,
     InvalidPage,
+    FrameAllocError(FE)
 }
 
 pub trait Mapper<S: FrameSize> {
@@ -188,13 +198,13 @@ pub trait Mapper<S: FrameSize> {
         frame: Frame<S>,
         flags: MapFlags,
         alloc: &mut A,
-    ) -> Result<Self::Flush, MapError>;
+    ) -> Result<Self::Flush, MapError<A::Error>>;
 
     unsafe fn unmap<A: FrameAllocator + ?Sized>(
         &mut self,
         frame: Frame<S>,
         alloc: &mut A,
-    ) -> Result<Self::Flush, UnmapError>;
+    ) -> Result<Self::Flush, UnmapError<A::Error>>;
 
     // unsafe fn map_range<A: FrameAlloc + ?Sized>(
     //     &mut self,
@@ -229,7 +239,7 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
         frame: Frame<S>,
         flags: MapFlags,
         alloc: &mut A,
-    ) -> Result<Self::Flush, MapError> {
+    ) -> Result<Self::Flush, MapError<A::Error>> {
         crate::log::debug!("MAP {:016x} -> {:016x} [{:?}]", page, frame, flags);
         self.mapper.map(page, frame, flags, alloc)
     }
@@ -237,7 +247,7 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
         &mut self,
         frame: Frame<S>,
         alloc: &mut A,
-    ) -> Result<Self::Flush, UnmapError> {
+    ) -> Result<Self::Flush, UnmapError<A::Error>> {
         crate::log::debug!("UNMAP {:016x}", frame);
         self.mapper.unmap(frame, alloc)
     }
