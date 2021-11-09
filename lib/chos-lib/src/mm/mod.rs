@@ -6,140 +6,99 @@ use bitflags::bitflags;
 use crate::arch::mm::{PAddr, VAddr};
 use crate::int::ceil_divu64;
 
-#[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct Frame<S: FrameSize> {
-    addr: VAddr,
-    size: PhantomData<S>,
-}
-
-crate::forward_fmt!(
-    impl<S: FrameSize> LowerHex, UpperHex for Frame<S> => VAddr : |this: &Self| this.addr
-);
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FrameAlignError;
 
-impl<S: FrameSize> Frame<S> {
-    pub const fn try_new(addr: VAddr) -> Result<Self, FrameAlignError> {
-        if addr.as_u64() % S::PAGE_SIZE != 0 {
-            Err(FrameAlignError)
-        } else {
-            Ok(Self {
-                addr,
-                size: PhantomData,
-            })
+macro_rules! frame {
+    ($name:ident : $addr:ty) => {
+        #[repr(transparent)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name<S: FrameSize> {
+            addr: $addr,
+            size: PhantomData<S>,
         }
-    }
 
-    pub const fn new_align_up(addr: VAddr) -> Self {
-        Self {
-            addr: VAddr::make_canonical(ceil_divu64(addr.as_u64(), S::PAGE_SIZE)),
-            size: PhantomData,
+        crate::forward_fmt!(impl<S: FrameSize> Display, LowerHex, UpperHex for $name<S> => $addr : |this: &Self| this.addr);
+
+        impl<S: FrameSize> $name<S> {
+            pub fn new(addr: $addr) -> Self {
+                Self::try_new(addr).expect("Invalid address")
+            }
+
+            pub const fn try_new(addr: $addr) -> Result<Self, FrameAlignError> {
+                if addr.as_u64() % S::PAGE_SIZE == 0 {
+                    Ok(Self {
+                        addr,
+                        size: PhantomData,
+                    })
+                } else {
+                    Err(FrameAlignError)
+                }
+            }
+
+            pub fn new_align_up(addr: $addr) -> Self {
+                Self {
+                    addr: <$addr>::new(ceil_divu64(addr.as_u64(), S::PAGE_SIZE)),
+                    size: PhantomData,
+                }
+            }
+
+            pub fn new_align_down(addr: $addr) -> Self {
+                Self {
+                    addr: <$addr>::new(addr.as_u64() / S::PAGE_SIZE * S::PAGE_SIZE),
+                    size: PhantomData,
+                }
+            }
+
+            pub const unsafe fn new_unchecked(addr: $addr) -> Self {
+                Self {
+                    addr,
+                    size: PhantomData,
+                }
+            }
+
+            pub const fn addr(&self) -> $addr {
+                self.addr
+            }
         }
-    }
 
-    pub fn new_align_down(addr: VAddr) -> Self {
-        Self {
-            addr: VAddr::make_canonical(addr.as_u64() / S::PAGE_SIZE * S::PAGE_SIZE),
-            size: PhantomData,
+        paste::item! {
+            pub struct [<$name Range>]<S: FrameSize> {
+                start: $name<S>,
+                end: $name<S>,
+            }
+
+            impl<S: FrameSize> [<$name Range>]<S> {
+                pub const fn new(start: $name<S>, end: $name<S>) -> Self {
+                    Self { start, end }
+                }
+
+                pub const fn start(&self) -> $name<S> {
+                    self.start
+                }
+
+                pub const fn end(&self) -> $name<S> {
+                    self.end
+                }
+            }
+
+            impl<S: FrameSize> Iterator for [<$name Range>]<S> {
+                type Item = $name<S>;
+                fn next(&mut self) -> Option<Self::Item> {
+                    if self.start.addr() < self.end.addr() {
+                        let frame = self.start;
+                        self.start = unsafe { $name::new_unchecked(self.start.addr() + S::PAGE_SIZE) };
+                        Some(frame)
+                    } else {
+                        None
+                    }
+                }
+            }
         }
-    }
-
-    pub const unsafe fn new_unchecked(addr: VAddr) -> Self {
-        Self {
-            addr,
-            size: PhantomData,
-        }
-    }
-
-    pub const fn addr(&self) -> VAddr {
-        self.addr
-    }
+    };
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct FrameRange<S: FrameSize> {
-    start: Frame<S>,
-    end: Frame<S>,
-}
-
-impl<S: FrameSize> FrameRange<S> {
-    pub const fn new(start: Frame<S>, end: Frame<S>) -> Self {
-        Self { start, end }
-    }
-
-    pub const fn from_start_count(start: Frame<S>, count: u64) -> Self {
-        Self {
-            start,
-            end: unsafe { Frame::new_unchecked(start.addr().add_canonical(count * S::PAGE_SIZE)) },
-        }
-    }
-}
-
-impl<S: FrameSize> Iterator for FrameRange<S> {
-    type Item = Frame<S>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.start.addr() < self.end.addr() {
-            let frame = self.start;
-            self.start =
-                unsafe { Frame::new_unchecked(self.start.addr().add_canonical(S::PAGE_SIZE)) };
-            Some(frame)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct Page<S: FrameSize> {
-    addr: PAddr,
-    size: PhantomData<S>,
-}
-
-crate::forward_fmt!(
-    impl<S: FrameSize> LowerHex, UpperHex for Page<S> => PAddr : |this: &Self| this.addr
-);
-
-#[derive(Clone, Copy, Debug)]
-pub struct PageAlignError;
-
-impl<S: FrameSize> Page<S> {
-    pub const fn new(addr: PAddr) -> Result<Self, PageAlignError> {
-        if addr.as_u64() % S::PAGE_SIZE == 0 {
-            Ok(Self {
-                addr,
-                size: PhantomData,
-            })
-        } else {
-            Err(PageAlignError)
-        }
-    }
-
-    pub const fn new_align_up(addr: PAddr) -> Self {
-        Self {
-            addr: PAddr::new(ceil_divu64(addr.as_u64(), S::PAGE_SIZE)),
-            size: PhantomData,
-        }
-    }
-
-    pub const fn new_align_down(addr: PAddr) -> Self {
-        Self {
-            addr: PAddr::new(addr.as_u64() / S::PAGE_SIZE * S::PAGE_SIZE),
-            size: PhantomData,
-        }
-    }
-
-    pub const unsafe fn new_unchecked(addr: PAddr) -> Self {
-        Self {
-            addr,
-            size: PhantomData,
-        }
-    }
-
-    pub const fn addr(&self) -> PAddr {
-        self.addr
-    }
-}
+frame!(PFrame: PAddr);
+frame!(VFrame: VAddr);
 
 pub trait FrameSize: Clone + Copy + Debug {
     const PAGE_SIZE: u64;
@@ -148,8 +107,8 @@ pub trait FrameSize: Clone + Copy + Debug {
 
 pub unsafe trait FrameAllocator {
     type Error;
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<Frame<S>, Self::Error>;
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, frame: Frame<S>) -> Result<(), Self::Error>;
+    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<VFrame<S>, Self::Error>;
+    unsafe fn dealloc_frame<S: FrameSize>(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
 }
 
 bitflags! {
@@ -187,32 +146,24 @@ pub enum UnmapError<FE> {
     NotMapped,
     InvalidFrame,
     InvalidPage,
-    FrameAllocError(FE)
+    FrameAllocError(FE),
 }
 
 pub trait Mapper<S: FrameSize> {
     type Flush: MapperFlush;
     unsafe fn map<A: FrameAllocator + ?Sized>(
         &mut self,
-        page: Page<S>,
-        frame: Frame<S>,
+        pframe: PFrame<S>,
+        vframe: VFrame<S>,
         flags: MapFlags,
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>>;
 
     unsafe fn unmap<A: FrameAllocator + ?Sized>(
         &mut self,
-        frame: Frame<S>,
+        vframe: VFrame<S>,
         alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>>;
-
-    // unsafe fn map_range<A: FrameAlloc + ?Sized>(
-    //     &mut self,
-    //     page: Page<S>,
-    //     range: FrameRange<S>,
-    //     flags: MapFlags,
-    //     alloc: &mut A,
-    // ) -> Result<Self::Flush, MapError>;
 }
 
 pub struct LoggingMapper<M> {
@@ -235,8 +186,8 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
     type Flush = M::Flush;
     unsafe fn map<A: FrameAllocator + ?Sized>(
         &mut self,
-        page: Page<S>,
-        frame: Frame<S>,
+        page: PFrame<S>,
+        frame: VFrame<S>,
         flags: MapFlags,
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
@@ -245,7 +196,7 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
     }
     unsafe fn unmap<A: FrameAllocator + ?Sized>(
         &mut self,
-        frame: Frame<S>,
+        frame: VFrame<S>,
         alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
         crate::log::debug!("UNMAP {:016x}", frame);

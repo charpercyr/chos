@@ -223,7 +223,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
         assert_eq!(ptr.as_ref().len(), self.meta.layout.size());
         let vaddr = VAddr::new_unchecked(ptr.as_ptr() as *mut u8 as u64);
         let vaddr = <F::Slab as Slab>::frame_containing(vaddr).vaddr();
-        let slab: &mut SlabHeader<F> = &mut *vaddr.as_ptr_mut();
+        let slab: &mut SlabHeader<F> = &mut *vaddr.as_mut_ptr();
         let was_full = slab.is_full(&self.meta);
         slab.dealloc(ptr, &self.meta);
         if was_full {
@@ -270,7 +270,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
 
     unsafe fn alloc_new_slab(&mut self) -> Result<NonNull<SlabHeader<F>>, AllocError> {
         let frame = self.frame_alloc.alloc_slab()?;
-        let ptr: *mut SlabHeader<F> = frame.vaddr().as_ptr_mut();
+        let ptr: *mut SlabHeader<F> = frame.vaddr().as_mut_ptr();
         write_bytes(ptr.cast::<u8>(), 0, <F::Slab as Slab>::SIZE);
         write(
             ptr,

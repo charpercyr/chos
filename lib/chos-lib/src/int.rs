@@ -60,3 +60,34 @@ pub const fn next_pow2u64(mut value: u64) -> u64 {
     value |= value >> 32;
     value + 1
 }
+
+pub trait IntSplit {
+    type Split;
+    fn split(self) -> (Self::Split, Self::Split);
+    fn join(h: Self::Split, l: Self::Split) -> Self;
+}
+
+macro_rules! impl_int_split {
+    ($t:ty, $s:ty) => {
+        impl IntSplit for $t {
+            type Split = $s;
+            fn split(self) -> ($s, $s) {
+                const SHIFT: usize = core::mem::size_of::<$s>() * 8;
+                ((self >> SHIFT) as $s, (self & ((1 << SHIFT) - 1)) as $s)
+            }
+            fn join(h: $s, l: $s) -> $t {
+                const SHIFT: usize = core::mem::size_of::<$s>() * 8;
+                ((h as $t) << SHIFT) | (l as $t)
+            }
+        }
+    };
+}
+impl_int_split!(u128, u64);
+impl_int_split!(u64, u32);
+impl_int_split!(u32, u16);
+impl_int_split!(u16, u8);
+
+#[cfg(target_pointer_width = "32")]
+impl_int_split!(usize, u16);
+#[cfg(target_pointer_width = "64")]
+impl_int_split!(usize, u32);

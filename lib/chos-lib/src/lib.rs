@@ -7,12 +7,14 @@
 #![feature(core_intrinsics)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
+#![feature(const_raw_ptr_deref)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 #![feature(inherent_associated_types)]
 #![feature(maybe_uninit_extra)]
 #![feature(negative_impls)]
 #![feature(never_type)]
+#![feature(ptr_metadata)]
 
 pub mod arch;
 

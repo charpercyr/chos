@@ -15,14 +15,14 @@ pub struct PAlloc {
 
 unsafe impl FrameAllocator for PAlloc {
     type Error = !;
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<Frame<S>, !> {
+    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<VFrame<S>, !> {
         let ptr = self.pcur;
         self.pcur = self.pcur.add(1);
         write(ptr, PageTable::empty());
-        Ok(Frame::new_unchecked(VAddr::new_unchecked(ptr as u64)))
+        Ok(VFrame::new_unchecked(VAddr::new_unchecked(ptr as u64)))
     }
 
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: Frame<S>) -> Result<(), !> {
+    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: VFrame<S>) -> Result<(), !> {
         panic!("Cannot dealloc with this deallocator")
     }
 }
@@ -57,15 +57,15 @@ impl PAlloc {
             mapper
                 .mapper
                 .map(
-                    Page::<FrameSize4K>::new_unchecked(PAddr::new(cur as u64)),
-                    Frame::new_unchecked(vaddr),
+                    PFrame::<FrameSize4K>::new_unchecked(PAddr::new(cur as u64)),
+                    VFrame::new_unchecked(vaddr),
                     MapFlags::WRITE,
                     self,
                 )
                 .unwrap()
                 .ignore();
             cur = cur.add(1);
-            vaddr = VAddr::new(vaddr.as_u64() + PAGE_SIZE64)
+            vaddr = VAddr::try_new(vaddr.as_u64() + PAGE_SIZE64)
                 .expect("Got invalid vaddr, this is very unlikely");
         }
     }

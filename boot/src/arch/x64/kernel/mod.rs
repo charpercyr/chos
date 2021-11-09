@@ -14,7 +14,7 @@ use chos_lib::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_lib::int::CeilDiv;
 use chos_lib::iter::IteratorExt;
 use chos_lib::log::debug;
-use chos_lib::mm::{Frame, MapFlags, Mapper, MapperFlush, Page};
+use chos_lib::mm::{VFrame, MapFlags, Mapper, MapperFlush, PFrame};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::BootMapper;
@@ -121,8 +121,8 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             mapper
                 .mapper
                 .map(
-                    Page::<FrameSize4K>::new_unchecked(PAddr::new(paddr)),
-                    Frame::new_unchecked(VAddr::new(vaddr).unwrap()),
+                    PFrame::<FrameSize4K>::new_unchecked(PAddr::new(paddr)),
+                    VFrame::new_unchecked(VAddr::try_new(vaddr).unwrap()),
                     map_flags,
                     &mut palloc,
                 )
@@ -143,7 +143,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             size: (pmap_end - pmap_start) as usize,
         },
         pt: KernelMemEntry {
-            phys: phys::KERNEL_DATA_BASE.add(pmap_end).sub(pmap_start),
+            phys: phys::KERNEL_DATA_BASE + pmap_end - pmap_start,
             virt: virt::PAGING_BASE,
             size: palloc.total_size(),
         },

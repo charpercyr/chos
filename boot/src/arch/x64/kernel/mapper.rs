@@ -2,7 +2,7 @@ use chos_lib::arch::mm::{FrameSize1G, OffsetMapper};
 use chos_lib::arch::x64::mm::{PAddr, VAddr};
 use chos_lib::int::CeilDiv;
 use chos_lib::log::debug;
-use chos_lib::mm::{Frame, MapFlags, Mapper, MapperFlush, Page};
+use chos_lib::mm::{VFrame, MapFlags, Mapper, MapperFlush, PFrame};
 use multiboot2::MemoryMapTag;
 
 use super::palloc::PAlloc;
@@ -40,8 +40,8 @@ impl BootMapper {
             );
             self.mapper
                 .map(
-                    Page::<FrameSize1G>::new_unchecked(PAddr::new(i * GB)),
-                    Frame::new_unchecked(VAddr::new_unchecked(i * GB + base.as_u64())),
+                    PFrame::<FrameSize1G>::new_unchecked(PAddr::new(i * GB)),
+                    VFrame::new_unchecked(VAddr::new_unchecked(i * GB + base.as_u64())),
                     MapFlags::EXEC | MapFlags::WRITE,
                     alloc,
                 )

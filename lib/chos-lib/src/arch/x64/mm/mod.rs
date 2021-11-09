@@ -1,129 +1,263 @@
-
 mod mapper;
+mod paging;
+
+use core::{fmt, ops};
+use core::ptr::{from_raw_parts, from_raw_parts_mut, Pointee};
+
+use crate::int::align_upu64;
+
 pub use mapper::*;
-
-use core::fmt;
-use core::ops::{Index, IndexMut};
-use core::slice::{Iter, IterMut};
-
-use modular_bitfield::bitfield;
-use modular_bitfield::specifiers::*;
-
-use crate::mm::FrameSize;
-
-pub const PAGE_TABLE_SIZE: usize = 512;
+pub use paging::*;
 
 pub const PAGE_SHIFT: u32 = 12;
 pub const PAGE_MASK: u64 = (1 << PAGE_SHIFT) - 1;
 pub const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 pub const PAGE_SIZE64: u64 = 1 << PAGE_SHIFT;
 
-macro_rules! impl_addr_fns {
-    ($ty:ty) => {
-        impl $ty {
-            pub const fn null() -> Self {
-                Self(0)
-            }
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct PAddr(u64);
 
-            pub const fn as_u64(self) -> u64 {
-                self.0
-            }
+impl PAddr {
+    pub const fn null() -> Self {
+        Self(0)
+    }
 
-            pub const fn is_page_aligned(self) -> bool {
-                self.0 & PAGE_MASK == 0
-            }
+    pub const fn new(v: u64) -> Self {
+        Self(v)
+    }
 
-            pub const fn align_page(self) -> Self {
-                Self(self.0 & !PAGE_MASK)
-            }
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
 
-            pub const fn align_page_up(self) -> Self {
-                Self((self.0 + PAGE_SIZE64 - 1) / PAGE_SIZE64 * PAGE_SIZE64)
-            }
+    pub const fn is_page_aligned(self) -> bool {
+        (self.0 & PAGE_MASK) == 0
+    }
 
-            pub const fn page(self) -> u64 {
-                self.0 >> 12
-            }
+    pub const fn align_page_up(self) -> Self {
+        Self::new(align_upu64(self.0, PAGE_SIZE64))
+    }
 
-            pub unsafe fn offset(self, o: i64) -> Self {
-                if o < 0 {
-                    Self(self.0 - (-o as u64))
-                } else {
-                    Self(self.0 + o as u64)
-                }
-            }
+    pub const fn align_page_down(self) -> Self {
+        Self::new(self.0 / PAGE_SIZE64 * PAGE_SIZE64)
+    }
 
-            pub const unsafe fn add(self, o: u64) -> Self {
-                Self(self.0 + o)
-            }
+    pub const fn page(self) -> u64 {
+        self.0 >> PAGE_SHIFT
+    }
 
-            pub const unsafe fn sub(self, o: u64) -> Self {
-                Self(self.0 - o)
-            }
-        }
+    pub const fn add_u64(self, rhs: u64) -> Self {
+        Self::new(self.0 + rhs)
+    }
 
-        impl fmt::Debug for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, concat!(stringify!($ty), "({:#x})"), self.0)
-            }
-        }
-
-        impl fmt::Display for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "{:#x}", self.0)
-            }
-        }
-
-        impl fmt::Pointer for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "{:#x}", self.0)
-            }
-        }
-
-        crate::forward_fmt!(
-            impl LowerHex, UpperHex for $ty => u64 : |this: &Self| this.0
-        );
-    };
+    pub const fn add_paddr(self, rhs: PAddr) -> Self {
+        Self::new(self.0 + rhs.0)
+    }
 }
+
+impl ops::Add<u64> for PAddr {
+    type Output = PAddr;
+    fn add(self, rhs: u64) -> Self::Output {
+        PAddr::new(self.0 + rhs)
+    }
+}
+
+impl ops::Add<PAddr> for u64 {
+    type Output = PAddr;
+    fn add(self, rhs: PAddr) -> Self::Output {
+        PAddr::new(self + rhs.0)
+    }
+}
+
+impl ops::Add for PAddr {
+    type Output = PAddr;
+    fn add(self, rhs: Self) -> Self::Output {
+        PAddr::new(self.0 + rhs.0)
+    }
+}
+
+impl ops::Sub<u64> for PAddr {
+    type Output = PAddr;
+    fn sub(self, rhs: u64) -> Self::Output {
+        PAddr::new(self.0 - rhs)
+    }
+}
+
+impl ops::Sub<PAddr> for u64 {
+    type Output = PAddr;
+    fn sub(self, rhs: PAddr) -> Self::Output {
+        PAddr::new(self - rhs.0)
+    }
+}
+
+impl ops::Sub for PAddr {
+    type Output = PAddr;
+    fn sub(self, rhs: Self) -> Self::Output {
+        PAddr::new(self.0 - rhs.0)
+    }
+}
+
+crate::forward_fmt!(impl LowerHex, UpperHex for PAddr => u64 : |this: &Self| (*this).as_u64());
+impl fmt::Debug for PAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PAddr(0x{:x})", self.0)
+    }
+}
+impl fmt::Display for PAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(self, f)
+    }
+}
+
+const fn is_canonical(addr: u64) -> bool {
+    const MASK: u64 = 0xffff_8000_0000_0000;
+    (addr & MASK) == 0 || (addr & MASK) == MASK
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NonCanonicalError;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct VAddr(u64);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VaddrError {
-    NonCanonical,
-}
-
 impl VAddr {
-    pub const fn new(v: u64) -> Result<Self, VaddrError> {
-        if v & (1 << 47) != 0 && v & 0xffff_0000_0000_0000 != 0xffff_0000_0000_0000 {
-            Err(VaddrError::NonCanonical)
-        } else if (v & (1 << 47)) == 0 && v & 0xffff_0000_0000_0000 != 0 {
-            Err(VaddrError::NonCanonical)
+    pub const fn null() -> Self {
+        Self(0)
+    }
+
+    pub const fn try_new(addr: u64) -> Result<Self, NonCanonicalError> {
+        if is_canonical(addr) {
+            Ok(Self(addr))
         } else {
-            Ok(Self(v))
+            Err(NonCanonicalError)
         }
     }
 
-    pub const fn make_canonical(mut v: u64) -> Self {
-        v |= if v & (1 << 47) != 0 {
-            0xffff_0000_0000_0000
+    pub const fn new(addr: u64) -> Self {
+        match Self::try_new(addr) {
+            Ok(vaddr) => vaddr,
+            Err(_) => panic!("Non canonical address"),
+        }
+    }
+
+    pub const unsafe fn new_unchecked(addr: u64) -> Self {
+        Self(addr)
+    }
+
+    pub const fn make_canonical(addr: u64) -> Self {
+        if (addr & (1 << 47)) != 0 {
+            Self(addr | 0xffff_0000_0000_0000)
         } else {
-            0
-        };
-        Self(v)
+            Self(addr & 0x0000_ffff_ffff_ffff)
+        }
     }
 
-    pub const unsafe fn new_unchecked(v: u64) -> Self {
-        Self(v)
+    pub const fn as_u64(self) -> u64 {
+        self.0
     }
 
-    pub fn from_ptr<T>(ptr: *const T) -> Self {
-        Self(ptr as u64)
+    pub const fn is_page_aligned(self) -> bool {
+        (self.0 & PAGE_MASK) == 0
     }
 
-    pub fn split(self) -> (u16, u16, u16, u16, u16) {
+    pub const fn align_page_up(self) -> Self {
+        Self::new(align_upu64(self.0, PAGE_SIZE64))
+    }
+
+    pub const fn align_page_down(self) -> Self {
+        Self::new(self.0 / PAGE_SIZE64 * PAGE_SIZE64)
+    }
+
+    pub const fn page(self) -> u64 {
+        self.0 >> PAGE_SHIFT
+    }
+
+    pub const fn as_ptr<T>(self) -> *const T {
+        self.0 as _
+    }
+
+    pub const fn as_mut_ptr<T>(self) -> *mut T {
+        self.0 as _
+    }
+
+    pub const fn from_raw_parts_ptr<T: Pointee + ?Sized>(self, metadata: T::Metadata) -> *const T {
+        from_raw_parts(self.as_ptr(), metadata)
+    }
+
+    pub const fn from_raw_parts_mut_ptr<T: Pointee + ?Sized>(self, metadata: T::Metadata) -> *mut T {
+        from_raw_parts_mut(self.as_mut_ptr(), metadata)
+    }
+
+    pub const unsafe fn as_ref<'a, T>(self) -> &'a T {
+        &*self.as_ptr()
+    }
+
+    pub const unsafe fn as_mut<'a, T>(self) -> &'a mut T {
+        &mut *self.as_mut_ptr()
+    }
+
+    pub const unsafe fn from_raw_parts<'a, T: Pointee + ?Sized>(self, metadata: T::Metadata) -> &'a T {
+        &*self.from_raw_parts_ptr(metadata)
+    }
+
+    pub const unsafe fn from_raw_parts_mut<'a, T: Pointee + ?Sized>(
+        self,
+        metadata: T::Metadata,
+    ) -> &'a mut T {
+        &mut *self.from_raw_parts_mut_ptr(metadata)
+    }
+
+    pub const fn try_add_u64(self, other: u64) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 + other)
+    }
+
+    pub const fn add_u64(self, other: u64) -> Self {
+        Self::new(self.0 + other)
+    }
+
+    pub const fn try_add_paddr(self, other: PAddr) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 + other.0)
+    }
+
+    pub const fn add_paddr(self, other: PAddr) -> Self {
+        Self::new(self.0 + other.0)
+    }
+
+    pub const fn try_add_vaddr(self, other: VAddr) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 + other.0)
+    }
+
+    pub const fn add_vaddr(self, other: VAddr) -> Self {
+        Self::new(self.0 + other.0)
+    }
+
+    pub const fn try_sub_u64(self, other: u64) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 - other)
+    }
+
+    pub const fn sub_u64(self, other: u64) -> Self {
+        Self::new(self.0 - other)
+    }
+
+    pub const fn try_sub_paddr(self, other: PAddr) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 - other.0)
+    }
+
+    pub const fn sub_paddr(self, other: PAddr) -> Self {
+        Self::new(self.0 - other.0)
+    }
+
+    pub const fn try_sub_vaddr(self, other: VAddr) -> Result<Self, NonCanonicalError> {
+        Self::try_new(self.0 - other.0)
+    }
+
+    pub const fn sub_vaddr(self, other: VAddr) -> Self {
+        Self::new(self.0 - other.0)
+    }
+
+    pub const fn split(self) -> (u16, u16, u16, u16, u16) {
         let addr = self.0;
         let off = (addr & 0xfff) as u16;
         let p1 = ((addr & (0x1ff << 12)) >> 12) as u16;
@@ -132,207 +266,87 @@ impl VAddr {
         let p4 = ((addr & (0x1ff << 39)) >> 39) as u16;
         (p4, p3, p2, p1, off)
     }
-
-    pub const fn add_canonical(self, o: u64) -> VAddr {
-        VAddr::make_canonical(self.0 + o)
-    }
-
-    pub unsafe fn as_ptr<T>(self) -> *const T {
-        self.0 as _
-    }
-
-    pub unsafe fn as_ptr_mut<T>(self) -> *mut T {
-        self.0 as _
-    }
-    
-    pub unsafe fn as_ref<'a, T>(self) -> &'a T {
-        &*self.as_ptr()
-    }
-
-    pub unsafe fn as_mut<'a, T>(self) -> &'a mut T {
-        &mut *self.as_ptr_mut()
-    }
-
-    pub unsafe fn as_slice<'a, T>(self, len: usize) -> &'a [T] {
-        core::slice::from_raw_parts(self.as_ptr(), len)
-    }
-
-    pub unsafe fn as_slice_mut<'a, T>(self, len: usize) -> &'a mut [T] {
-        core::slice::from_raw_parts_mut(self.as_ptr_mut(), len)
-    }
-}
-impl_addr_fns!(VAddr);
-
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct PAddr(u64);
-
-impl PAddr {
-    pub const fn new(v: u64) -> Self {
-        Self(v)
-    }
-}
-impl_addr_fns!(PAddr);
-
-#[bitfield(bits = 64)]
-#[derive(Clone, Copy, Debug)]
-pub struct PageEntry {
-    pub present: bool,
-    pub writable: bool,
-    pub user: bool,
-    pub write_through: bool,
-    pub no_cache: bool,
-    pub accessed: bool,
-    pub dirty: bool,
-    pub huge_page: bool,
-    pub global: bool,
-    pub os0: B3,
-    addr: B40,
-    pub os1: B11,
-    pub no_execute: bool,
 }
 
-impl PageEntry {
-    pub const fn zero() -> Self {
-        Self::new()
+crate::forward_fmt!(impl Pointer for VAddr => *const () : |this: &Self| this.as_ptr::<()>());
+crate::forward_fmt!(impl LowerHex, UpperHex for VAddr => u64 : |this: &Self| this.as_u64());
+impl fmt::Debug for VAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VAddr(0x{:x})", self.0)
     }
-
-    pub fn phys_addr(&self) -> PAddr {
-        PAddr::new(self.addr() << 12)
-    }
-
-    pub fn set_phys_addr(&mut self, addr: PAddr) {
-        assert!(addr.is_page_aligned(), "Address is not page aligned");
-        self.set_addr(addr.page());
-    }
-
-    pub fn with_phys_addr(self, addr: PAddr) -> Self {
-        assert!(addr.is_page_aligned(), "Address is not page aligned");
-        self.with_addr(addr.page())
+}
+impl fmt::Display for VAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(self, f)
     }
 }
 
-#[derive(Clone, Debug)]
-#[repr(C, align(4096))]
-pub struct PageTable {
-    entries: [PageEntry; PAGE_TABLE_SIZE],
-}
-
-impl PageTable {
-    pub const fn empty() -> Self {
-        Self {
-            entries: [PageEntry::zero(); PAGE_TABLE_SIZE],
-        }
-    }
-
-    pub fn iter(&self) -> PageTableIter<'_> {
-        PageTableIter {
-            iter: self.entries.iter(),
-        }
-    }
-
-    pub fn iter_mut(&mut self) -> PageTableIterMut<'_> {
-        PageTableIterMut {
-            iter: self.entries.iter_mut(),
-        }
-    }
-
-    pub unsafe fn set_page_table(&mut self) {
-        asm! {
-            "mov %rax, %cr3",
-            in("rax") self,
-            options(att_syntax, nostack),
-        }
-    }
-
-    pub unsafe fn get_current_page_table() -> &'static mut Self {
-        let pgt: *mut Self;
-        asm! {
-            "mov %cr3, %rax",
-            lateout("rax") pgt,
-            options(att_syntax, nostack, nomem),
-        }
-        &mut *pgt
+impl ops::Add<u64> for VAddr {
+    type Output = VAddr;
+    fn add(self, rhs: u64) -> Self::Output {
+        VAddr::new(self.0 + rhs)
     }
 }
 
-impl Index<u16> for PageTable {
-    type Output = PageEntry;
-
-    fn index(&self, index: u16) -> &Self::Output {
-        &self.entries[index as usize]
+impl ops::Add<VAddr> for u64 {
+    type Output = VAddr;
+    fn add(self, rhs: VAddr) -> Self::Output {
+        VAddr::new(self + rhs.0)
     }
 }
 
-impl IndexMut<u16> for PageTable {
-    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
-        &mut self.entries[index as usize]
+impl ops::Add<PAddr> for VAddr {
+    type Output = VAddr;
+    fn add(self, rhs: PAddr) -> Self::Output {
+        VAddr::new(self.0 + rhs.0)
     }
 }
 
-pub struct PageTableIter<'a> {
-    iter: Iter<'a, PageEntry>,
-}
-
-impl<'a> Iterator for PageTableIter<'a> {
-    type Item = &'a PageEntry;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+impl ops::Add<VAddr> for PAddr {
+    type Output = VAddr;
+    fn add(self, rhs: VAddr) -> Self::Output {
+        VAddr::new(self.0 + rhs.0)
     }
 }
 
-impl<'a> IntoIterator for &'a PageTable {
-    type Item = &'a PageEntry;
-    type IntoIter = PageTableIter<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+impl ops::Add for VAddr {
+    type Output = VAddr;
+    fn add(self, rhs: Self) -> Self::Output {
+        VAddr::new(self.0 + rhs.0)
     }
 }
 
-impl<'a> IntoIterator for &'a mut PageTable {
-    type Item = &'a mut PageEntry;
-    type IntoIter = PageTableIterMut<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter_mut()
+impl ops::Sub<u64> for VAddr {
+    type Output = VAddr;
+    fn sub(self, rhs: u64) -> Self::Output {
+        VAddr::new(self.0 - rhs)
     }
 }
 
-pub struct PageTableIterMut<'a> {
-    iter: IterMut<'a, PageEntry>,
-}
-
-impl<'a> Iterator for PageTableIterMut<'a> {
-    type Item = &'a mut PageEntry;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+impl ops::Sub<VAddr> for u64 {
+    type Output = VAddr;
+    fn sub(self, rhs: VAddr) -> Self::Output {
+        VAddr::new(self - rhs.0)
     }
 }
 
-pub fn make_canonical(addr: u64) -> u64 {
-    if (addr & (1 << 47)) != 0 {
-        addr | 0xffff_0000_0000_0000
-    } else {
-        addr & 0x0000_ffff_ffff_ffff
+impl ops::Sub<PAddr> for VAddr {
+    type Output = VAddr;
+    fn sub(self, rhs: PAddr) -> Self::Output {
+        VAddr::new(self.0 - rhs.0)
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct FrameSize4K;
-impl FrameSize for FrameSize4K {
-    const PAGE_SIZE: u64 = 4096;
-    const DEBUG_STR: &'static str = "4K";
+impl ops::Sub<VAddr> for PAddr {
+    type Output = VAddr;
+    fn sub(self, rhs: VAddr) -> Self::Output {
+        VAddr::new(self.0 - rhs.0)
+    }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct FrameSize2M;
-impl FrameSize for FrameSize2M {
-    const PAGE_SIZE: u64 = 512 * 4096;
-    const DEBUG_STR: &'static str = "2M";
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct FrameSize1G;
-impl FrameSize for FrameSize1G {
-    const PAGE_SIZE: u64 = 512 * 512 * 4096;
-    const DEBUG_STR: &'static str = "1G";
+impl ops::Sub for VAddr {
+    type Output = VAddr;
+    fn sub(self, rhs: Self) -> Self::Output {
+        VAddr::new(self.0 - rhs.0)
+    }
 }
