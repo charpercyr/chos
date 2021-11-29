@@ -4,14 +4,16 @@
 #![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
+#![feature(build_hasher_simple_hash_one)]
 #![feature(core_intrinsics)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
-#![feature(const_raw_ptr_deref)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
+#![feature(generic_associated_types)]
 #![feature(inherent_associated_types)]
 #![feature(maybe_uninit_extra)]
+#![feature(maybe_uninit_uninit_array)]
 #![feature(negative_impls)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
@@ -21,9 +23,6 @@ pub mod arch;
 pub mod boot;
 
 mod macros;
-
-mod either;
-pub use either::*;
 
 pub mod elf;
 

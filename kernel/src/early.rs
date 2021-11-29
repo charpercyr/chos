@@ -51,9 +51,9 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     }
     unsafe { chos_lib::log::set_handler(info.early_log) };
 
-    info!("####################");
-    info!("### EARLY KERNEL ###");
-    info!("####################");
+    debug!("####################");
+    debug!("### EARLY KERNEL ###");
+    debug!("####################");
 
     setup_early_memory_allocator(info);
 

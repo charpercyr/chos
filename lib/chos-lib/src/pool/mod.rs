@@ -1,10 +1,12 @@
 mod arc;
+mod boxed;
 #[cfg(feature = "alloc")]
 use alloc::alloc::Global;
 use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
 
 pub use arc::*;
+pub use boxed::*;
 
 use crate::init::ConstInit;
 
@@ -35,10 +37,10 @@ pub fn handle_alloc_error(layout: Layout) -> ! {
     )
 }
 
+pub unsafe trait ConstPool<T>: Pool<T> + ConstInit + Copy {}
+
 #[cfg(feature = "alloc")]
 unsafe impl<T> ConstPool<T> for Global {}
-
-pub unsafe trait ConstPool<T>: Pool<T> + ConstInit {}
 
 #[macro_export]
 macro_rules! pool {

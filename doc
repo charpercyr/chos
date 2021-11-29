@@ -1,0 +1,11 @@
+#!/bin/bash
+
+cwd=$(realpath $(dirname $0))
+
+pushd $cwd &> /dev/null
+
+cargo doc --workspace --document-private-items --no-deps
+e=$?
+
+popd &> /dev/null
+exit $e

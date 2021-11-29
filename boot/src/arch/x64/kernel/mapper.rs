@@ -2,7 +2,7 @@ use chos_lib::arch::mm::{FrameSize1G, OffsetMapper};
 use chos_lib::arch::x64::mm::{PAddr, VAddr};
 use chos_lib::int::CeilDiv;
 use chos_lib::log::debug;
-use chos_lib::mm::{VFrame, MapFlags, Mapper, MapperFlush, PFrame};
+use chos_lib::mm::{MapFlags, Mapper, MapperFlush, PFrame, VFrame};
 use multiboot2::MemoryMapTag;
 
 use super::palloc::PAlloc;

@@ -15,7 +15,7 @@ use chos_lib::sync::lock::{Lock, RawLock};
 pub trait Slab: Sized {
     const SIZE: usize;
 
-    fn frame_containing(addr: VAddr) -> Self;
+    fn frame_containing(addr: VAddr) -> VAddr;
     fn vaddr(&self) -> VAddr;
 }
 
@@ -32,7 +32,7 @@ struct SlabMeta {
 }
 
 struct SlabHeader<F: SlabAllocator> {
-    link: list::Link<()>,
+    link: list::AtomicLink<()>,
     frame: F::Slab,
 }
 
@@ -114,7 +114,7 @@ impl<F: SlabAllocator> SlabHeader<F> {
 struct SlabAdapter<F: SlabAllocator>(PhantomData<F>);
 impl<F: SlabAllocator> int::Adapter for SlabAdapter<F> {
     type Value = SlabHeader<F>;
-    type Link = list::Link<()>;
+    type Link = list::AtomicLink<()>;
     type Pointer = UnsafeRef<SlabHeader<F>>;
 
     unsafe fn get_link(&self, value: *const Self::Value) -> *const Self::Link {
@@ -222,16 +222,12 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
     pub unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         assert_eq!(ptr.as_ref().len(), self.meta.layout.size());
         let vaddr = VAddr::new_unchecked(ptr.as_ptr() as *mut u8 as u64);
-        let vaddr = <F::Slab as Slab>::frame_containing(vaddr).vaddr();
+        let vaddr = <F::Slab as Slab>::frame_containing(vaddr);
         let slab: &mut SlabHeader<F> = &mut *vaddr.as_mut_ptr();
         let was_full = slab.is_full(&self.meta);
         slab.dealloc(ptr, &self.meta);
         if was_full {
-            let uref = self
-                .full
-                .cursor_mut_from_pointer(slab)
-                .unlink()
-                .expect("Should be a valid cursor");
+            let uref = self.full.cursor_mut_from_pointer(slab).unlink();
             self.stats.full_slabs -= 1;
             if slab.is_empty(&self.meta) {
                 self.stats.empty_slabs += 1;
@@ -244,11 +240,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
             if slab.is_empty(&self.meta) {
                 self.stats.partial_slabs -= 1;
                 self.stats.empty_slabs += 1;
-                let uref = self
-                    .partial
-                    .cursor_mut_from_pointer(slab)
-                    .unlink()
-                    .expect("Should be a valid cursor");
+                let uref = self.partial.cursor_mut_from_pointer(slab).unlink();
                 self.empty.push_front(uref);
             }
         }
@@ -276,7 +268,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
             ptr,
             SlabHeader {
                 frame,
-                link: list::Link::UNLINKED,
+                link: list::AtomicLink::INIT,
             },
         );
         let slab = &mut *ptr;

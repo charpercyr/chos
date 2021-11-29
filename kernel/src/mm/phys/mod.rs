@@ -2,22 +2,22 @@ pub mod raw_alloc;
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
-use chos_config::arch::mm::virt::PHYSICAL_MAP_BASE;
+use chos_config::arch::mm::virt::{self, PHYSICAL_MAP_BASE};
 use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
 use chos_lib::init::ConstInit;
 use chos_lib::intrusive::list;
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool};
+use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
 use chos_lib::sync::fake::FakeLock;
 use chos_lib::sync::lock::Lock;
-use chos_lib::sync::spin::lock::Spinlock;
+use chos_lib::sync::spin::lock::{RawSpinLock, Spinlock};
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
-use super::slab::{ObjectAllocator, Slab, SlabAllocator};
+use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
 
 #[derive(Debug)]
 pub struct Page {
     count: IArcCount,
-    list_link: list::Link<PagePool>,
+    list_link: list::AtomicLink<PagePool>,
     pub paddr: PAddr,
     pub order: u8,
 }
@@ -29,7 +29,8 @@ impl IArcAdapter for Page {
     }
 }
 
-chos_lib::intrusive_adapter!(pub struct PageListAdapter = PagePtr: Page { list_link: list::Link<PagePool> });
+chos_lib::intrusive_adapter!(pub struct PageListBoxAdapter = PageBox: Page { list_link: list::AtomicLink<PagePool> });
+chos_lib::intrusive_adapter!(pub struct PageListArcAdapter = PageArc: Page { list_link: list::AtomicLink<PagePool> });
 
 struct PageSlab {
     vaddr: VAddr,
@@ -42,12 +43,8 @@ impl PageSlab {
 impl Slab for PageSlab {
     const SIZE: usize = PAGE_SIZE << Self::ORDER;
 
-    fn frame_containing(addr: VAddr) -> Self {
-        Self {
-            vaddr: unsafe {
-                VAddr::new_unchecked(((addr.as_u64() as usize) / Self::SIZE * Self::SIZE) as u64)
-            },
-        }
+    fn frame_containing(addr: VAddr) -> VAddr {
+        unsafe { VAddr::new_unchecked(((addr.as_u64() as usize) / Self::SIZE * Self::SIZE) as u64) }
     }
 
     fn vaddr(&self) -> VAddr {
@@ -103,14 +100,15 @@ static PAGE_POOL: PagePoolImpl = unsafe { PagePoolImpl::new() };
 static ALLOC_LOCK: Spinlock<()> = Spinlock::INIT;
 chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 
-pub type PagePtr = IArc<Page, PagePool>;
+pub type PageBox = PoolBox<Page, PagePool>;
+pub type PageArc = IArc<Page, PagePool>;
 
-pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PagePtr, AllocError> {
+pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
     let _guard = ALLOC_LOCK.lock();
     let paddr = raw_alloc::alloc_pages(order, flags)?;
-    IArc::try_new(Page {
+    PoolBox::try_new(Page {
         count: IArcCount::INIT,
-        list_link: list::Link::UNLINKED,
+        list_link: list::AtomicLink::INIT,
         paddr,
         order,
     })
@@ -120,3 +118,36 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PagePtr, Alloc
     })
 }
 
+pub struct MMSlab<const O: u8> {
+    page: PageBox,
+}
+
+impl<const O: u8> Slab for MMSlab<O> {
+    const SIZE: usize = PAGE_SIZE << O;
+    fn frame_containing(addr: VAddr) -> VAddr {
+        unsafe { VAddr::new_unchecked(addr.as_u64() / (Self::SIZE as u64) * (Self::SIZE as u64)) }
+    }
+    fn vaddr(&self) -> VAddr {
+        self.page.paddr + virt::PHYSICAL_MAP_BASE
+    }
+}
+
+pub struct MMSlabAllocator<const O: u8>;
+
+impl<const O: u8> ConstInit for MMSlabAllocator<O> {
+    const INIT: Self = Self;
+}
+
+unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
+    type Slab = MMSlab<O>;
+    unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
+        Ok(MMSlab {
+            page: alloc_pages(O, AllocFlags::empty())?,
+        })
+    }
+    unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
+        drop(frame)
+    }
+}
+
+pub type MMPoolObjectAllocator<T, const O: u8> = PoolObjectAllocator<RawSpinLock, MMSlabAllocator<O>, T>;

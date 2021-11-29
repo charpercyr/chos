@@ -1,11 +1,12 @@
 use core::alloc::{AllocError, Layout};
+use core::convert::TryFrom;
 use core::fmt;
 use core::marker::{PhantomData, Unpin};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{handle_alloc_error, Pool};
+use super::{handle_alloc_error, ConstPool, Pool, PoolBox};
 use crate::init::ConstInit;
 
 pub struct IArcCount {
@@ -37,7 +38,7 @@ pub struct IArc<T: IArcAdapter, P: Pool<T>> {
 impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
     pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError> {
         value.count().count.fetch_add(1, Ordering::Relaxed);
-        let ptr = unsafe { alloc.allocate()?.cast() };
+        let ptr = unsafe { alloc.allocate()? };
         unsafe { core::ptr::write(ptr.as_ptr(), value) };
         Ok(Self {
             ptr,
@@ -90,10 +91,30 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
     fn get_count(&self) -> &AtomicUsize {
         unsafe { &self.ptr.as_ref().count().count }
     }
+
+    pub fn from_pool_box(b: PoolBox<T, P>) -> Self {
+        let (ptr, alloc) = PoolBox::leak_with_allocator(b);
+        let count = ptr.count();
+        count.count.fetch_add(1, Ordering::Relaxed);
+        Self {
+            ptr: ptr.into(),
+            alloc,
+            value: PhantomData,
+        }
+    }
+
+    pub fn into_pool_box(this: Self) -> Result<PoolBox<T, P>, Self> {
+        if this.is_unique() {
+            this.get_count().fetch_sub(1, Ordering::Relaxed);
+            let (ptr, alloc) = Self::into_raw_with_allocator(this);
+            unsafe { Ok(PoolBox::from_raw_in(ptr as _, alloc)) }
+        } else {
+            Err(this)
+        }
+    }
 }
 
-#[cfg(feature = "alloc")]
-impl<T: IArcAdapter, P: super::ConstPool<T>> IArc<T, P> {
+impl<T: IArcAdapter, P: ConstPool<T>> IArc<T, P> {
     pub fn new(value: T) -> Self {
         return Self::try_new_in(value, P::INIT)
             .unwrap_or_else(|_| super::handle_alloc_error(Layout::new::<T>()));
@@ -150,6 +171,38 @@ impl<T: IArcAdapter, P: Pool<T>> Deref for IArc<T, P> {
     }
 }
 
+impl<T: IArcAdapter + PartialEq, P: Pool<T>> PartialEq for IArc<T, P> {
+    fn eq(&self, other: &Self) -> bool {
+        <T as PartialEq>::eq(self, other)
+    }
+}
+impl<T: IArcAdapter + PartialEq, P: Pool<T>> PartialEq<T> for IArc<T, P> {
+    fn eq(&self, other: &T) -> bool {
+        <T as PartialEq>::eq(self, other)
+    }
+}
+impl<T: IArcAdapter + Eq, P: Pool<T>> Eq for IArc<T, P> {}
+
+impl<T: IArcAdapter + PartialOrd, P: Pool<T>> PartialOrd for IArc<T, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        <T as PartialOrd>::partial_cmp(self, other)
+    }
+}
+impl<T: IArcAdapter + PartialOrd, P: Pool<T>> PartialOrd<T> for IArc<T, P> {
+    fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
+        <T as PartialOrd>::partial_cmp(self, other)
+    }
+}
+impl<T: IArcAdapter + Ord, P: Pool<T>> Ord for IArc<T, P> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        <T as Ord>::cmp(self, other)
+    }
+}
+
+impl<T: IArcAdapter, P: Unpin + Pool<T>> Unpin for IArc<T, P> {}
+unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Sync> Sync for IArc<T, P> {}
+unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Send> Send for IArc<T, P> {}
+
 macro_rules! fmt {
     ($($fmt:ident),* $(,)?) => {
         $(
@@ -170,10 +223,6 @@ impl<T: IArcAdapter, P: Pool<T>> fmt::Pointer for IArc<T, P> {
     }
 }
 
-impl<T: IArcAdapter, P: Unpin + Pool<T>> Unpin for IArc<T, P> {}
-unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Sync> Sync for IArc<T, P> {}
-unsafe impl<T: IArcAdapter + Sync + Send, P: Pool<T> + Send> Send for IArc<T, P> {}
-
 impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::PointerOps for IArc<T, P> {
     type Metadata = P;
     type Target = T;
@@ -182,5 +231,18 @@ impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::PointerOps for IArc<T, P> {
     }
     unsafe fn from_raw(ptr: *const Self::Target, meta: Self::Metadata) -> Self {
         Self::from_raw_in(ptr, meta)
+    }
+}
+
+impl<T: IArcAdapter, P: Pool<T>> From<PoolBox<T, P>> for IArc<T, P> {
+    fn from(b: PoolBox<T, P>) -> Self {
+        Self::from_pool_box(b)
+    }
+}
+
+impl<T: IArcAdapter, P: Pool<T>> TryFrom<IArc<T, P>> for PoolBox<T, P> {
+    type Error = IArc<T, P>;
+    fn try_from(value: IArc<T, P>) -> Result<Self, Self::Error> {
+        IArc::into_pool_box(value)
     }
 }

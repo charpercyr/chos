@@ -21,8 +21,11 @@ macro_rules! frame {
         crate::forward_fmt!(impl<S: FrameSize> Display, LowerHex, UpperHex for $name<S> => $addr : |this: &Self| this.addr);
 
         impl<S: FrameSize> $name<S> {
-            pub fn new(addr: $addr) -> Self {
-                Self::try_new(addr).expect("Invalid address")
+            pub const fn new(addr: $addr) -> Self {
+                match Self::try_new(addr) {
+                    Ok(addr) => addr,
+                    Err(_) => panic!("Address is not frame aligned"),
+                }
             }
 
             pub const fn try_new(addr: $addr) -> Result<Self, FrameAlignError> {
@@ -105,10 +108,10 @@ pub trait FrameSize: Clone + Copy + Debug {
     const DEBUG_STR: &'static str;
 }
 
-pub unsafe trait FrameAllocator {
+pub unsafe trait FrameAllocator<S: FrameSize> {
     type Error;
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<VFrame<S>, Self::Error>;
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
+    unsafe fn alloc_frame(&mut self) -> Result<VFrame<S>, Self::Error>;
+    unsafe fn dealloc_frame(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
 }
 
 bitflags! {
@@ -151,7 +154,8 @@ pub enum UnmapError<FE> {
 
 pub trait Mapper<S: FrameSize> {
     type Flush: MapperFlush;
-    unsafe fn map<A: FrameAllocator + ?Sized>(
+    type PGTFrameSize: FrameSize;
+    unsafe fn map<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
         pframe: PFrame<S>,
         vframe: VFrame<S>,
@@ -159,7 +163,7 @@ pub trait Mapper<S: FrameSize> {
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>>;
 
-    unsafe fn unmap<A: FrameAllocator + ?Sized>(
+    unsafe fn unmap<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
         vframe: VFrame<S>,
         alloc: &mut A,
@@ -184,22 +188,23 @@ impl<M> LoggingMapper<M> {
 }
 impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
     type Flush = M::Flush;
-    unsafe fn map<A: FrameAllocator + ?Sized>(
+    type PGTFrameSize = M::PGTFrameSize;
+    unsafe fn map<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
-        page: PFrame<S>,
-        frame: VFrame<S>,
+        pframe: PFrame<S>,
+        vframe: VFrame<S>,
         flags: MapFlags,
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
-        crate::log::debug!("MAP {:016x} -> {:016x} [{:?}]", page, frame, flags);
-        self.mapper.map(page, frame, flags, alloc)
+        crate::log::debug!("MAP {:016x} ({}) -> {:016x} [{:?}]", vframe, S::DEBUG_STR, pframe, flags);
+        self.mapper.map(pframe, vframe, flags, alloc)
     }
-    unsafe fn unmap<A: FrameAllocator + ?Sized>(
+    unsafe fn unmap<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
         frame: VFrame<S>,
         alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
-        crate::log::debug!("UNMAP {:016x}", frame);
+        crate::log::debug!("UNMAP {:016x} ({})", frame, S::DEBUG_STR);
         self.mapper.unmap(frame, alloc)
     }
 }

@@ -15,6 +15,7 @@
 
 extern crate alloc;
 
+mod arch;
 mod dummy;
 mod early;
 mod mm;

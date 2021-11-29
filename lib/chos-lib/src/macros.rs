@@ -1,6 +1,7 @@
 #[macro_export]
 macro_rules! offset_of {
     ($field:ident, $container:ty) => {
+        #[allow(unused_unsafe)]
         unsafe {
             use core::mem::MaybeUninit;
             let container: MaybeUninit<$container> = MaybeUninit::uninit();

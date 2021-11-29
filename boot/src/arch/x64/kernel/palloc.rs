@@ -13,16 +13,16 @@ pub struct PAlloc {
     pcur: *mut PageTable,
 }
 
-unsafe impl FrameAllocator for PAlloc {
+unsafe impl FrameAllocator<FrameSize4K> for PAlloc {
     type Error = !;
-    unsafe fn alloc_frame<S: FrameSize>(&mut self) -> Result<VFrame<S>, !> {
+    unsafe fn alloc_frame(&mut self) -> Result<VFrame<FrameSize4K>, !> {
         let ptr = self.pcur;
         self.pcur = self.pcur.add(1);
         write(ptr, PageTable::empty());
         Ok(VFrame::new_unchecked(VAddr::new_unchecked(ptr as u64)))
     }
 
-    unsafe fn dealloc_frame<S: FrameSize>(&mut self, _: VFrame<S>) -> Result<(), !> {
+    unsafe fn dealloc_frame(&mut self, _: VFrame<FrameSize4K>) -> Result<(), !> {
         panic!("Cannot dealloc with this deallocator")
     }
 }

@@ -3,10 +3,12 @@ use alloc::alloc::{GlobalAlloc, Layout};
 struct KAlloc;
 
 unsafe impl GlobalAlloc for KAlloc {
-    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
-        core::ptr::null_mut()
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        unimplemented!("KAlloc::alloc({:?})", layout)
     }
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unimplemented!("KAlloc::dealloc({:p}, {:?}", ptr, layout)
+    }
 }
 
 #[global_allocator]

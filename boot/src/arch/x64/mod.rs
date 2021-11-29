@@ -12,7 +12,7 @@ mod timer;
 use chos_config::arch::mm::virt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
-use chos_lib::log::{debug, info, println, Bytes};
+use chos_lib::log::{debug, println, Bytes};
 use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
@@ -57,9 +57,9 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 "#
     );
 
-    info!("############");
-    info!("### BOOT ###");
-    info!("############");
+    debug!("############");
+    debug!("### BOOT ###");
+    debug!("############");
 
     if let Some(sections) = mbh.elf_sections_tag() {
         symbols::init_symbols(sections);

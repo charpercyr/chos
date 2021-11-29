@@ -1,5 +1,5 @@
 
-use crate::{BuildOpts, Project};
+use crate::{BuildOpts, Project, util::display_cmd_hook};
 
 use duct::cmd;
 
@@ -33,6 +33,6 @@ pub fn build_main(opts: &BuildOpts, config: &[Project]) {
         args.extend(proj.flags.rustc_flags.iter().cloned());
         args.extend(opts.rustc_args.iter().cloned());
 
-        cmd("cargo", args).run().unwrap();
+        cmd("cargo", args).before_spawn(display_cmd_hook).run().unwrap();
     }
 }

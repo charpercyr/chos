@@ -1,4 +1,5 @@
 use core::cell::{Cell, RefCell, UnsafeCell};
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
 pub trait ConstInit: Sized {
@@ -23,6 +24,10 @@ impl<T: ConstInit> ConstInit for RefCell<T> {
 
 impl<T> ConstInit for MaybeUninit<T> {
     const INIT: Self = Self::uninit();
+}
+
+impl<T: ?Sized> ConstInit for PhantomData<T> {
+    const INIT: Self = Self;
 }
 
 #[cfg(feature = "alloc")]

@@ -3,7 +3,7 @@ use core::{ops::{Index, IndexMut}, slice::{Iter, IterMut}};
 
 use modular_bitfield::prelude::*;
 
-use crate::mm::FrameSize;
+use crate::{init::ConstInit, mm::FrameSize};
 
 use super::{PAddr};
 
@@ -153,6 +153,9 @@ pub fn make_canonical(addr: u64) -> u64 {
 
 #[derive(Clone, Copy, Debug)]
 pub struct FrameSize4K;
+impl ConstInit for FrameSize4K {
+    const INIT: Self = Self;
+}
 impl FrameSize for FrameSize4K {
     const PAGE_SIZE: u64 = 4096;
     const DEBUG_STR: &'static str = "4K";
@@ -160,6 +163,9 @@ impl FrameSize for FrameSize4K {
 
 #[derive(Clone, Copy, Debug)]
 pub struct FrameSize2M;
+impl ConstInit for FrameSize2M {
+    const INIT: Self = Self;
+}
 impl FrameSize for FrameSize2M {
     const PAGE_SIZE: u64 = 512 * 4096;
     const DEBUG_STR: &'static str = "2M";
@@ -167,6 +173,9 @@ impl FrameSize for FrameSize2M {
 
 #[derive(Clone, Copy, Debug)]
 pub struct FrameSize1G;
+impl ConstInit for FrameSize1G {
+    const INIT: Self = Self;
+}
 impl FrameSize for FrameSize1G {
     const PAGE_SIZE: u64 = 512 * 512 * 4096;
     const DEBUG_STR: &'static str = "1G";

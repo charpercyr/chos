@@ -2,6 +2,7 @@ use core::panic::PanicInfo;
 
 use chos_lib::arch::x64::backtrace;
 use chos_lib::arch::x64::qemu::*;
+use chos_lib::log::unsafe_error;
 use rustc_demangle::demangle;
 
 use crate::unsafe_println;
@@ -12,8 +13,8 @@ fn panic(info: &PanicInfo) -> ! {
     unsafe {
         let in_panic = IN_PANIC;
         IN_PANIC = true;
-        unsafe_println!("=== PANIC ===");
-        unsafe_println!("{}", info);
+        unsafe_error!("=== PANIC ===");
+        unsafe_error!("{}", info);
         if !in_panic {
             unsafe_println!("BACKTRACE");
             for frame in backtrace().take(200) {
