@@ -1,4 +1,3 @@
-mod acpi;
 mod asm;
 mod cmdline;
 mod intr;
@@ -10,6 +9,8 @@ mod symbols;
 mod timer;
 
 use chos_config::arch::mm::virt;
+use chos_lib::arch::boot::ArchKernelBootInfo;
+use chos_lib::arch::x64::acpi::Rsdt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
 use chos_lib::log::{debug, println, Bytes};
@@ -17,7 +18,6 @@ use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 
-use self::acpi::Rsdt;
 use crate::arch::x64::intr::apic;
 
 struct MpInfo {
@@ -75,9 +75,10 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     intr::initalize(madt);
 
-    let kernel = if let Some(kernel) = mbh.module_tags().find(|m| {
-        matches!(iter_cmdline(m.name()).next(), Some(("kernel", _)))
-    }) {
+    let kernel = if let Some(kernel) = mbh
+        .module_tags()
+        .find(|m| matches!(iter_cmdline(m.name()).next(), Some(("kernel", _))))
+    {
         let kernel = unsafe {
             core::slice::from_raw_parts(
                 kernel.start_address() as *const u8,
@@ -120,6 +121,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             multiboot_header: mbp,
             early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
+            arch: ArchKernelBootInfo { rsdt },
         },
         page_table: unsafe { PageTable::get_current_page_table() },
     };

@@ -3,10 +3,9 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use core::time::Duration;
 
+use chos_lib::arch::x64::acpi::hpet::Hpet;
 use chos_lib::sync::spin::sem::SpinSem;
 use x86_64::structures::idt::InterruptStackFrame;
-
-use super::acpi::hpet::Hpet;
 
 static DONE: SpinSem = SpinSem::new(0);
 
@@ -37,7 +36,10 @@ pub struct DelayInProgressError;
 static IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
-    if IN_PROGRESS.compare_exchange(false, true, Relaxed, Relaxed).is_err() {
+    if IN_PROGRESS
+        .compare_exchange(false, true, Relaxed, Relaxed)
+        .is_err()
+    {
         return Err(DelayInProgressError);
     }
     let hpet = unsafe { &mut HPET }

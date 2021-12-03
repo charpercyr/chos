@@ -1,3 +1,4 @@
+pub mod fadt;
 pub mod hpet;
 pub mod madt;
 pub mod mcfg;
@@ -69,22 +70,23 @@ impl Rsdt {
     }
 
     pub fn madt(&self) -> Option<&madt::Madt> {
-        self.find_table(madt::Madt::SIGNATURE)
-            .map(|hdr| unsafe { transmute(hdr) })
+        unsafe { self.find_table(madt::Madt::SIGNATURE) }
     }
 
     pub fn hpet(&self) -> Option<&hpet::Hpet> {
-        self.find_table(hpet::Hpet::SIGNATURE)
-            .map(|hdr| unsafe { transmute(hdr) })
+        unsafe { self.find_table(hpet::Hpet::SIGNATURE) }
     }
 
     pub fn mcfg(&self) -> Option<&mcfg::Mcfg> {
-        self.find_table(mcfg::Mcfg::SIGNATURE)
-            .map(|hdr| unsafe { transmute(hdr) })
+        unsafe { self.find_table(mcfg::Mcfg::SIGNATURE) }
     }
 
-    fn find_table(&self, sig: &[u8; 4]) -> Option<&SDTHeader> {
-        self.sdts().find(|&sdt| &sdt.sig == sig)
+    pub fn fadt(&self) -> Option<&fadt::Fadt> {
+        unsafe { self.find_table(fadt::Fadt::SIGNATURE) }
+    }
+
+    unsafe fn find_table<T>(&self, sig: &[u8; 4]) -> Option<&T> {
+        self.sdts().find(|&sdt| &sdt.sig == sig).map(|hdr| unsafe { transmute(hdr) })
     }
 
     fn sdt_ptr(&self) -> (*const u32, usize) {

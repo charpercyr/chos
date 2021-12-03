@@ -2,10 +2,9 @@ use core::mem::MaybeUninit;
 use core::ptr::null;
 use core::time::Duration;
 
+use chos_lib::arch::x64::acpi::madt;
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::sync::spin::barrier::Barrier;
-
-use super::acpi::madt;
 
 const MPSTART_RELOC_ADDRESS: *mut u8 = 0x8000 as _;
 

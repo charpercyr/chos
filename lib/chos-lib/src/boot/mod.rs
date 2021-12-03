@@ -1,3 +1,4 @@
+use crate::arch::boot::ArchKernelBootInfo;
 use crate::arch::x64::mm::{PAddr, VAddr};
 use crate::log::LogHandler;
 
@@ -22,6 +23,7 @@ pub struct KernelBootInfo {
     pub elf: usize,
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
+    pub arch: ArchKernelBootInfo,
 }
 
 pub type KernelEntry = fn(&KernelBootInfo, u8) -> !;

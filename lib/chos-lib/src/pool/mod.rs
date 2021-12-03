@@ -39,6 +39,22 @@ pub fn handle_alloc_error(layout: Layout) -> ! {
 
 pub unsafe trait ConstPool<T>: Pool<T> + ConstInit + Copy {}
 
+pub trait ConstPoolExt<T>: ConstPool<T> {
+    fn try_boxed(value: T) -> Result<PoolBox<T, Self>, AllocError> {
+        PoolBox::try_new_in(value, Self::INIT)
+    }
+    fn boxed(value: T) -> PoolBox<T, Self> {
+        PoolBox::new_in(value, Self::INIT)
+    }
+    fn try_arc(value: T) -> Result<IArc<T, Self>, AllocError> where T: IArcAdapter {
+        IArc::try_new_in(value, Self::INIT)
+    }
+    fn arc(value: T) -> IArc<T, Self> where T: IArcAdapter {
+        IArc::new_in(value, Self::INIT)
+    }
+}
+impl<T, P: ConstPool<T>> ConstPoolExt<T> for P {}
+
 #[cfg(feature = "alloc")]
 unsafe impl<T> ConstPool<T> for Global {}
 

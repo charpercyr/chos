@@ -10,7 +10,7 @@ use x86_64::structures::idt::{
     HandlerFunc, InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode,
 };
 
-use super::acpi::madt::{self, Madt};
+use chos_lib::arch::x64::acpi::madt::{self, Madt};
 
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
