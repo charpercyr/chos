@@ -44,7 +44,7 @@ impl<F: SlabAllocator> SlabHeader<F> {
             bitmap.set(i, false);
             Ok(self.get_object_ptr(meta, i))
         } else {
-            return Err(AllocError);
+            Err(AllocError)
         }
     }
 
@@ -97,8 +97,7 @@ impl<F: SlabAllocator> SlabHeader<F> {
 
     const fn bitmap_offset() -> usize {
         let off = size_of::<Self>();
-        let off = align_upusize(off, align_of::<usize>());
-        off
+        align_upusize(off, align_of::<usize>())
     }
 
     const fn object_offset(meta: &SlabMeta, i: usize) -> usize {
@@ -106,8 +105,7 @@ impl<F: SlabAllocator> SlabHeader<F> {
         let off =
             off + size_of::<usize>() * ceil_divusize(meta.object_count, size_of::<usize>() * 8);
         let off = align_upusize(off, align_of::<usize>());
-        let off = off + i * meta.layout.size();
-        off
+        off + i * meta.layout.size()
     }
 }
 
@@ -236,13 +234,11 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
                 self.stats.partial_slabs += 1;
                 self.partial.push_front(uref);
             }
-        } else {
-            if slab.is_empty(&self.meta) {
-                self.stats.partial_slabs -= 1;
-                self.stats.empty_slabs += 1;
-                let uref = self.partial.cursor_mut_from_pointer(slab).unlink();
-                self.empty.push_front(uref);
-            }
+        } else if slab.is_empty(&self.meta) {
+            self.stats.partial_slabs -= 1;
+            self.stats.empty_slabs += 1;
+            let uref = self.partial.cursor_mut_from_pointer(slab).unlink();
+            self.empty.push_front(uref);
         }
         self.stats.allocated_objects -= 1;
         self.stats.free_objects += 1;

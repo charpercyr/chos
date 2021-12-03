@@ -1,5 +1,4 @@
-
-macro dummy ($name:ident, $msg:expr) {
+macro dummy($name:ident, $msg:expr) {
     #[no_mangle]
     extern "C" fn $name() -> ! {
         unreachable!($msg)

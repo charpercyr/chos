@@ -196,7 +196,13 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
         flags: MapFlags,
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
-        crate::log::debug!("MAP {:016x} ({}) -> {:016x} [{:?}]", vframe, S::DEBUG_STR, pframe, flags);
+        crate::log::debug!(
+            "MAP {:016x} ({}) -> {:016x} [{:?}]",
+            vframe,
+            S::DEBUG_STR,
+            pframe,
+            flags
+        );
         self.mapper.map(pframe, vframe, flags, alloc)
     }
     unsafe fn unmap<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(

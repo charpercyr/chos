@@ -1,4 +1,6 @@
-use core::{mem::align_of, ptr::write_bytes, sync::atomic::AtomicPtr};
+use core::mem::align_of;
+use core::ptr::write_bytes;
+use core::sync::atomic::AtomicPtr;
 
 pub unsafe fn write_bytes_slice<T>(ptr: *mut [T], value: u8) {
     write_bytes((*ptr).as_mut_ptr(), value, (*ptr).len())

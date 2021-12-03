@@ -60,11 +60,11 @@ impl<T, P: Pool<T>> PoolBox<T, P> {
         }
     }
 
-    pub fn as_ref(&self) -> &T {
+    pub fn get_ref(&self) -> &T {
         unsafe { self.ptr.as_ref() }
     }
 
-    pub fn as_mut(&mut self) -> &mut T {
+    pub fn get_mut(&mut self) -> &mut T {
         unsafe { self.ptr.as_mut() }
     }
 
@@ -142,19 +142,19 @@ impl<T, P: Pool<T>> Drop for PoolBox<T, P> {
 impl<T, P: Pool<T>> Deref for PoolBox<T, P> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        self.get_ref()
     }
 }
 
 impl<T, P: Pool<T>> DerefMut for PoolBox<T, P> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
+        self.get_mut()
     }
 }
 
 impl<T: Clone, P: Pool<T> + Clone> Clone for PoolBox<T, P> {
     fn clone(&self) -> Self {
-        Self::new_in(self.as_ref().clone(), self.alloc.clone())
+        Self::new_in(self.get_ref().clone(), self.alloc.clone())
     }
 }
 
@@ -201,7 +201,7 @@ macro_rules! fmt {
         $(
             impl<T: fmt::$fmt, P: Pool<T>> fmt::$fmt for PoolBox<T, P> {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    fmt::$fmt::fmt(self.as_ref(), f)
+                    fmt::$fmt::fmt(self.get_ref(), f)
                 }
             }
         )*

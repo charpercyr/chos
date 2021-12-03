@@ -114,6 +114,6 @@ impl<'a> Elf<'a> {
     }
 
     pub fn raw(&self) -> &Elf64Hdr {
-        &self.hdr
+        self.hdr
     }
 }

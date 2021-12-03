@@ -102,7 +102,7 @@ impl<'a> SymtabEntry<'a> {
     }
 
     pub fn raw(&self) -> &Elf64Sym {
-        &self.hdr
+        self.hdr
     }
 }
 

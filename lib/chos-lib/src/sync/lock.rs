@@ -100,11 +100,11 @@ impl<L: RawLock, T: ?Sized> Drop for LockGuard<'_, L, T> {
 }
 
 impl<L: RawLock, T: ?Sized> LockGuard<'_, L, T> {
-    pub fn as_ref(&self) -> &T {
+    pub fn get_ref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
 
-    pub fn as_mut(&mut self) -> &mut T {
+    pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.lock.value.get() }
     }
 }
@@ -112,11 +112,11 @@ impl<L: RawLock, T: ?Sized> LockGuard<'_, L, T> {
 impl<L: RawLock, T: ?Sized> Deref for LockGuard<'_, L, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        self.get_ref()
     }
 }
 impl<L: RawLock, T: ?Sized> DerefMut for LockGuard<'_, L, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
+        self.get_mut()
     }
 }

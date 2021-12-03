@@ -32,8 +32,6 @@ pub mod init;
 
 pub mod intrusive;
 
-pub mod iter;
-
 pub mod log;
 
 pub mod mm;

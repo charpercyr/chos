@@ -23,7 +23,6 @@ default-features = false
 x86_64 = "0.14.1"
 
 [features]
-default = ["alloc"]
 alloc = []
 log-critical = []
 log-error = ["log-critical"]

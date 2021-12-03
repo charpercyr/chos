@@ -12,7 +12,7 @@ fn all_fmts(span: Span) -> HashSet<Ident> {
         "UpperExp",
     ]
     .iter()
-    .map(|&d| Ident::new(d, span.clone()))
+    .map(|&d| Ident::new(d, span))
     .collect()
 }
 

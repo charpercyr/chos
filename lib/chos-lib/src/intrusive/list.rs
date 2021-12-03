@@ -72,12 +72,15 @@ impl<M> LinkOps for AtomicLink<M> {
             if value != Self::APTR_UNLINKED {
                 return false;
             }
-            if let Ok(_) = next.compare_exchange_weak(
-                Self::APTR_UNLINKED,
-                null_mut(),
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            ) {
+            if next
+                .compare_exchange_weak(
+                    Self::APTR_UNLINKED,
+                    null_mut(),
+                    Ordering::Acquire,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
                 return true;
             }
         }
@@ -184,10 +187,6 @@ impl<A: Adapter<Link: ListLinkOps>> HList<A> {
             cur: self.front_raw(),
             list: self,
         }
-    }
-
-    pub fn into_iter(self) -> HListIntoIter<A> {
-        HListIntoIter { list: self }
     }
 
     pub fn clear(&mut self) {
@@ -460,7 +459,7 @@ impl<A: Adapter<Link: ListLinkOps>> IntoIterator for HList<A> {
     type IntoIter = HListIntoIter<A>;
     type Item = A::Pointer;
     fn into_iter(self) -> Self::IntoIter {
-        Self::into_iter(self)
+        Self::IntoIter { list: self }
     }
 }
 
@@ -488,9 +487,8 @@ pub(super) unsafe fn insert_after<L: ListLinkOps>(after_ptr: NonNull<L>, node_pt
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
-
     use alloc::sync::Arc;
+    use std::prelude::v1::*;
 
     use super::*;
 

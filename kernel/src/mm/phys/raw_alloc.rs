@@ -302,7 +302,7 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
             } else {
                 panic!(
                     "Could not find block {:012x}",
-                    paddr.as_u64() + PAGE_SIZE64 << order
+                    paddr.as_u64() + (PAGE_SIZE64 << order),
                 );
             }
         }

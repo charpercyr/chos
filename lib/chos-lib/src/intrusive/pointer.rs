@@ -45,11 +45,11 @@ impl<T: ?Sized> UnsafeRef<T> {
         self.0
     }
 
-    pub fn as_ref(&self) -> &T {
+    pub fn get_ref(&self) -> &T {
         unsafe { &*self.0 }
     }
 
-    pub fn as_mut(&mut self) -> &mut T {
+    pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.0 }
     }
 }
@@ -72,12 +72,12 @@ unsafe impl<T: ?Sized> ExclusivePointerOps for UnsafeRef<T> {}
 impl<T: ?Sized> core::ops::Deref for UnsafeRef<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        self.get_ref()
     }
 }
 impl<T: ?Sized> core::ops::DerefMut for UnsafeRef<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
+        self.get_mut()
     }
 }
 

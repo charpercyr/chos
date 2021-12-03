@@ -150,4 +150,5 @@ unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
     }
 }
 
-pub type MMPoolObjectAllocator<T, const O: u8> = PoolObjectAllocator<RawSpinLock, MMSlabAllocator<O>, T>;
+pub type MMPoolObjectAllocator<T, const O: u8> =
+    PoolObjectAllocator<RawSpinLock, MMSlabAllocator<O>, T>;

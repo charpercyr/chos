@@ -89,11 +89,9 @@ unsafe impl RawTryRWLock for RawSpinRWLock {
         if !self.lock.try_lock() {
             return false;
         }
-        if self.readers.get() == 0 {
-            if !self.write_lock.try_lock() {
-                unsafe { self.lock.unlock() }
-                return false;
-            }
+        if self.readers.get() == 0 && !self.write_lock.try_lock() {
+            unsafe { self.lock.unlock() }
+            return false;
         }
         true
     }

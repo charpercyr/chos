@@ -44,4 +44,3 @@ impl VMMap {
 impl ConstInit for VMMap {
     const INIT: Self = Self::new();
 }
-

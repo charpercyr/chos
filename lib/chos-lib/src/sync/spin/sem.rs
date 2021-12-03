@@ -21,12 +21,11 @@ impl SpinSem {
                 }
                 spin_loop();
             };
-            if let Ok(_) = self.count.compare_exchange_weak(
-                count,
-                count - 1,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            ) {
+            if self
+                .count
+                .compare_exchange_weak(count, count - 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
                 break;
             }
         }

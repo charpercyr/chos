@@ -33,7 +33,7 @@ pub unsafe fn from_cstring_utf8_bounded<'a>(
     max: usize,
 ) -> Result<&'a str, BoundedError> {
     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
-    from_utf8(from_raw_parts(s, len)).map_err(|e| BoundedError::Utf8Error(e))
+    from_utf8(from_raw_parts(s, len)).map_err(BoundedError::Utf8Error)
 }
 
 pub unsafe fn from_cstring_utf8_mut<'a>(s: *mut u8) -> Result<&'a mut str, Utf8Error> {
@@ -45,7 +45,7 @@ pub unsafe fn from_cstring_utf8_bounded_mut<'a>(
     max: usize,
 ) -> Result<&'a mut str, BoundedError> {
     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
-    from_utf8_mut(from_raw_parts_mut(s, len)).map_err(|e| BoundedError::Utf8Error(e))
+    from_utf8_mut(from_raw_parts_mut(s, len)).map_err(BoundedError::Utf8Error)
 }
 
 pub unsafe fn from_cstring_utf8_unchecked<'a>(s: *const u8) -> &'a str {

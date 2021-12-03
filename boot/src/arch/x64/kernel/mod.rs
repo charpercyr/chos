@@ -12,9 +12,8 @@ use chos_lib::arch::x64::mm::{PAddr, VAddr, PAGE_SIZE};
 use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
 use chos_lib::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use chos_lib::int::CeilDiv;
-use chos_lib::iter::IteratorExt;
 use chos_lib::log::debug;
-use chos_lib::mm::{VFrame, MapFlags, Mapper, MapperFlush, PFrame};
+use chos_lib::mm::{MapFlags, Mapper, MapperFlush, PFrame, VFrame};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::BootMapper;
@@ -26,16 +25,15 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         .program()
         .iter()
         .filter(|p| p.typ() == ProgramEntryType::Load);
-    let (pmap_start, pmap_end) = iter
-        .clone()
-        .map(|p| {
-            (
-                p.vaddr() / p.align() * p.align(),
+    let (pmap_start, pmap_end) = iter.clone().fold((u64::MAX, u64::MIN), |(min, max), p| {
+        (
+            u64::min(min, p.vaddr() / p.align() * p.align()),
+            u64::max(
+                max,
                 (p.vaddr() + p.mem_size()).ceil_div(p.align()) * p.align(),
-            )
-        })
-        .min_max()
-        .expect("No LOAD program entries");
+            ),
+        )
+    });
     let (pmap_start, pmap_end) = (
         pmap_start + phys::KERNEL_DATA_BASE.as_u64(),
         pmap_end + phys::KERNEL_DATA_BASE.as_u64(),

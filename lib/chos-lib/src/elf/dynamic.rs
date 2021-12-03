@@ -140,7 +140,7 @@ impl<'a> DynamicEntry<'a> {
             25 => InitArray,
             27 => InitArraySz,
             0x6ffffef5 => GnuHash,
-            t @ _ => Unknown(t),
+            t => Unknown(t),
         }
     }
 

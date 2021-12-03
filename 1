@@ -1,0 +1,1160 @@
+warning: comparing with null is better expressed by the `.is_null()` method
+  --> lib/chos-lib/src/arch/x64/bt.rs:21:16
+   |
+21 |             if self.frame != null() {
+   |                ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(clippy::cmp_null)]` on by default
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cmp_null
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/bt.rs:33:1
+   |
+33 | / pub unsafe fn backtrace() -> Backtrace {
+34 | |     let mut frame: *const Frame;
+35 | |     asm!(
+36 | |         "mov {}, rbp",
+...  |
+39 | |     Backtrace { frame }
+40 | | }
+   | |_^
+   |
+   = note: `#[warn(clippy::missing_safety_doc)]` on by default
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: name `SMI` contains a capitalized acronym
+  --> lib/chos-lib/src/arch/x64/apic/reg.rs:43:5
+   |
+43 |     SMI { vector: u8 },
+   |     ^^^ help: consider making the acronym lowercase, except the initial letter: `Smi`
+   |
+   = note: `#[warn(clippy::upper_case_acronyms)]` on by default
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#upper_case_acronyms
+
+warning: name `NMI` contains a capitalized acronym
+  --> lib/chos-lib/src/arch/x64/apic/reg.rs:44:5
+   |
+44 |     NMI { vector: u8 },
+   |     ^^^ help: consider making the acronym lowercase, except the initial letter: `Nmi`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#upper_case_acronyms
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:11:5
+   |
+11 | /     pub unsafe fn with_address(addr: usize) -> Self {
+12 | |         Self {
+13 | |             registers: &mut *(addr as *mut ApicRegisters),
+14 | |         }
+15 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:17:5
+   |
+17 | /     pub unsafe fn initialize(&mut self, spurious: u8) {
+18 | |         let value = spurious as u32;
+19 | |
+20 | |         self.registers
+...  |
+32 | |             .write(value | (1 << 8));
+33 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:39:5
+   |
+39 | /     pub unsafe fn id(&self) -> u8 {
+40 | |         (self.registers.lapic_id.read() >> 24) as u8
+41 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:43:5
+   |
+43 | /     pub unsafe fn version(&self) -> u32 {
+44 | |         (*self.registers).lapic_version.read()
+45 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:46:5
+   |
+46 | /     pub unsafe fn start_ap(&mut self, lapic_id: u8, code_page: usize, delay_us: fn(usize)) {
+47 | |         start_ap(
+48 | |             &mut self.registers.interrupt_command,
+49 | |             lapic_id,
+...  |
+52 | |         );
+53 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/apic/mod.rs:55:5
+   |
+55 | /     pub unsafe fn eoi(&mut self) {
+56 | |         self.registers.eoi.write(0)
+57 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/hpet.rs:87:5
+   |
+87 | /     pub unsafe fn with_address(address: usize) -> Self {
+88 | |         Self {
+89 | |             registers: &mut *(address as *mut Registers),
+90 | |         }
+91 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:109:5
+    |
+109 | /     pub unsafe fn enable(&mut self) {
+110 | |         self.set_enabled(true)
+111 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:113:5
+    |
+113 | /     pub unsafe fn disable(&mut self) {
+114 | |         self.set_enabled(false)
+115 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:117:5
+    |
+117 | /     pub unsafe fn set_enabled(&mut self, e: bool) {
+118 | |         self.registers.configuration.update(|config| {
+119 | |             config.set_enable(e);
+120 | |         })
+121 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:127:5
+    |
+127 | /     pub unsafe fn set_count(&mut self, count: u64) {
+128 | |         self.registers.main_counter_value.write(count)
+129 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:155:5
+    |
+155 | /     pub unsafe fn set_int_route(&mut self, route: u8) {
+156 | |         self.registers.configuration.update(|config| {
+157 | |             config.set_int_route_cnf(route);
+158 | |         })
+159 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:161:5
+    |
+161 | /     pub unsafe fn set_comparator(&mut self, value: u64) {
+162 | |         self.registers.comparator.write(value)
+163 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:165:5
+    |
+165 | /     pub unsafe fn set_enabled(&mut self, enabled: bool) {
+166 | |         self.registers.configuration.update(|config| {
+167 | |             config.set_int_enb_cnf(enabled);
+168 | |         });
+169 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:171:5
+    |
+171 | /     pub unsafe fn enable(&mut self) {
+172 | |         self.set_enabled(true);
+173 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/hpet.rs:175:5
+    |
+175 | /     pub unsafe fn disable(&mut self) {
+176 | |         self.set_enabled(false);
+177 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/ioapic/mod.rs:27:5
+   |
+27 | /     pub unsafe fn with_address(addr: usize) -> Self {
+28 | |         Self {
+29 | |             registers: &mut *(addr as *mut Registers),
+30 | |         }
+31 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/ioapic/mod.rs:53:5
+   |
+53 | /     pub unsafe fn write_redirection(&mut self, n: u8, red: RedirectionEntry) {
+54 | |         let n = n as u32;
+55 | |         let value: u64 = transmute(red);
+56 | |         let high = (value >> 32) as u32;
+...  |
+59 | |         self.write(Self::ADDR_RED_BASE + 2 * n, low);
+60 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/ioapic/mod.rs:62:5
+   |
+62 | /     pub unsafe fn update_redirection<R>(
+63 | |         &mut self,
+64 | |         n: u8,
+65 | |         f: impl FnOnce(&mut RedirectionEntry) -> R,
+...  |
+70 | |         res
+71 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/mm/mapper.rs:44:5
+   |
+44 | /     pub unsafe fn new(p4: &'a mut PageTable, base: VAddr) -> Self {
+45 | |         Self { p4, base }
+46 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/mm/mapper.rs:47:5
+   |
+47 | /     pub unsafe fn identity(p4: &'a mut PageTable) -> Self {
+48 | |         Self {
+49 | |             p4,
+50 | |             base: VAddr::null(),
+51 | |         }
+52 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: redundant closure
+   --> lib/chos-lib/src/arch/x64/mm/mapper.rs:178:22
+    |
+178 |             .map_err(|e| MapError::FrameAllocError(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `MapError::FrameAllocError`
+    |
+    = note: `#[warn(clippy::redundant_closure)]` on by default
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+warning: redundant pattern matching, consider using `is_err()`
+   --> lib/chos-lib/src/arch/x64/mm/mapper.rs:280:24
+    |
+280 |                 if let Err(_) = self.alloc.dealloc_frame(addr) {
+    |                 -------^^^^^^--------------------------------- help: try this: `if self.alloc.dealloc_frame(addr).is_err()`
+    |
+    = note: `#[warn(clippy::redundant_pattern_matching)]` on by default
+    = note: this will change drop order of the result, as well as all temporaries
+    = note: add `#[allow(clippy::redundant_pattern_matching)]` if this is important
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_pattern_matching
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/mm/paging.rs:75:5
+   |
+75 | /     pub unsafe fn set_page_table(&mut self) {
+76 | |         asm! {
+77 | |             "mov %rax, %cr3",
+78 | |             in("rax") self,
+79 | |             options(att_syntax, nostack),
+80 | |         }
+81 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/mm/paging.rs:83:5
+   |
+83 | /     pub unsafe fn get_current_page_table() -> &'static mut Self {
+84 | |         let pgt: *mut Self;
+85 | |         asm! {
+86 | |             "mov %cr3, %rax",
+...  |
+90 | |         &mut *pgt
+91 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/mm/mod.rs:145:5
+    |
+145 | /     pub const unsafe fn new_unchecked(addr: u64) -> Self {
+146 | |         Self(addr)
+147 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/mm/mod.rs:193:5
+    |
+193 | /     pub const unsafe fn as_ref<'a, T>(self) -> &'a T {
+194 | |         &*self.as_ptr()
+195 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/mm/mod.rs:197:5
+    |
+197 | /     pub const unsafe fn as_mut<'a, T>(self) -> &'a mut T {
+198 | |         &mut *self.as_mut_ptr()
+199 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/mm/mod.rs:201:5
+    |
+201 | /     pub const unsafe fn from_raw_parts<'a, T: Pointee + ?Sized>(self, metadata: T::Metadata) -> &'a T {
+202 | |         &*self.from_raw_parts_ptr(metadata)
+203 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/arch/x64/mm/mod.rs:205:5
+    |
+205 | /     pub const unsafe fn from_raw_parts_mut<'a, T: Pointee + ?Sized>(
+206 | |         self,
+207 | |         metadata: T::Metadata,
+208 | |     ) -> &'a mut T {
+209 | |         &mut *self.from_raw_parts_mut_ptr(metadata)
+210 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/msr/mod.rs:10:5
+   |
+10 | /     pub unsafe fn read(&self) -> u64 {
+11 | |         let vh: u32;
+12 | |         let vl: u32;
+13 | |         asm! {
+...  |
+20 | |         u64::join(vh, vl)
+21 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/msr/mod.rs:23:5
+   |
+23 | /     pub unsafe fn write(&mut self,v : u64) {
+24 | |         self.write_shared(v)
+25 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/msr/mod.rs:27:5
+   |
+27 | /     pub unsafe fn write_shared(&self, v: u64) {
+28 | |         let (vh, vl) = v.split();
+29 | |         asm! {
+30 | |             "wrmsr",
+...  |
+35 | |         }
+36 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/arch/x64/regs/mod.rs:44:5
+   |
+44 | /     pub unsafe fn set(flags: Self) {
+45 | |         asm! {
+46 | |             "push {flags}",
+47 | |             "popf",
+...  |
+50 | |         }
+51 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/elf/gnu_hash.rs:15:5
+   |
+15 | /     pub unsafe fn new(buf: &'a [u8]) -> Self {
+16 | |         let mut ptr = buf.as_ptr();
+17 | |         let hdr: &Elf64GnuHash = &*buf.as_ptr().cast();
+18 | |         ptr = ptr.add(size_of::<Elf64GnuHash>());
+...  |
+30 | |         }
+31 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/elf/symtab.rs:20:5
+   |
+20 | /     pub unsafe fn new(buf: &'a [u8], strat: LookupStrategy<'a>) -> Self {
+21 | |         Self {
+22 | |             entries: from_raw_parts(buf.as_ptr().cast(), buf.len() / size_of::<Elf64Sym>()),
+23 | |             strat,
+24 | |         }
+25 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/list.rs:13:5
+   |
+13 |     unsafe fn get_prev(&self) -> Option<NonNull<Self>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/list.rs:14:5
+   |
+14 |     unsafe fn get_next(&self) -> Option<NonNull<Self>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/list.rs:15:5
+   |
+15 |     unsafe fn set_prev(&self, prev: Option<NonNull<Self>>);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/list.rs:16:5
+   |
+16 |     unsafe fn set_next(&self, next: Option<NonNull<Self>>);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/list.rs:41:5
+   |
+41 | /     pub unsafe fn force_unlink(&self) {
+42 | |         self.release()
+43 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: this implementation is unsound, as some fields in `AtomicLink<M>` are `!Send`
+  --> lib/chos-lib/src/intrusive/list.rs:52:1
+   |
+52 | unsafe impl<M: Send> Send for AtomicLink<M> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(clippy::non_send_fields_in_send_ty)]` on by default
+note: the type of field `next` is `!Send`
+  --> lib/chos-lib/src/intrusive/list.rs:20:5
+   |
+20 |     next: Cell<Option<NonNull<Self>>>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: add bounds on type parameter `M` that satisfy `Cell<Option<NonNull<Self>>>: Send`
+note: the type of field `prev` is `!Send`
+  --> lib/chos-lib/src/intrusive/list.rs:21:5
+   |
+21 |     prev: Cell<Option<NonNull<Self>>>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: add bounds on type parameter `M` that satisfy `Cell<Option<NonNull<Self>>>: Send`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#non_send_fields_in_send_ty
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/intrusive/list.rs:210:5
+    |
+210 | /     pub unsafe fn cursor_from_pointer(&self, ptr: *const A::Value) -> HListCursor<'_, A> {
+211 | |         let link = self.adapter.get_link(ptr);
+212 | |         HListCursor {
+213 | |             inner: RawCursor {
+...   |
+217 | |         }
+218 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/intrusive/list.rs:220:5
+    |
+220 | /     pub unsafe fn cursor_mut_from_pointer(
+221 | |         &mut self,
+222 | |         ptr: *const A::Value,
+223 | |     ) -> HListCursorMut<'_, A> {
+...   |
+230 | |         }
+231 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+ --> lib/chos-lib/src/intrusive/pointer.rs:6:5
+  |
+6 |     unsafe fn from_raw(ptr: *const Self::Target, meta: Self::Metadata) -> Self;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+ --> lib/chos-lib/src/intrusive/pointer.rs:9:1
+  |
+9 | pub unsafe trait ExclusivePointerOps: PointerOps {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/pointer.rs:40:5
+   |
+40 | /     pub unsafe fn new(ptr: *mut T) -> Self {
+41 | |         Self(ptr)
+42 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/mod.rs:11:5
+   |
+11 |     unsafe fn get_link(&self, value: *const Self::Value) -> *const Self::Link;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/mod.rs:12:5
+   |
+12 |     unsafe fn get_value(&self, link: *const Self::Link) -> *const Self::Value;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/mod.rs:26:5
+   |
+26 |     unsafe fn set_meta(&self, meta: Self::Metadata);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/intrusive/mod.rs:27:5
+   |
+27 |     unsafe fn take_meta(&self) -> Self::Metadata;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/log.rs:17:5
+   |
+17 |     unsafe fn log_unsafe(&self, args: Arguments<'_>, lvl: LogLevel);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/log.rs:57:1
+   |
+57 | / pub unsafe fn set_handler(handler: &'static dyn LogHandler) {
+58 | |     LOG_HANDLER = Some(handler);
+59 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/log.rs:61:1
+   |
+61 | / pub unsafe fn clear_handler() {
+62 | |     LOG_HANDLER = None;
+63 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/log.rs:71:1
+   |
+71 | / pub unsafe fn unsafe_log_impl(args: Arguments<'_>, lvl: LogLevel) {
+72 | |     if let Some(handler) = LOG_HANDLER {
+73 | |         handler.log(args, lvl);
+74 | |     }
+75 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:56:13
+    |
+12  |  / macro_rules! frame {
+13  |  |     ($name:ident : $addr:ty) => {
+14  |  |         #[repr(transparent)]
+15  |  |         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+...    |
+56  | /|             pub const unsafe fn new_unchecked(addr: $addr) -> Self {
+57  | ||                 Self {
+58  | ||                     addr,
+59  | ||                     size: PhantomData,
+60  | ||                 }
+61  | ||             }
+    | ||_____________^
+...    |
+101 |  |     };
+102 |  | }
+    |  |_- in this expansion of `frame!`
+103 |    frame!(PFrame: PAddr);
+    |    --------------------- in this macro invocation
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:56:13
+    |
+12  |  / macro_rules! frame {
+13  |  |     ($name:ident : $addr:ty) => {
+14  |  |         #[repr(transparent)]
+15  |  |         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+...    |
+56  | /|             pub const unsafe fn new_unchecked(addr: $addr) -> Self {
+57  | ||                 Self {
+58  | ||                     addr,
+59  | ||                     size: PhantomData,
+60  | ||                 }
+61  | ||             }
+    | ||_____________^
+...    |
+101 |  |     };
+102 |  | }
+    |  |_- in this expansion of `frame!`
+103 |    frame!(PFrame: PAddr);
+104 |    frame!(VFrame: VAddr);
+    |    --------------------- in this macro invocation
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:111:1
+    |
+111 | / pub unsafe trait FrameAllocator<S: FrameSize> {
+112 | |     type Error;
+113 | |     unsafe fn alloc_frame(&mut self) -> Result<VFrame<S>, Self::Error>;
+114 | |     unsafe fn dealloc_frame(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
+115 | | }
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:113:5
+    |
+113 |     unsafe fn alloc_frame(&mut self) -> Result<VFrame<S>, Self::Error>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:114:5
+    |
+114 |     unsafe fn dealloc_frame(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:158:5
+    |
+158 | /     unsafe fn map<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
+159 | |         &mut self,
+160 | |         pframe: PFrame<S>,
+161 | |         vframe: VFrame<S>,
+162 | |         flags: MapFlags,
+163 | |         alloc: &mut A,
+164 | |     ) -> Result<Self::Flush, MapError<A::Error>>;
+    | |_________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/mm/mod.rs:166:5
+    |
+166 | /     unsafe fn unmap<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
+167 | |         &mut self,
+168 | |         vframe: VFrame<S>,
+169 | |         alloc: &mut A,
+170 | |     ) -> Result<Self::Flush, UnmapError<A::Error>>;
+    | |___________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: a `const` item should never be interior mutable
+  --> lib/chos-lib/src/pool/arc.rs:17:5
+   |
+17 | /     const INIT: Self = Self {
+18 | |         count: AtomicUsize::new(0),
+19 | |     };
+   | |______^
+   |
+   = note: `#[warn(clippy::declare_interior_mutable_const)]` on by default
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#declare_interior_mutable_const
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/pool/arc.rs:62:5
+   |
+62 | /     pub unsafe fn from_raw_in(ptr: *const T, alloc: P) -> Self {
+63 | |         Self {
+64 | |             ptr: NonNull::new_unchecked(ptr as _),
+65 | |             alloc,
+66 | |             value: PhantomData,
+67 | |         }
+68 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/pool/arc.rs:79:5
+   |
+79 | /     pub unsafe fn get_mut_unchecked(this: &mut Self) -> &mut T {
+80 | |         this.ptr.as_mut()
+81 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/pool/arc.rs:133:5
+    |
+133 | /     pub unsafe fn from_raw(raw: *const T) -> Self {
+134 | |         Self {
+135 | |             ptr: NonNull::new_unchecked(raw as *mut T),
+136 | |             alloc: P::INIT,
+137 | |             value: PhantomData,
+138 | |         }
+139 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/pool/boxed.rs:55:5
+   |
+55 | /     pub unsafe fn from_raw_in(ptr: *mut T, alloc: P) -> Self {
+56 | |         Self {
+57 | |             ptr: NonNull::new_unchecked(ptr),
+58 | |             alloc,
+59 | |             value: PhantomData,
+60 | |         }
+61 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/pool/boxed.rs:120:5
+    |
+120 | /     pub unsafe fn from_raw(raw: *mut T) -> Self {
+121 | |         Self {
+122 | |             ptr: NonNull::new_unchecked(raw),
+123 | |             alloc: P::INIT,
+124 | |             value: PhantomData,
+125 | |         }
+126 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/pool/mod.rs:13:1
+   |
+13 | / pub unsafe trait Pool<T> {
+14 | |     unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError>;
+15 | |     unsafe fn deallocate(&self, ptr: NonNull<T>);
+16 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/pool/mod.rs:14:5
+   |
+14 |     unsafe fn allocate(&self) -> Result<NonNull<T>, AllocError>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/pool/mod.rs:15:5
+   |
+15 |     unsafe fn deallocate(&self, ptr: NonNull<T>);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/pool/mod.rs:40:1
+   |
+40 | pub unsafe trait ConstPool<T>: Pool<T> + ConstInit + Copy {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+ --> lib/chos-lib/src/ptr.rs:3:1
+  |
+3 | / pub unsafe fn write_bytes_slice<T>(ptr: *mut [T], value: u8) {
+4 | |     write_bytes((*ptr).as_mut_ptr(), value, (*ptr).len())
+5 | | }
+  | |_^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:11:1
+   |
+11 | / pub unsafe fn strlen_bounded(s: *const u8, max: usize) -> Option<usize> {
+12 | |     assert!(max <= isize::MAX as usize);
+13 | |     let mut cur = s;
+14 | |     while *cur != 0 {
+...  |
+20 | |     Some(cur.offset_from(s) as usize)
+21 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:23:1
+   |
+23 | / pub unsafe fn strlen(s: *const u8) -> usize {
+24 | |     strlen_bounded(s, isize::MAX as usize).unwrap()
+25 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:27:1
+   |
+27 | / pub unsafe fn from_cstring_utf8<'a>(s: *const u8) -> Result<&'a str, Utf8Error> {
+28 | |     from_utf8(from_raw_parts(s, strlen(s)))
+29 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:31:1
+   |
+31 | / pub unsafe fn from_cstring_utf8_bounded<'a>(
+32 | |     s: *const u8,
+33 | |     max: usize,
+34 | | ) -> Result<&'a str, BoundedError> {
+35 | |     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
+36 | |     from_utf8(from_raw_parts(s, len)).map_err(BoundedError::Utf8Error)
+37 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:39:1
+   |
+39 | / pub unsafe fn from_cstring_utf8_mut<'a>(s: *mut u8) -> Result<&'a mut str, Utf8Error> {
+40 | |     from_utf8_mut(from_raw_parts_mut(s, strlen(s)))
+41 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:43:1
+   |
+43 | / pub unsafe fn from_cstring_utf8_bounded_mut<'a>(
+44 | |     s: *mut u8,
+45 | |     max: usize,
+46 | | ) -> Result<&'a mut str, BoundedError> {
+47 | |     let len = strlen_bounded(s, max).ok_or(BoundedError::BoundError)?;
+48 | |     from_utf8_mut(from_raw_parts_mut(s, len)).map_err(BoundedError::Utf8Error)
+49 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:51:1
+   |
+51 | / pub unsafe fn from_cstring_utf8_unchecked<'a>(s: *const u8) -> &'a str {
+52 | |     from_utf8_unchecked(from_raw_parts(s, strlen(s)))
+53 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:55:1
+   |
+55 | / pub unsafe fn from_cstring_utf8_bounded_unchecked<'a>(s: *const u8, max: usize) -> Option<&'a str> {
+56 | |     let len = strlen_bounded(s, max)?;
+57 | |     Some(from_utf8_unchecked(from_raw_parts(s, len)))
+58 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:60:1
+   |
+60 | / pub unsafe fn from_cstring_utf8_unchecked_mut<'a>(s: *mut u8) -> &'a mut str {
+61 | |     from_utf8_unchecked_mut(from_raw_parts_mut(s, strlen(s)))
+62 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/str.rs:64:1
+   |
+64 | / pub unsafe fn from_cstring_utf8_bounded_unchecked_mut<'a>(
+65 | |     s: *mut u8,
+66 | |     max: usize,
+67 | | ) -> Option<&'a mut str> {
+68 | |     let len = strlen_bounded(s, max)?;
+69 | |     Some(from_utf8_unchecked_mut(from_raw_parts_mut(s, len)))
+70 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+   --> lib/chos-lib/src/stride.rs:298:1
+    |
+298 | / pub unsafe fn from_raw_parts_mut<'a, T>(
+299 | |     ptr: *mut T,
+300 | |     len: usize,
+301 | |     stride: usize,
+...   |
+308 | |     }
+309 | | }
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+ --> lib/chos-lib/src/sync/fake.rs:7:5
+  |
+7 | /     pub const unsafe fn new() -> Self {
+8 | |         Self(())
+9 | |     }
+  | |_____^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/sync/lock.rs:8:1
+   |
+8  | / pub unsafe trait RawLock {
+9  | |     fn lock(&self);
+10 | |     unsafe fn unlock(&self);
+11 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/sync/lock.rs:10:5
+   |
+10 |     unsafe fn unlock(&self);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/sync/lock.rs:13:1
+   |
+13 | / pub unsafe trait RawTryLock: RawLock {
+14 | |     fn try_lock(&self) -> bool;
+15 | |     fn try_lock_tries(&self, tries: usize) -> bool {
+16 | |         for _ in 0..tries {
+...  |
+23 | |     }
+24 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/sync/rwlock.rs:8:1
+   |
+8  | / pub unsafe trait RawRWLock {
+9  | |     fn lock_read(&self);
+10 | |     unsafe fn unlock_read(&self);
+11 | |     fn lock_write(&self);
+12 | |     unsafe fn unlock_write(&self);
+13 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/sync/rwlock.rs:10:5
+   |
+10 |     unsafe fn unlock_read(&self);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/sync/rwlock.rs:12:5
+   |
+12 |     unsafe fn unlock_write(&self);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> lib/chos-lib/src/sync/rwlock.rs:15:1
+   |
+15 | / pub unsafe trait RawTryRWLock: RawRWLock {
+16 | |     fn try_lock_read(&self) -> bool;
+17 | |     fn try_lock_read_tries(&self, tries: usize) -> bool {
+18 | |         for _ in 0..tries {
+...  |
+36 | |     }
+37 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: a `const` item should never be interior mutable
+  --> lib/chos-lib/src/sync/spin/lock.rs:15:5
+   |
+15 | /     const INIT: Self = Self {
+16 | |         lock: AtomicBool::new(false),
+17 | |     };
+   | |______^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#declare_interior_mutable_const
+
+warning: a `const` item should never be interior mutable
+  --> lib/chos-lib/src/sync/spin/lock.rs:54:5
+   |
+54 | /     const INIT: Self = Self {
+55 | |         write_lock: RawSpinLock::INIT,
+56 | |         lock: RawSpinLock::INIT,
+57 | |         readers: Cell::new(0),
+58 | |     };
+   | |______^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#declare_interior_mutable_const
+
+warning: unsafe function's docs miss `# Safety` section
+  --> lib/chos-lib/src/volatile.rs:72:1
+   |
+72 | / pub unsafe fn copy_volatile<T: Copy, PS: ReadAccess, PD: WriteAccess>(
+73 | |     src: *const Volatile<T, PS>,
+74 | |     dst: *mut Volatile<T, PD>,
+75 | |     count: usize,
+76 | | ) {
+77 | |     volatile_copy_memory::<T>(&mut (*dst).0, &(*src).0, count)
+78 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: `chos-lib` (lib) generated 99 warnings
+warning: unused variable: `frame`
+  --> kernel/src/panic.rs:12:13
+   |
+12 |         for frame in chos_lib::arch::x64::backtrace() {
+   |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_frame`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `info`
+ --> kernel/src/panic.rs:7:10
+  |
+7 | fn panic(info: &PanicInfo) -> ! {
+  |          ^^^^ help: if this is intentional, prefix it with an underscore: `_info`
+
+warning: docs for unsafe trait missing `# Safety` section
+  --> kernel/src/mm/slab.rs:22:1
+   |
+22 | / pub unsafe trait SlabAllocator {
+23 | |     type Slab: Slab;
+24 | |
+25 | |     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError>;
+26 | |     unsafe fn dealloc_slab(&mut self, frame: Self::Slab);
+27 | | }
+   | |_^
+   |
+   = note: `#[warn(clippy::missing_safety_doc)]` on by default
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_safety_doc
+
+warning: `chos` (lib) generated 3 warnings
+    Finished dev [unoptimized + debuginfo] target(s) in 0.03s

@@ -67,7 +67,7 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
         }
     }
 
-    pub fn as_ref(&self) -> &T {
+    pub fn get_ref(&self) -> &T {
         unsafe { self.ptr.as_ref() }
     }
 
@@ -116,8 +116,8 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
 
 impl<T: IArcAdapter, P: ConstPool<T>> IArc<T, P> {
     pub fn new(value: T) -> Self {
-        return Self::try_new_in(value, P::INIT)
-            .unwrap_or_else(|_| super::handle_alloc_error(Layout::new::<T>()));
+        Self::try_new_in(value, P::INIT)
+            .unwrap_or_else(|_| super::handle_alloc_error(Layout::new::<T>()))
     }
 
     pub fn try_new(value: T) -> Result<Self, AllocError> {
@@ -167,7 +167,7 @@ impl<T: IArcAdapter, P: Pool<T> + Clone> Clone for IArc<T, P> {
 impl<T: IArcAdapter, P: Pool<T>> Deref for IArc<T, P> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        self.get_ref()
     }
 }
 
@@ -208,7 +208,7 @@ macro_rules! fmt {
         $(
             impl<T: IArcAdapter + fmt::$fmt, P: Pool<T>> fmt::$fmt for IArc<T, P> {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    fmt::$fmt::fmt(self.as_ref(), f)
+                    fmt::$fmt::fmt(self.get_ref(), f)
                 }
             }
         )*

@@ -32,7 +32,7 @@ macro_rules! stride_slice_impl {
                     let (start, _, len) = self.ptr_range(r);
                     StrideSlice {
                         ptr: start,
-                        len: len,
+                        len,
                         stride: self.stride,
                         array: PhantomData,
                     }
@@ -41,6 +41,10 @@ macro_rules! stride_slice_impl {
 
             pub fn len(&self) -> usize {
                 self.len
+            }
+
+            pub fn is_empty(&self) -> bool {
+                self.len == 0
             }
 
             pub fn stride(&self) -> usize {
@@ -189,7 +193,7 @@ impl<'a, T> StrideSliceMut<'a, T> {
             let (start, _, len) = self.ptr_range(r);
             StrideSliceMut {
                 ptr: start,
-                len: len,
+                len,
                 stride: self.stride,
                 array: PhantomData,
             }
@@ -241,7 +245,7 @@ impl<'a, T> Iterator for StrideSliceIter<'a, T> {
         if self.cur < self.end {
             let ptr = self.cur;
             unsafe {
-                self.cur = self.cur.cast::<u8>().offset(self.stride as _).cast();
+                self.cur = self.cur.cast::<u8>().add(self.stride).cast();
                 Some(&*ptr)
             }
         } else {
@@ -263,7 +267,7 @@ impl<'a, T> Iterator for StrideSliceIterMut<'a, T> {
         if self.cur < self.end {
             let ptr = self.cur;
             unsafe {
-                self.cur = self.cur.cast::<u8>().offset(self.stride as _).cast();
+                self.cur = self.cur.cast::<u8>().add(self.stride).cast();
                 Some(&mut *ptr)
             }
         } else {
