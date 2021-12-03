@@ -45,15 +45,13 @@ pub fn init_symbols(sections: mb::ElfSectionsTag) {
 pub fn find_symbol(addr: usize) -> Option<(&'static str, usize)> {
     let addr = addr as u64;
     if let Some((symt, strt)) = unsafe { get_tables() } {
-        if let Some(sym) = symt.iter().find(|s| {
-            (s.typ() == SymtabEntryType::Func)
-                && (addr >= s.value())
-                && (addr < s.value() + s.size())
-        }) {
-            Some((sym.name(strt).unwrap_or(""), (addr - sym.value()) as usize))
-        } else {
-            None
-        }
+        symt.iter()
+            .find(|s| {
+                (s.typ() == SymtabEntryType::Func)
+                    && (addr >= s.value())
+                    && (addr < s.value() + s.size())
+            })
+            .map(|sym| (sym.name(strt).unwrap_or(""), (addr - sym.value()) as usize))
     } else {
         None
     }

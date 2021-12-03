@@ -10,7 +10,7 @@ impl Serial {
     pub const fn new(base: u16) -> Self {
         Self {
             ports: [
-                Port::new(base + 0),
+                Port::new(base),
                 Port::new(base + 1),
                 Port::new(base + 2),
                 Port::new(base + 3),

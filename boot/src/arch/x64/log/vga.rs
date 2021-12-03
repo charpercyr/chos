@@ -78,7 +78,7 @@ impl Vga {
 
     pub fn put(&mut self, entry: VgaEntry) {
         unsafe {
-            (*Self::BASE.offset((self.x + self.y * Self::WIDTH) as isize)).write(entry);
+            (*Self::BASE.add(self.x + self.y * Self::WIDTH)).write(entry);
         }
         self.x += 1;
         if self.x >= Self::WIDTH {
@@ -107,21 +107,18 @@ impl Vga {
         self.y -= n;
         unsafe {
             copy_volatile(
-                Self::BASE.offset((n * Self::WIDTH) as isize),
+                Self::BASE.add(n * Self::WIDTH),
                 Self::BASE,
                 (Self::HEIGHT - n) * Self::WIDTH,
             );
         }
-        // for i in (n * Self::WIDTH + Self::HEIGHT - n)..(Self::WIDTH * Self::HEIGHT) {
-        //     unsafe { (*Self::BASE.offset(i as isize)).write(VgaEntry::EMPTY) }
-        // }
     }
 
     pub fn clear(&mut self) {
         self.x = 0;
         self.y = 0;
         for i in 0..(Self::WIDTH * Self::HEIGHT) {
-            unsafe { (*Self::BASE.offset(i as isize)).write(VgaEntry::EMPTY) }
+            unsafe { (*Self::BASE.add(i)).write(VgaEntry::EMPTY) }
         }
     }
 }

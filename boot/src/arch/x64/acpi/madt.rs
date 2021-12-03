@@ -7,23 +7,23 @@ use super::SDTHeader;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct MADT {
+pub struct Madt {
     pub hdr: SDTHeader,
     pub lapic_address: u32,
     pub flags: u32,
 }
 
-impl MADT {
+impl Madt {
     pub const SIGNATURE: &'static [u8; 4] = b"APIC";
 
     pub fn entries(&self) -> Iter<'_> {
         unsafe {
             let ptr = self as *const Self as *const u8;
-            let ptr = ptr.offset(size_of::<Self>() as isize);
+            let ptr = ptr.add(size_of::<Self>());
             let len = self.hdr.length as usize - size_of::<Self>();
             Iter {
                 cur: ptr,
-                end: ptr.offset(len as isize),
+                end: ptr.add(len),
                 madt: PhantomData,
             }
         }
@@ -31,7 +31,7 @@ impl MADT {
 
     pub fn apic_count(&self) -> usize {
         self.entries()
-            .filter(|e| if let Entry::LAPIC(_) = e { true } else { false })
+            .filter(|e| matches!(e, Entry::LApic(_)))
             .count()
     }
 }
@@ -97,11 +97,11 @@ pub struct LAPICAddressOverrideEntry {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Entry<'a> {
-    LAPIC(&'a LAPICEntry),
-    IOAPIC(&'a IOAPICEntry),
+    LApic(&'a LAPICEntry),
+    IoApic(&'a IOAPICEntry),
     InterruptSourceOverride(&'a InterruptSourceOverrideEntry),
-    NMI(&'a NMIEntry),
-    LAPICAddressOverride(&'a LAPICAddressOverrideEntry),
+    Nmi(&'a NMIEntry),
+    LApicAddressOverride(&'a LAPICAddressOverrideEntry),
     Unknown(&'a EntryHeader),
 }
 
@@ -109,7 +109,7 @@ pub enum Entry<'a> {
 pub struct Iter<'a> {
     cur: *const u8,
     end: *const u8,
-    madt: PhantomData<&'a MADT>,
+    madt: PhantomData<&'a Madt>,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -120,11 +120,11 @@ impl<'a> Iterator for Iter<'a> {
                 let hdr = &*(self.cur as *const EntryHeader);
                 self.cur = self.cur.offset(hdr.len as isize);
                 match hdr.typ {
-                    0 => Some(Entry::LAPIC(transmute(hdr))),
-                    1 => Some(Entry::IOAPIC(transmute(hdr))),
+                    0 => Some(Entry::LApic(transmute(hdr))),
+                    1 => Some(Entry::IoApic(transmute(hdr))),
                     2 => Some(Entry::InterruptSourceOverride(transmute(hdr))),
-                    4 => Some(Entry::NMI(transmute(hdr))),
-                    5 => Some(Entry::LAPICAddressOverride(transmute(hdr))),
+                    4 => Some(Entry::Nmi(transmute(hdr))),
+                    5 => Some(Entry::LApicAddressOverride(transmute(hdr))),
                     _ => Some(Entry::Unknown(hdr)),
                 }
             }

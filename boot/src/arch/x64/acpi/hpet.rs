@@ -2,7 +2,7 @@ use super::SDTHeader;
 
 #[derive(Debug, Copy, Clone)]
 #[repr(C, packed)]
-pub struct HPET {
+pub struct Hpet {
     pub hdr: SDTHeader,
     pub hw_rev_id: u8,
     pub flags: u8,
@@ -17,7 +17,7 @@ pub struct HPET {
     pub page_protection: u8,
 }
 
-impl HPET {
+impl Hpet {
     pub const SIGNATURE: &'static [u8; 4] = b"HPET";
 
     pub fn comparator_count(&self) -> u8 {

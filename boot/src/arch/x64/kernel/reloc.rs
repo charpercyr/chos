@@ -57,7 +57,7 @@ pub unsafe fn do_relocation(symtab: &Symtab, e: &RelaEntry, strtab: Option<&StrT
 
 unsafe fn apply_rela(symtab: &Symtab, rela: &Rela, strtab: Option<&StrTab>) {
     for e in rela.iter() {
-        do_relocation(&symtab, &e, strtab);
+        do_relocation(symtab, &e, strtab);
     }
 }
 

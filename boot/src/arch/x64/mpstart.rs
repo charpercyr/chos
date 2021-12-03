@@ -35,7 +35,7 @@ unsafe fn start_processor(apic: &mut Apic, lapic_id: u8) {
     });
 }
 
-pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) -> usize {
+pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) -> usize {
     assert!(
         MPSTART_16_LEN <= 0x78000,
         "MPSTART is too big, must fit in [0x8000, 0x80000)"
@@ -51,7 +51,7 @@ pub unsafe fn start_mp(madt: &madt::MADT, start_fn: MpStartFn, user: *const ()) 
     let this_apic_id = apic.id();
 
     let entries = madt.entries().filter_map(|e| {
-        if let madt::Entry::LAPIC(lapic) = e {
+        if let madt::Entry::LApic(lapic) = e {
             Some(lapic.apic_id)
         } else {
             None

@@ -54,32 +54,32 @@ impl fmt::Debug for SDTHeader {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct RSDT {
+pub struct Rsdt {
     pub hdr: SDTHeader,
 }
 
-impl RSDT {
+impl Rsdt {
     pub fn sdts(&self) -> RSDTIter {
         let (ptr, len) = self.sdt_ptr();
         RSDTIter {
             cur: ptr,
-            end: unsafe { ptr.offset(len as _) },
+            end: unsafe { ptr.add(len) },
             rsdt: PhantomData,
         }
     }
 
-    pub fn madt(&self) -> Option<&madt::MADT> {
-        self.find_table(madt::MADT::SIGNATURE)
+    pub fn madt(&self) -> Option<&madt::Madt> {
+        self.find_table(madt::Madt::SIGNATURE)
             .map(|hdr| unsafe { transmute(hdr) })
     }
 
-    pub fn hpet(&self) -> Option<&hpet::HPET> {
-        self.find_table(hpet::HPET::SIGNATURE)
+    pub fn hpet(&self) -> Option<&hpet::Hpet> {
+        self.find_table(hpet::Hpet::SIGNATURE)
             .map(|hdr| unsafe { transmute(hdr) })
     }
 
-    pub fn mcfg(&self) -> Option<&mcfg::MCFG> {
-        self.find_table(mcfg::MCFG::SIGNATURE)
+    pub fn mcfg(&self) -> Option<&mcfg::Mcfg> {
+        self.find_table(mcfg::Mcfg::SIGNATURE)
             .map(|hdr| unsafe { transmute(hdr) })
     }
 
@@ -100,7 +100,7 @@ impl RSDT {
 pub struct RSDTIter<'a> {
     cur: *const u32,
     end: *const u32,
-    rsdt: PhantomData<&'a RSDT>,
+    rsdt: PhantomData<&'a Rsdt>,
 }
 
 impl<'a> Iterator for RSDTIter<'a> {

@@ -6,7 +6,7 @@ use core::time::Duration;
 use chos_lib::sync::spin::sem::SpinSem;
 use x86_64::structures::idt::InterruptStackFrame;
 
-use super::acpi::hpet::HPET;
+use super::acpi::hpet::Hpet;
 
 static DONE: SpinSem = SpinSem::new(0);
 
@@ -21,7 +21,7 @@ extern "x86-interrupt" fn timer_callback(_: InterruptStackFrame) {
 
 static mut HPET: Option<chos_lib::arch::x64::hpet::HPET> = None;
 
-pub fn initialize(hpet_table: &HPET) {
+pub fn initialize(hpet_table: &Hpet) {
     super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback)
         .expect("Could not allocate IOApic interrupt 8");
     unsafe {
@@ -37,7 +37,7 @@ pub struct DelayInProgressError;
 static IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
-    if let Err(_) = IN_PROGRESS.compare_exchange(false, true, Relaxed, Relaxed) {
+    if IN_PROGRESS.compare_exchange(false, true, Relaxed, Relaxed).is_err() {
         return Err(DelayInProgressError);
     }
     let hpet = unsafe { &mut HPET }

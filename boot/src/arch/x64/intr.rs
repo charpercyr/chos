@@ -10,7 +10,7 @@ use x86_64::structures::idt::{
     HandlerFunc, InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode,
 };
 
-use super::acpi::madt::{self, MADT};
+use super::acpi::madt::{self, Madt};
 
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
@@ -58,7 +58,7 @@ static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 static mut APIC: MaybeUninit<Apic> = MaybeUninit::uninit();
 static mut IO_APIC: MaybeUninit<IOApic> = MaybeUninit::uninit();
 
-pub fn initalize(madt: &MADT) {
+pub fn initalize(madt: &Madt) {
     disable_pic();
 
     let idt = unsafe { &mut IDT };
@@ -69,7 +69,7 @@ pub fn initalize(madt: &MADT) {
     let ioapic = madt
         .entries()
         .find_map(|e| {
-            if let madt::Entry::IOAPIC(ioapic) = e {
+            if let madt::Entry::IoApic(ioapic) = e {
                 Some(ioapic)
             } else {
                 None

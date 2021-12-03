@@ -5,11 +5,11 @@ use super::SDTHeader;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct MCFG {
+pub struct Mcfg {
     pub hdr: SDTHeader,
 }
 
-impl MCFG {
+impl Mcfg {
     pub const SIGNATURE: &'static [u8; 4] = b"MCFG";
 
     pub fn iter(&self) -> Iter<'_> {
@@ -26,7 +26,7 @@ impl MCFG {
     }
 }
 
-impl<'a> IntoIterator for &'a MCFG {
+impl<'a> IntoIterator for &'a Mcfg {
     type Item = &'a Entry;
     type IntoIter = Iter<'a>;
 
@@ -48,7 +48,7 @@ pub struct Entry {
 pub struct Iter<'a> {
     cur: *const u8,
     end: *const u8,
-    mcfg: PhantomData<&'a MCFG>,
+    mcfg: PhantomData<&'a Mcfg>,
 }
 
 impl<'a> Iterator for Iter<'a> {

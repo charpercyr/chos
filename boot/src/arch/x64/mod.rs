@@ -17,7 +17,7 @@ use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 
-use self::acpi::RSDT;
+use self::acpi::Rsdt;
 use crate::arch::x64::intr::apic;
 
 struct MpInfo {
@@ -69,18 +69,14 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         .rsdp_v1_tag()
         .expect("No RSDT from Multiboot")
         .rsdt_address();
-    let rsdt = unsafe { &*(rsdt as *const RSDT) };
+    let rsdt = unsafe { &*(rsdt as *const Rsdt) };
     let madt = rsdt.madt().unwrap();
     let hpet = rsdt.hpet().unwrap();
 
     intr::initalize(madt);
 
     let kernel = if let Some(kernel) = mbh.module_tags().find(|m| {
-        if let Some(("kernel", _)) = iter_cmdline(m.name()).next() {
-            true
-        } else {
-            false
-        }
+        matches!(iter_cmdline(m.name()).next(), Some(("kernel", _)))
     }) {
         let kernel = unsafe {
             core::slice::from_raw_parts(
