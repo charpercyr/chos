@@ -1,5 +1,3 @@
-use core::ptr::null;
-
 use super::mm::VAddr;
 
 #[repr(C, packed)]
@@ -18,7 +16,7 @@ impl Iterator for Backtrace {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            if self.frame != null() {
+            if !self.frame.is_null() {
                 let ptr = (*self.frame).ip;
                 self.frame = (*self.frame).next;
                 Some(VAddr::new_unchecked(ptr as u64))

@@ -14,6 +14,7 @@ pub struct IArcCount {
 }
 
 impl ConstInit for IArcCount {
+    #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Self {
         count: AtomicUsize::new(0),
     };

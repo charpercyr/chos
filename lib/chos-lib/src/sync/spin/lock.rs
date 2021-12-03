@@ -12,6 +12,7 @@ pub struct RawSpinLock {
 }
 
 impl ConstInit for RawSpinLock {
+    #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Self {
         lock: AtomicBool::new(false),
     };
@@ -51,6 +52,7 @@ unsafe impl Send for RawSpinRWLock {}
 unsafe impl Sync for RawSpinRWLock {}
 
 impl ConstInit for RawSpinRWLock {
+    #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Self {
         write_lock: RawSpinLock::INIT,
         lock: RawSpinLock::INIT,

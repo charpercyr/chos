@@ -40,8 +40,8 @@ pub struct CommandRegisters {
 pub enum Command {
     Normal { vector: u8 },
     LowPriority { vector: u8 },
-    SMI { vector: u8 },
-    NMI { vector: u8 },
+    Smi { vector: u8 },
+    Nmi { vector: u8 },
     Init,
     InitDeassert,
     Sipi { page_number: u8 },
@@ -67,11 +67,11 @@ impl CommandRegisters {
                 vector = v as _;
                 cmd = 1;
             }
-            SMI { vector: v } => {
+            Smi { vector: v } => {
                 vector = v as _;
                 cmd = 2;
             }
-            NMI { vector: v } => {
+            Nmi { vector: v } => {
                 vector = v as _;
                 cmd = 4;
             }

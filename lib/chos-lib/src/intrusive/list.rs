@@ -49,7 +49,9 @@ impl<M> AtomicLink<M> {
 impl<M> ConstInit for AtomicLink<M> {
     const INIT: Self = Self::new();
 }
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<M: Send> Send for AtomicLink<M> {}
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<M: Sync> Sync for AtomicLink<M> {}
 
 impl<M> fmt::Debug for AtomicLink<M> {

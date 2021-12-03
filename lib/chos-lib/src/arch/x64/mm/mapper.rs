@@ -175,7 +175,7 @@ unsafe fn get_page_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?
     if !entry.present() {
         let vframe = alloc
             .alloc_frame()
-            .map_err(|e| MapError::FrameAllocError(e))?;
+            .map_err(MapError::FrameAllocError)?;
         entry = create_page_entry(resolve_page_paddr(base, vframe.addr()), flags);
         allocated = true;
     } else {
@@ -277,7 +277,7 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> Drop for Alloc
         for i in 0..self.n {
             unsafe {
                 let addr = self.addrs[i].assume_init();
-                if let Err(_) = self.alloc.dealloc_frame(addr) {
+                if self.alloc.dealloc_frame(addr).is_err() {
                     unreachable!("Dealloc failed for {:?}", addr);
                 }
             }
