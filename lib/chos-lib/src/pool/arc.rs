@@ -6,8 +6,11 @@ use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use intrusive_collections::{PointerOps, TryExclusivePointerOps};
+
 use super::{handle_alloc_error, ConstPool, Pool, PoolBox};
 use crate::init::ConstInit;
+use crate::intrusive::DefaultPointerOps;
 
 pub struct IArcCount {
     count: AtomicUsize,
@@ -224,14 +227,25 @@ impl<T: IArcAdapter, P: Pool<T>> fmt::Pointer for IArc<T, P> {
     }
 }
 
-impl<T: IArcAdapter, P: Pool<T>> crate::intrusive::PointerOps for IArc<T, P> {
-    type Metadata = P;
-    type Target = T;
-    fn into_raw(this: Self) -> (*const Self::Target, Self::Metadata) {
-        Self::into_raw_with_allocator(this)
+unsafe impl<T: IArcAdapter, P: ConstPool<T>> PointerOps for DefaultPointerOps<IArc<T, P>> {
+    type Value = T;
+    type Pointer = IArc<T, P>;
+
+    unsafe fn from_raw(&self, value: *const Self::Value) -> Self::Pointer {
+        IArc::from_raw(value as *mut Self::Value)
     }
-    unsafe fn from_raw(ptr: *const Self::Target, meta: Self::Metadata) -> Self {
-        Self::from_raw_in(ptr, meta)
+
+    fn into_raw(&self, ptr: Self::Pointer) -> *const Self::Value {
+        IArc::into_raw(ptr)
+    }
+}
+
+unsafe impl<T: IArcAdapter, P: ConstPool<T>> TryExclusivePointerOps for DefaultPointerOps<IArc<T, P>> {
+    unsafe fn try_get_mut(&self, value: *const Self::Value) -> Option<*mut Self::Value> {
+        let mut arc = IArc::<T, P>::from_raw(value);
+        let res = IArc::get_mut(&mut arc).map(|res| res as *mut T);
+        drop(IArc::into_raw(arc));
+        res
     }
 }
 

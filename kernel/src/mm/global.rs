@@ -15,8 +15,8 @@ unsafe impl GlobalAlloc for KAlloc {
 #[global_allocator]
 static KALLOC: KAlloc = KAlloc;
 
-#[no_mangle]
-fn rust_oom(layout: Layout) -> ! {
+#[lang = "oom"]
+fn out_of_memory_handler(layout: Layout) -> ! {
     panic!(
         "Out of memory, tried to allocate {} bytes (align = {})",
         layout.size(),

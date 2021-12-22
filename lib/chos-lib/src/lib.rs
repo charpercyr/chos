@@ -18,6 +18,8 @@
 #![feature(never_type)]
 #![feature(ptr_metadata)]
 
+pub mod access;
+
 pub mod arch;
 
 pub mod boot;

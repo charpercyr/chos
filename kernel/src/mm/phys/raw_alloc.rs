@@ -6,10 +6,8 @@ use core::slice::from_raw_parts_mut;
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{PAddr, PAGE_SIZE64};
-use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
-use chos_lib::intrusive::{list, UnsafeRef};
-use chos_lib::intrusive_adapter;
+use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
 #[derive(Debug, Clone, Copy)]
 struct Metadata {
@@ -22,7 +20,7 @@ struct Metadata {
 
 #[derive(Debug)]
 struct Region {
-    link: list::AtomicLink<()>,
+    link: linked_list::AtomicLink,
     flags: RegionFlags,
     meta: Metadata,
 }
@@ -80,19 +78,19 @@ impl Region {
     }
 }
 
-intrusive_adapter!(struct RegionAdapter = UnsafeRef<Region>: Region { link: list::AtomicLink<()> });
+intrusive_adapter!(RegionAdapter = UnsafeMut<Region>: Region { link: linked_list::AtomicLink });
 
 struct Block {
-    link: list::AtomicLink<()>,
+    link: linked_list::AtomicLink,
 }
 
-intrusive_adapter!(struct BlockAdapter = UnsafeRef<Block>: Block { link: list::AtomicLink<()> });
+intrusive_adapter!(BlockAdapter = UnsafeMut<Block>: Block { link: linked_list::AtomicLink });
 struct BlockHead {
-    blocks: list::HList<BlockAdapter>,
+    blocks: LinkedList<BlockAdapter>,
     bitmap_offset: u64,
 }
 
-static mut REGIONS: list::HList<RegionAdapter> = list::HList::new(RegionAdapter::new());
+static mut REGIONS: LinkedList<RegionAdapter> = LinkedList::new(RegionAdapter::NEW);
 
 bitflags! {
     pub struct AllocFlags: u64 {
@@ -143,7 +141,7 @@ pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
     write(
         region,
         Region {
-            link: list::AtomicLink::INIT,
+            link: linked_list::AtomicLink::new(),
             flags,
             meta: calculate_meta(total_pages),
         },
@@ -157,7 +155,7 @@ pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
     {
         for block in region.block_list_uninit() {
             *block = MaybeUninit::new(BlockHead {
-                blocks: list::HList::new(BlockAdapter::new()),
+                blocks: LinkedList::new(BlockAdapter::new()),
                 bitmap_offset,
             });
             remaining_pages /= 2;
@@ -181,10 +179,10 @@ pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
         write(
             block,
             Block {
-                link: list::AtomicLink::INIT,
+                link: linked_list::AtomicLink::new(),
             },
         );
-        block_head.blocks.push_front(UnsafeRef::new(block));
+        block_head.blocks.push_front(UnsafeMut::from_raw(block));
 
         if (order as u8) < biggest_order {
             let page_bit = (current_page >> (order + 1)) + block_head.bitmap_offset;
@@ -197,7 +195,7 @@ pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
         remaining_pages -= 1 << order;
     }
 
-    REGIONS.push_front(UnsafeRef::new(region));
+    REGIONS.push_front(UnsafeMut::from_raw(region));
 }
 
 pub unsafe fn add_regions(it: impl IntoIterator<Item = (PAddr, u64, RegionFlags)>) {
@@ -218,8 +216,8 @@ unsafe fn alloc_in_region(
     let meta = region.meta;
     let block_head = &mut region.block_list()[order as usize];
     let bitmap_offset = block_head.bitmap_offset;
-    if let Some(block) = block_head.blocks.pop_front() {
-        let ptr = block.as_ptr() as *mut Block;
+    if let Some(mut block) = block_head.blocks.pop_front() {
+        let ptr = block.as_mut() as *mut Block;
         write_bytes(ptr, 0xcc, 1);
 
         let paddr = (ptr as u64) - virt::PHYSICAL_MAP_BASE.as_u64();
@@ -262,11 +260,11 @@ unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
     write(
         ptr,
         Block {
-            link: list::AtomicLink::INIT,
+            link: linked_list::AtomicLink::new(),
         },
     );
 
-    block.blocks.push_front(UnsafeRef::new(ptr));
+    block.blocks.push_front(UnsafeMut::from_raw(ptr));
 
     let page = (paddr.as_u64() - base_paddr.as_u64()) / PAGE_SIZE64 - meta.meta_pages;
     let page_bit = (page >> (order + 1)) + block.bitmap_offset;
@@ -286,19 +284,18 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
     let word = page_bit / (size_of::<usize>() as u64);
     let bit = page_bit % (size_of::<usize>() as u64);
     if order < meta.biggest_order && bitmap[word as usize] & (1 << bit) != 0 {
-        let mut cursor_opt = block.blocks.front_mut();
+        let mut cursor = block.blocks.front_mut();
         loop {
-            if let Some(cursor) = cursor_opt {
-                let b = cursor.get();
+            if let Some(b) = cursor.get() {
                 let other_paddr = b as *const Block as u64 - virt::PHYSICAL_MAP_BASE.as_u64();
                 if paddr.as_u64().abs_diff(other_paddr) == (PAGE_SIZE64 << order) {
-                    cursor.unlink();
+                    cursor.remove();
                     bitmap[word as usize] ^= 1 << bit;
                     let other_paddr = PAddr::new(other_paddr);
                     free_in_region(region, paddr.min(other_paddr), order + 1);
                     break;
                 }
-                cursor_opt = cursor.next();
+                cursor.move_next();
             } else {
                 panic!(
                     "Could not find block {:012x}",

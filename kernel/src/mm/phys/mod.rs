@@ -5,11 +5,11 @@ use core::ptr::NonNull;
 use chos_config::arch::mm::virt::{self, PHYSICAL_MAP_BASE};
 use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
 use chos_lib::init::ConstInit;
-use chos_lib::intrusive::list;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
 use chos_lib::sync::fake::FakeLock;
 use chos_lib::sync::lock::Lock;
 use chos_lib::sync::spin::lock::{RawSpinLock, Spinlock};
+use intrusive_collections::linked_list;
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
@@ -17,7 +17,7 @@ use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
 #[derive(Debug)]
 pub struct Page {
     count: IArcCount,
-    list_link: list::AtomicLink<PagePool>,
+    list_link: linked_list::AtomicLink,
     pub paddr: PAddr,
     pub order: u8,
 }
@@ -29,8 +29,8 @@ impl IArcAdapter for Page {
     }
 }
 
-chos_lib::intrusive_adapter!(pub struct PageListBoxAdapter = PageBox: Page { list_link: list::AtomicLink<PagePool> });
-chos_lib::intrusive_adapter!(pub struct PageListArcAdapter = PageArc: Page { list_link: list::AtomicLink<PagePool> });
+chos_lib::intrusive_adapter!(pub PageListBoxAdapter = PageBox: Page { list_link: linked_list::AtomicLink });
+chos_lib::intrusive_adapter!(pub PageListArcAdapter = PageArc: Page { list_link: linked_list::AtomicLink });
 
 struct PageSlab {
     vaddr: VAddr,
@@ -108,7 +108,7 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, Alloc
     let paddr = raw_alloc::alloc_pages(order, flags)?;
     PoolBox::try_new(Page {
         count: IArcCount::INIT,
-        list_link: list::AtomicLink::INIT,
+        list_link: linked_list::AtomicLink::new(),
         paddr,
         order,
     })

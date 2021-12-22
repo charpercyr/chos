@@ -8,8 +8,10 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 use core::task::{Context, Poll};
 
+use intrusive_collections::{ExclusivePointerOps, PointerOps};
+
 use super::{handle_alloc_error, ConstPool, Pool};
-use crate::intrusive::{ExclusivePointerOps, PointerOps};
+use crate::intrusive::DefaultPointerOps;
 
 pub struct PoolBox<T, P: Pool<T>> {
     ptr: NonNull<T>,
@@ -215,18 +217,19 @@ impl<T, P: Pool<T>> fmt::Pointer for PoolBox<T, P> {
     }
 }
 
-impl<T, P: Pool<T>> PointerOps for PoolBox<T, P> {
-    type Metadata = P;
-    type Target = T;
-    fn into_raw(this: Self) -> (*const Self::Target, Self::Metadata) {
-        let (ptr, alloc) = Self::into_raw_with_allocator(this);
-        (ptr, alloc)
+unsafe impl<T, P: ConstPool<T>> PointerOps for DefaultPointerOps<PoolBox<T, P>> {
+    type Value = T;
+    type Pointer = PoolBox<T, P>;
+
+    unsafe fn from_raw(&self, value: *const Self::Value) -> Self::Pointer {
+        PoolBox::from_raw(value as *mut Self::Value)
     }
-    unsafe fn from_raw(ptr: *const Self::Target, meta: Self::Metadata) -> Self {
-        Self::from_raw_in(ptr as _, meta)
+
+    fn into_raw(&self, ptr: Self::Pointer) -> *const Self::Value {
+        PoolBox::into_raw(ptr)
     }
 }
-unsafe impl<T, P: Pool<T>> ExclusivePointerOps for PoolBox<T, P> {}
+unsafe impl<T, P: ConstPool<T>> ExclusivePointerOps for DefaultPointerOps<PoolBox<T, P>> {}
 
 impl<T: Future + Unpin, P: Pool<T> + Unpin> Future for PoolBox<T, P> {
     type Output = T::Output;

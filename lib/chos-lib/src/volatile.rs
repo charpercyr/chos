@@ -3,18 +3,7 @@ use core::marker::PhantomData;
 use core::mem::{forget, transmute, ManuallyDrop};
 use core::ptr;
 
-pub trait WriteAccess {}
-pub trait ReadAccess {}
-
-pub struct NoAccess(());
-pub struct WriteOnly(());
-pub struct ReadOnly(());
-pub struct ReadWrite(());
-
-impl WriteAccess for WriteOnly {}
-impl WriteAccess for ReadWrite {}
-impl ReadAccess for ReadOnly {}
-impl ReadAccess for ReadWrite {}
+pub use crate::access::*;
 
 #[repr(transparent)]
 pub struct Volatile<T, P = ReadWrite>(T, PhantomData<P>);

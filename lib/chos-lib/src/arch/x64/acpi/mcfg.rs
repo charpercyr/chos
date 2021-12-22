@@ -4,9 +4,10 @@ use core::mem::size_of;
 use super::SDTHeader;
 
 #[derive(Debug, Clone, Copy)]
-#[repr(C)]
+#[repr(C, packed)]
 pub struct Mcfg {
     pub hdr: SDTHeader,
+    _res: u64,
 }
 
 impl Mcfg {

@@ -5,6 +5,7 @@
 #![feature(default_alloc_error_handler)]
 #![feature(decl_macro)]
 #![feature(int_abs_diff)]
+#![feature(lang_items)]
 #![feature(maybe_uninit_slice)]
 #![feature(negative_impls)]
 #![feature(never_type)]

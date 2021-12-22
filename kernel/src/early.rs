@@ -4,6 +4,8 @@ use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
 use multiboot2::MemoryArea;
 
+use crate::mm::phys::{alloc_pages, AllocFlags};
+
 use super::*;
 
 fn hlt_loop() -> ! {
@@ -56,6 +58,19 @@ pub fn entry(info: &KernelBootInfo, id: u8) -> ! {
     debug!("####################");
 
     setup_early_memory_allocator(info);
+
+    unsafe {
+        let page = alloc_pages(10, AllocFlags::empty()).unwrap();
+        println!("{:?}", page);
+    }
+
+    unsafe {
+        let rsdt = &*info.arch.rsdt;
+        let mcfg = rsdt.mcfg().unwrap();
+        for seg in mcfg {
+            println!("{:#x?}", seg);
+        }
+    }
 
     exit_qemu(QemuStatus::Success);
 }

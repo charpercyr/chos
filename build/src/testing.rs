@@ -9,6 +9,7 @@ const LIBS: &'static [&'static str] = &["chos-lib"];
 fn test_package(name: &str, opts: &TestOpts) -> io::Result<()> {
     let mut args = vec!["test", "-p", name, "--all-features"];
     args.extend(opts.build.cargo_args.iter().map::<&str, _>(|i| i));
+    args.extend(opts.filters.iter().map::<&str, _>(|i| i));
     cmd("cargo", args)
         .before_spawn(display_cmd_hook)
         .run()?;

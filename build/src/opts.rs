@@ -44,6 +44,7 @@ pub struct TestOpts {
     pub build: BuildOpts,
     #[structopt(long, short = "p")]
     pub packages: Option<Vec<String>>,
+    pub filters: Vec<String>,
 }
 
 #[derive(StructOpt, Debug)]

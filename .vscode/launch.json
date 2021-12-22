@@ -28,7 +28,8 @@
                 "args":[
                     "test",
                     "--no-run",
-                    "-p", "chos-lib"
+                    "-p", "chos-lib",
+                    "--all-features"
                 ]
             }
         }

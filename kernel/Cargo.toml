@@ -23,5 +23,10 @@ version= "0.22.3"
 default-features = false
 # features = []
 
+[dependencies.intrusive-collections]
+git = "https://github.com/charpercyr/intrusive-rs"
+branch = "charpercyr/exclusive"
+features = ["nightly"]
+
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.1"

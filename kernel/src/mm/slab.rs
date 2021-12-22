@@ -8,9 +8,11 @@ use bitvec::slice::BitSlice;
 use chos_lib::arch::mm::VAddr;
 use chos_lib::init::ConstInit;
 use chos_lib::int::{align_upusize, ceil_divusize};
-use chos_lib::intrusive::{self as int, list, UnsafeRef};
 use chos_lib::pool::Pool;
 use chos_lib::sync::lock::{Lock, RawLock};
+use intrusive_collections::{
+    intrusive_adapter, linked_list, LinkedList, LinkedListAtomicLink, UnsafeMut,
+};
 
 pub trait Slab: Sized {
     const SIZE: usize;
@@ -32,7 +34,7 @@ struct SlabMeta {
 }
 
 struct SlabHeader<F: SlabAllocator> {
-    link: list::AtomicLink<()>,
+    link: LinkedListAtomicLink,
     frame: F::Slab,
 }
 
@@ -109,22 +111,7 @@ impl<F: SlabAllocator> SlabHeader<F> {
     }
 }
 
-struct SlabAdapter<F: SlabAllocator>(PhantomData<F>);
-impl<F: SlabAllocator> int::Adapter for SlabAdapter<F> {
-    type Value = SlabHeader<F>;
-    type Link = list::AtomicLink<()>;
-    type Pointer = UnsafeRef<SlabHeader<F>>;
-
-    unsafe fn get_link(&self, value: *const Self::Value) -> *const Self::Link {
-        &(*value).link
-    }
-    unsafe fn get_value(&self, link: *const Self::Link) -> *const Self::Value {
-        chos_lib::container_of!(link, link, SlabHeader<F>)
-    }
-}
-impl<F: SlabAllocator> ConstInit for SlabAdapter<F> {
-    const INIT: Self = Self(PhantomData);
-}
+intrusive_collections::intrusive_adapter!(SlabAdapter<F> = UnsafeMut<SlabHeader<F>> : SlabHeader<F> { link: linked_list::AtomicLink } where F: SlabAllocator);
 
 #[derive(Debug, Clone, Copy)]
 pub struct ObjectAllocatorStats {
@@ -138,9 +125,9 @@ pub struct ObjectAllocatorStats {
 pub struct RawObjectAllocator<F: SlabAllocator> {
     frame_alloc: F,
     meta: SlabMeta,
-    empty: list::HList<SlabAdapter<F>>,
-    partial: list::HList<SlabAdapter<F>>,
-    full: list::HList<SlabAdapter<F>>,
+    empty: LinkedList<SlabAdapter<F>>,
+    partial: LinkedList<SlabAdapter<F>>,
+    full: LinkedList<SlabAdapter<F>>,
     stats: ObjectAllocatorStats,
 }
 
@@ -150,9 +137,9 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
         Self {
             frame_alloc,
             meta: slab_meta::<F>(layout),
-            empty: list::HList::INIT,
-            partial: list::HList::INIT,
-            full: list::HList::INIT,
+            empty: LinkedList::new(SlabAdapter::NEW),
+            partial: LinkedList::new(SlabAdapter::NEW),
+            full: LinkedList::new(SlabAdapter::NEW),
             stats: ObjectAllocatorStats {
                 empty_slabs: 0,
                 partial_slabs: 0,
@@ -165,8 +152,8 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
 
     pub unsafe fn alloc(&mut self) -> Result<NonNull<[u8]>, AllocError> {
         // Try to allocate in partial slabs
-        if let Some(uref) = self.partial.pop_front() {
-            let slab = &mut *(uref.as_ptr() as *mut SlabHeader<F>);
+        if let Some(mut uref) = self.partial.pop_front() {
+            let slab = &mut *(uref.as_mut() as *mut SlabHeader<F>);
             if let Ok(ptr) = slab.alloc(&self.meta) {
                 if slab.is_full(&self.meta) {
                     self.stats.partial_slabs -= 1;
@@ -181,8 +168,8 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
             }
         }
         // Try to allocate in empty slabs
-        if let Some(uref) = self.empty.pop_front() {
-            let slab = &mut *(uref.as_ptr() as *mut SlabHeader<F>);
+        if let Some(mut uref) = self.empty.pop_front() {
+            let slab = &mut *(uref.as_mut() as *mut SlabHeader<F>);
             if let Ok(ptr) = slab.alloc(&self.meta) {
                 self.stats.empty_slabs -= 1;
                 if slab.is_full(&self.meta) {
@@ -204,7 +191,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
             self.dealloc_slab(new_slab_ptr);
             e
         })?;
-        let uref = UnsafeRef::new(new_slab);
+        let uref = UnsafeMut::from_raw(new_slab);
         if new_slab.is_full(&self.meta) {
             self.stats.full_slabs += 1;
             self.full.push_front(uref);
@@ -225,7 +212,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
         let was_full = slab.is_full(&self.meta);
         slab.dealloc(ptr, &self.meta);
         if was_full {
-            let uref = self.full.cursor_mut_from_pointer(slab).unlink();
+            let uref = self.full.cursor_mut_from_ptr(slab).remove().unwrap();
             self.stats.full_slabs -= 1;
             if slab.is_empty(&self.meta) {
                 self.stats.empty_slabs += 1;
@@ -237,7 +224,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
         } else if slab.is_empty(&self.meta) {
             self.stats.partial_slabs -= 1;
             self.stats.empty_slabs += 1;
-            let uref = self.partial.cursor_mut_from_pointer(slab).unlink();
+            let uref = self.partial.cursor_mut_from_ptr(slab).remove().unwrap();
             self.empty.push_front(uref);
         }
         self.stats.allocated_objects -= 1;
@@ -245,9 +232,9 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
     }
 
     pub unsafe fn dealloc_empty_frames(&mut self) {
-        while let Some(slab) = self.empty.pop_front() {
+        while let Some(mut slab) = self.empty.pop_front() {
             self.stats.free_objects -= self.meta.object_count;
-            self.dealloc_slab(NonNull::new_unchecked(slab.as_ptr() as *mut _));
+            self.dealloc_slab(NonNull::new_unchecked(slab.as_mut() as *mut _));
         }
         self.stats.empty_slabs = 0;
     }
@@ -264,7 +251,7 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
             ptr,
             SlabHeader {
                 frame,
-                link: list::AtomicLink::INIT,
+                link: LinkedListAtomicLink::new(),
             },
         );
         let slab = &mut *ptr;
