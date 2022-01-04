@@ -31,7 +31,6 @@ static mut TLS_DATA: MaybeUninit<&'static [TlsData]> = MaybeUninit::uninit();
 static GSBASE: Msr = Msr::new(0xc0000101);
 
 #[no_mangle]
-#[inline]
 unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
     let tls_data = &*(GSBASE.read() as *const TlsData);
     let addr = match idx.module {
