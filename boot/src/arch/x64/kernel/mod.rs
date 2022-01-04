@@ -3,17 +3,16 @@ mod palloc;
 mod reloc;
 
 use core::ptr::{copy_nonoverlapping, write_bytes};
-use core::str::from_utf8_unchecked;
 use core::u8;
 
 use chos_config::arch::x64::mm::{phys, virt};
-use chos_lib::arch::mm::FrameSize4K;
-use chos_lib::arch::x64::mm::{PAddr, VAddr, PAGE_SIZE};
+use chos_lib::arch::mm::{FrameSize4K, PAddr, PageTable};
+use chos_lib::arch::x64::mm::VAddr;
 use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
-use chos_lib::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
+use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::int::CeilDiv;
 use chos_lib::log::debug;
-use chos_lib::mm::{MapFlags, Mapper, MapperFlush, PFrame, VFrame};
+use chos_lib::mm::{MapperFlush, PFrame, RangeMapper, VFrame, MapFlags};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::BootMapper;
@@ -77,60 +76,22 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
 
     let mut palloc = PAlloc::new(pmap_end as *mut u8);
     let mut mapper = BootMapper::new(&mut palloc);
-    mapper.identity_map_memory(&mut palloc, memory, VAddr::null());
-    mapper.identity_map_memory(&mut palloc, memory, virt::PHYSICAL_MAP_BASE);
-    mapper.identity_map_memory(&mut palloc, memory, virt::PAGING_BASE);
-
-    for p in iter {
-        assert_eq!(p.align() as usize, PAGE_SIZE);
-        let pstart = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let pend = (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align())
-            * p.align();
-        let vstart = (virt::STATIC_BASE.as_u64() + p.vaddr()) / p.align() * p.align();
-        let vend =
-            (virt::STATIC_BASE.as_u64() + p.vaddr() + p.mem_size()).ceil_div(p.align()) * p.align();
-        let mut perms = [b'-'; 3];
-        let flags = p.flags();
-        if flags.contains(ProgramEntryFlags::READ) {
-            perms[0] = b'r';
-        }
-        if flags.contains(ProgramEntryFlags::WRITE) {
-            perms[1] = b'w';
-        }
-        if flags.contains(ProgramEntryFlags::EXEC) {
-            perms[2] = b'x';
-        }
-        let perms = from_utf8_unchecked(&perms);
-        debug!(
-            "MAP {:08x} - {:08x} to {:016x} - {:016x} {}",
-            pstart, pend, vstart, vend, perms
-        );
-        let pages = (pend - pstart) / p.align();
-        for i in 0..pages {
-            let paddr = pstart + i * PAGE_SIZE as u64;
-            let vaddr = vstart + i * PAGE_SIZE as u64;
-            let mut map_flags = MapFlags::empty();
-            if flags.contains(ProgramEntryFlags::WRITE) {
-                map_flags |= MapFlags::WRITE;
-            }
-            if flags.contains(ProgramEntryFlags::EXEC) {
-                map_flags |= MapFlags::EXEC;
-            }
-            mapper
-                .mapper
-                .map(
-                    PFrame::<FrameSize4K>::new_unchecked(PAddr::new(paddr)),
-                    VFrame::new_unchecked(VAddr::try_new(vaddr).unwrap()),
-                    map_flags,
-                    &mut palloc,
-                )
-                .unwrap()
-                .ignore();
-        }
-    }
-    // palloc.map_self(virt::PAGING_BASE, &mut mapper);
-
-    mapper.set_page_table();
+    mapper.identity_map_memory(&mut palloc, memory, VFrame::new(VAddr::null()));
+    mapper.identity_map_memory(&mut palloc, memory, VFrame::new(virt::PHYSICAL_MAP_BASE));
+    mapper
+        .mapper
+        .map_elf_load_sections(
+            kernel,
+            PFrame::<FrameSize4K>::new_unchecked(phys::KERNEL_DATA_BASE),
+            VFrame::new_unchecked(virt::STATIC_BASE),
+            MapFlags::empty(),
+            &mut palloc,
+        )
+        .expect("Mapping ELF failed")
+        .ignore();
+    PageTable::set_page_table(PFrame::new_unchecked(PAddr::new(
+        mapper.mapper.inner_mut().p4 as *mut _ as u64,
+    )));
 
     apply_relocations(kernel);
 
@@ -142,8 +103,13 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         },
         pt: KernelMemEntry {
             phys: phys::KERNEL_DATA_BASE + pmap_end - pmap_start,
-            virt: virt::PAGING_BASE,
+            virt: virt::PHYSICAL_MAP_BASE + pmap_end,
             size: palloc.total_size(),
         },
+        total_size: memory
+            .all_memory_areas()
+            .map(|e| e.end_address())
+            .max()
+            .expect("Memory map is empty"),
     }
 }

@@ -10,10 +10,12 @@ mod timer;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::boot::ArchKernelBootInfo;
+use chos_lib::arch::mm::PAddr;
 use chos_lib::arch::x64::acpi::Rsdt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
 use chos_lib::log::{debug, println, Bytes};
+use chos_lib::mm::PFrame;
 use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
@@ -117,11 +119,14 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         entry,
         barrier: Barrier::new(apic_count),
         kbi: KernelBootInfo {
-            elf: &kernel as *const _ as usize,
-            multiboot_header: mbp,
+            core_count: apic_count,
+            elf: kernel.data(),
             early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
-            arch: ArchKernelBootInfo { rsdt },
+            arch: ArchKernelBootInfo {
+                rsdt,
+                multiboot_header: mbp,
+            },
         },
         page_table: unsafe { PageTable::get_current_page_table() },
     };
@@ -132,7 +137,9 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             madt,
             |id, mp_info| {
                 let mp_info: &MpInfo = &*mp_info.cast();
-                (*mp_info.page_table).set_page_table();
+                PageTable::set_page_table(PFrame::new_unchecked(PAddr::new(
+                    mp_info.page_table as u64,
+                )));
                 mp_info.barrier.wait();
                 (mp_info.entry)(&mp_info.kbi, id);
             },

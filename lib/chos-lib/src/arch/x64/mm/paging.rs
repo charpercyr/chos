@@ -3,7 +3,7 @@ use core::{ops::{Index, IndexMut}, slice::{Iter, IterMut}};
 
 use modular_bitfield::prelude::*;
 
-use crate::{init::ConstInit, mm::FrameSize};
+use crate::{init::ConstInit, mm::{FrameSize, PFrame}, log::debug};
 
 use super::{PAddr};
 
@@ -72,10 +72,11 @@ impl PageTable {
         }
     }
 
-    pub unsafe fn set_page_table(&mut self) {
+    pub unsafe fn set_page_table(addr: PFrame<FrameSize4K>) {
+        debug!("Using {:#x} as page table", addr);
         asm! {
             "mov %rax, %cr3",
-            in("rax") self,
+            in("rax") addr.addr().as_u64(),
             options(att_syntax, nostack),
         }
     }

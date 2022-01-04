@@ -1,59 +1,42 @@
-use bitflags::bitflags;
-use chos_lib::init::ConstInit;
-use chos_lib::mm::MapFlags;
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
-use intrusive_collections::{linked_list, LinkedList};
+use chos_config::arch::mm::virt;
+use chos_lib::arch::mm::{PAddr, VAddr};
 
-use super::phys::MMPoolObjectAllocator;
-use crate::arch::mm::virt::{ArchVMArea, ArchVMMap};
+use super::phys::Page;
 
-bitflags! {
-    pub struct VMAreaFlags : u32 {
-        const READ =        0b0000_0001;
-        const WRITE =       0b0000_0010;
-        const EXEC =        0b0000_0100;
-        const SHARED =      0b0000_1000;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemoryRegion {
+    Alloc,
+    Normal,
+    PerCpu,
+    IoMem,
+    Static,
+}
 
-        const USER =        0b0001_0000;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemoryMapError {}
+
+fn region_base(region: MemoryRegion) -> VAddr {
+    match region {
+        MemoryRegion::Alloc => virt::PHYSICAL_MAP_BASE,
+        MemoryRegion::Normal => virt::HEAP_BASE,
+        MemoryRegion::PerCpu => virt::PER_CPU_BASE,
+        MemoryRegion::IoMem => virt::DEVICE_BASE,
+        MemoryRegion::Static => virt::STATIC_BASE,
     }
 }
 
-pub struct VMMap {
-    areas: LinkedList<VMAreaAdapter>,
-    arch: ArchVMMap,
+pub unsafe fn map_paddr(paddr: PAddr, region: MemoryRegion) -> Result<VAddr, MemoryMapError> {
+    Ok(region_base(region) + paddr)
 }
 
-pub struct VMArea {
-    count: IArcCount,
-    link: linked_list::AtomicLink,
-    pub flags: MapFlags,
-    pub arch: ArchVMArea,
+pub unsafe fn map_page(page: &Page, region: MemoryRegion) -> Result<VAddr, MemoryMapError> {
+    map_paddr(page.paddr, region)
 }
 
-impl IArcAdapter for VMArea {
-    fn count(&self) -> &IArcCount {
-        &self.count
-    }
+pub unsafe fn paddr_of(vaddr: VAddr, region: MemoryRegion) -> Option<PAddr> {
+    Some(PAddr::new((vaddr - region_base(region)).as_u64()))
 }
 
-chos_lib::intrusive_adapter!(VMAreaAdapter = VMAreaArc : VMArea  { link: linked_list::AtomicLink });
-
-const VM_AREA_SLAB_ORDER: u8 = 0;
-static VMAREA_SLAB_POOL: MMPoolObjectAllocator<VMArea, VM_AREA_SLAB_ORDER> =
-    MMPoolObjectAllocator::INIT;
-chos_lib::pool!(pub struct VMAreaPool: VMArea => &VMAREA_SLAB_POOL);
-
-pub type VMAreaArc = IArc<VMArea, VMAreaPool>;
-
-impl VMMap {
-    pub const fn new() -> Self {
-        Self {
-            areas: LinkedList::new(VMAreaAdapter::new()),
-            arch: ArchVMMap::INIT,
-        }
-    }
-}
-
-impl ConstInit for VMMap {
-    const INIT: Self = Self::new();
+pub unsafe fn unmap_page(_: VAddr) {
+    // Nothing
 }

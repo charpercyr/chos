@@ -78,7 +78,7 @@ pub macro print ($($args:tt)*) {
     $crate::log::log_impl(format_args!($($args)*))
 }
 
-pub macro print_unsafe ($($args:tt)*) {
+pub macro unsafe_print ($($args:tt)*) {
     $crate::log::unsafe_log_impl(format_args!($($args)*), $crate::log::LogLevel::Info)
 }
 

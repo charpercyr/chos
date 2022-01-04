@@ -116,4 +116,8 @@ impl<'a> Elf<'a> {
     pub fn raw(&self) -> &Elf64Hdr {
         self.hdr
     }
+
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
 }

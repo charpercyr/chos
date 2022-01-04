@@ -6,7 +6,9 @@ use core::slice::from_raw_parts_mut;
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{PAddr, PAGE_SIZE64};
+use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
+use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
 #[derive(Debug, Clone, Copy)]
@@ -240,17 +242,6 @@ unsafe fn alloc_in_region(
     }
 }
 
-pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
-    for region in REGIONS.iter_mut() {
-        if region.meta.biggest_order >= order && region.meta.free_pages >= (1 << order) {
-            if let Ok(addr) = alloc_in_region(region, order, flags) {
-                return Ok(addr);
-            }
-        }
-    }
-    Err(AllocError)
-}
-
 unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
     let meta = region.meta;
     let base_paddr = region.base_paddr();
@@ -308,7 +299,18 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
     }
 }
 
-pub unsafe fn dealloc_pages(page: PAddr, order: u8) {
+pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
+    for region in REGIONS.iter_mut() {
+        if region.meta.biggest_order >= order && region.meta.free_pages >= (1 << order) {
+            if let Ok(addr) = alloc_in_region(region, order, flags) {
+                return Ok(addr);
+            }
+        }
+    }
+    Err(AllocError)
+}
+
+pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
     for region in REGIONS.iter_mut() {
         if region.contains(page) {
             free_in_region(region, page, order);
@@ -316,4 +318,16 @@ pub unsafe fn dealloc_pages(page: PAddr, order: u8) {
         }
     }
     panic!("Invalid address {:?}", page);
+}
+
+static ALLOC_LOCK: Spinlock<()> = Spinlock::INIT;
+
+pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
+    let _guard = ALLOC_LOCK.lock();
+    alloc_pages_unlocked(order, flags)
+}
+
+pub unsafe fn dealloc_pages(page: PAddr, order: u8) {
+    let _guard = ALLOC_LOCK.lock();
+    dealloc_pages_unlocked(page, order)
 }

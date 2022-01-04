@@ -16,7 +16,7 @@
             "gdbpath": "rust-gdb",
             "autorun": [
                 // "b boot_main",
-                "add-symbol-file ./target/x86_64-chos/debug/chos.elf -o 0xffff818000000000",
+                "add-symbol-file ./target/x86_64-chos/debug/chos.elf -o 0xffff808000000000",
                 "set print pretty on"
             ]
         },

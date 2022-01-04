@@ -2,17 +2,17 @@ pub mod raw_alloc;
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
-use chos_config::arch::mm::virt::{self, PHYSICAL_MAP_BASE};
 use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
 use chos_lib::init::ConstInit;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
 use chos_lib::sync::fake::FakeLock;
 use chos_lib::sync::lock::Lock;
-use chos_lib::sync::spin::lock::{RawSpinLock, Spinlock};
+use chos_lib::sync::spin::lock::RawSpinLock;
 use intrusive_collections::linked_list;
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
+use super::virt::{map_paddr, map_page, paddr_of, MemoryRegion};
 
 #[derive(Debug)]
 pub struct Page {
@@ -57,15 +57,16 @@ struct PageSlabAllocator;
 unsafe impl SlabAllocator for PageSlabAllocator {
     type Slab = PageSlab;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
-        raw_alloc::alloc_pages(PageSlab::ORDER, AllocFlags::empty()).map(|p| PageSlab {
-            vaddr: VAddr::new_unchecked(p.as_u64() + PHYSICAL_MAP_BASE.as_u64()),
-        })
+        let paddr = raw_alloc::alloc_pages_unlocked(PageSlab::ORDER, AllocFlags::empty())?;
+        let vaddr = map_paddr(paddr, MemoryRegion::Alloc).map_err(|_| {
+            raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER);
+            AllocError
+        })?;
+        Ok(PageSlab { vaddr })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
-        raw_alloc::dealloc_pages(
-            PAddr::new(frame.vaddr.as_u64() - PHYSICAL_MAP_BASE.as_u64()),
-            PageSlab::ORDER,
-        )
+        let paddr = paddr_of(frame.vaddr, MemoryRegion::Alloc).expect("Should be mapped");
+        raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER)
     }
 }
 
@@ -88,7 +89,6 @@ unsafe impl Pool<Page> for PagePoolImpl {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<Page>) {
-        let _guard = ALLOC_LOCK.lock();
         let &Page { order, paddr, .. } = ptr.as_ref();
         let mut slab = self.alloc.lock();
         slab.dealloc(ptr);
@@ -97,14 +97,12 @@ unsafe impl Pool<Page> for PagePoolImpl {
 }
 
 static PAGE_POOL: PagePoolImpl = unsafe { PagePoolImpl::new() };
-static ALLOC_LOCK: Spinlock<()> = Spinlock::INIT;
 chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 
 pub type PageBox = PoolBox<Page, PagePool>;
 pub type PageArc = IArc<Page, PagePool>;
 
 pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
-    let _guard = ALLOC_LOCK.lock();
     let paddr = raw_alloc::alloc_pages(order, flags)?;
     PoolBox::try_new(Page {
         count: IArcCount::INIT,
@@ -120,6 +118,7 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, Alloc
 
 pub struct MMSlab<const O: u8> {
     page: PageBox,
+    vaddr: VAddr,
 }
 
 impl<const O: u8> Slab for MMSlab<O> {
@@ -128,7 +127,7 @@ impl<const O: u8> Slab for MMSlab<O> {
         unsafe { VAddr::new_unchecked(addr.as_u64() / (Self::SIZE as u64) * (Self::SIZE as u64)) }
     }
     fn vaddr(&self) -> VAddr {
-        self.page.paddr + virt::PHYSICAL_MAP_BASE
+        self.vaddr
     }
 }
 
@@ -141,9 +140,9 @@ impl<const O: u8> ConstInit for MMSlabAllocator<O> {
 unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
     type Slab = MMSlab<O>;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
-        Ok(MMSlab {
-            page: alloc_pages(O, AllocFlags::empty())?,
-        })
+        let page = alloc_pages(O, AllocFlags::empty())?;
+        let vaddr = map_page(&page, MemoryRegion::Normal).map_err(|_| AllocError)?;
+        Ok(MMSlab { page, vaddr })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
         drop(frame)

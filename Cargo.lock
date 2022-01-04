@@ -128,7 +128,7 @@ dependencies = [
 [[package]]
 name = "intrusive-collections"
 version = "0.9.3"
-source = "git+https://github.com/charpercyr/intrusive-rs?branch=charpercyr/exclusive#071ba8f1460cb5210792a74c3a8a38bcec3a5401"
+source = "git+https://github.com/charpercyr/intrusive-rs#071ba8f1460cb5210792a74c3a8a38bcec3a5401"
 dependencies = [
  "memoffset",
 ]

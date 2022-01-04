@@ -42,6 +42,7 @@ impl<'a> ProgramEntry<'a> {
             1 => Load,
             2 => Dynamic,
             6 => Phdr,
+            7 => Tls,
             t => Unknown(t),
         }
     }
@@ -94,6 +95,7 @@ pub enum ProgramEntryType {
     Load,
     Dynamic,
     Phdr,
+    Tls,
     Unknown(u32),
 }
 

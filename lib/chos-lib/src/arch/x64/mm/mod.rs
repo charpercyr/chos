@@ -54,6 +54,14 @@ impl PAddr {
     pub const fn add_paddr(self, rhs: PAddr) -> Self {
         Self::new(self.0 + rhs.0)
     }
+
+    pub const fn sub_u64(self, rhs: u64) -> Self {
+        Self::new(self.0 - rhs)
+    }
+
+    pub const fn sub_paddr(self, rhs: PAddr) -> Self {
+        Self::new(self.0 - rhs.0)
+    }
 }
 
 impl ops::Add<u64> for PAddr {
@@ -348,5 +356,17 @@ impl ops::Sub for VAddr {
     type Output = VAddr;
     fn sub(self, rhs: Self) -> Self::Output {
         VAddr::new(self.0 - rhs.0)
+    }
+}
+
+impl<T> From<&T> for VAddr {
+    fn from(v: &T) -> Self {
+        unsafe { Self::new_unchecked(v as *const T as u64) }
+    }
+}
+
+impl<T> From<&mut T> for VAddr {
+    fn from(v: &mut T) -> Self {
+        unsafe { Self::new_unchecked(v as *mut T as u64) }
     }
 }

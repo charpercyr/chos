@@ -21,7 +21,6 @@ default-features = false
 
 [dependencies.intrusive-collections]
 git = "https://github.com/charpercyr/intrusive-rs"
-branch = "charpercyr/exclusive"
 features = ["nightly"]
 default-features = false
 

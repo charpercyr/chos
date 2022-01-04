@@ -3,14 +3,18 @@ use core::mem::MaybeUninit;
 use super::{FrameSize1G, FrameSize2M, FrameSize4K, PAddr, PageEntry, PageTable, VAddr};
 use crate::mm::*;
 
+const FLUSH_MAX_INVLPG_FRAMES: u64 = 11;
+
 #[must_use = "Must flush or ignore"]
 pub enum Flush<S: FrameSize> {
     All,
-    PageRange(VFrameRange<S>),
+    Range(VFrameRange<S>),
     None,
 }
 
 impl<S: FrameSize> MapperFlush for Flush<S> {
+    const NONE: Self = Self::None;
+
     fn flush(self) {
         match self {
             Self::All => unsafe {
@@ -21,7 +25,7 @@ impl<S: FrameSize> MapperFlush for Flush<S> {
                     options(att_syntax, nomem, nostack)
                 }
             },
-            Self::PageRange(range) => unsafe {
+            Self::Range(range) => unsafe {
                 for vframe in range {
                     asm! {
                         "invlpg ({addr})",
@@ -31,6 +35,24 @@ impl<S: FrameSize> MapperFlush for Flush<S> {
                 }
             },
             Self::None => (),
+        }
+    }
+
+    fn combine(self, rhs: Self) -> Self {
+        match (self, rhs) {
+            (Self::All, _) | (_, Self::All) => Self::All,
+            (Self::Range(r1), Self::Range(r2)) => {
+                if let Some(r) = r1.intersection(r2) {
+                    if r.frame_count() <= FLUSH_MAX_INVLPG_FRAMES {
+                        Self::Range(r)
+                    } else{
+                        Self::All
+                    }
+                } else {
+                    Self::All
+                }
+            },
+            (Self::None, flush) | (flush, Self::None) => flush,
         }
     }
 }
@@ -155,6 +177,40 @@ impl Mapper<FrameSize1G> for OffsetMapper<'_> {
     }
 }
 
+impl<S: FrameSize> RangeMapper<S> for OffsetMapper<'_>
+where
+    Self: Mapper<S, Flush = Flush<S>>,
+{
+    unsafe fn map_range<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
+        &mut self,
+        prange: PFrameRange<S>,
+        vbase: VFrame<S>,
+        flags: MapFlags,
+        alloc: &mut A,
+    ) -> Result<Self::Flush, MapError<A::Error>> {
+        let pbase = prange.start();
+        for pframe in prange {
+            let vframe = VFrame::<S>::new(vbase.addr() + pframe.addr() - pbase.addr());
+            self.map(pframe, vframe, flags, alloc)?.ignore();
+        }
+        Ok(Flush::None)
+    }
+    unsafe fn unmap_range<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
+        &mut self,
+        vrange: VFrameRange<S>,
+        alloc: &mut A,
+    ) -> Result<Self::Flush, UnmapError<A::Error>> {
+        for vframe in vrange {
+            self.unmap(vframe, alloc)?.ignore();
+        }
+        if vrange.frame_count() > FLUSH_MAX_INVLPG_FRAMES {
+            Ok(Flush::All)
+        } else {
+            Ok(Flush::Range(vrange))
+        }
+    }
+}
+
 unsafe fn resolve_page_vaddr(base: VAddr, addr: PAddr) -> VAddr {
     VAddr::new_unchecked(addr.as_u64() + base.as_u64())
 }
@@ -173,9 +229,7 @@ unsafe fn get_page_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?
     let mut entry = table[i];
     let mut allocated = false;
     if !entry.present() {
-        let vframe = alloc
-            .alloc_frame()
-            .map_err(MapError::FrameAllocError)?;
+        let vframe = alloc.alloc_frame().map_err(MapError::FrameAllocError)?;
         entry = create_page_entry(resolve_page_paddr(base, vframe.addr()), flags);
         allocated = true;
     } else {

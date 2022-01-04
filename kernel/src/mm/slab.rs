@@ -243,6 +243,10 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
         &self.stats
     }
 
+    pub fn layout(&self) -> Layout {
+        self.meta.layout
+    }
+
     unsafe fn alloc_new_slab(&mut self) -> Result<NonNull<SlabHeader<F>>, AllocError> {
         let frame = self.frame_alloc.alloc_slab()?;
         let ptr: *mut SlabHeader<F> = frame.vaddr().as_mut_ptr();
