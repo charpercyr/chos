@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use super::mm::VAddr;
 
 #[repr(C, packed)]

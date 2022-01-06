@@ -1,4 +1,4 @@
-
+use core::arch::asm;
 use core::marker::PhantomData;
 
 use crate::access::*;
@@ -86,11 +86,17 @@ impl<T: PortData, A> Port<T, A> {
         }
     }
 
-    pub unsafe fn read(&self) -> T where A: ReadAccess {
+    pub unsafe fn read(&self) -> T
+    where
+        A: ReadAccess,
+    {
         T::read(self.port)
     }
 
-    pub unsafe fn write(&mut self, value: T) where A: WriteAccess {
+    pub unsafe fn write(&mut self, value: T)
+    where
+        A: WriteAccess,
+    {
         T::write(self.port, value)
     }
 }

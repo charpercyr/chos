@@ -1,5 +1,7 @@
+use core::arch::asm;
 
-use modular_bitfield::{bitfield, specifiers::*};
+use modular_bitfield::bitfield;
+use modular_bitfield::specifiers::*;
 
 use crate::arch::intr::IoPl;
 
@@ -8,11 +10,14 @@ use crate::arch::intr::IoPl;
 #[derive(Clone, Copy, Debug)]
 pub struct Flags {
     pub carry: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     pub parity: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     pub ajust: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     pub zero: bool,
     pub sign: bool,
     pub trap: bool,
@@ -21,14 +26,16 @@ pub struct Flags {
     pub overflow: bool,
     pub iopl: IoPl,
     pub nt: bool,
-    #[skip] __: B1,
+    #[skip]
+    __: B1,
     pub resume: bool,
     pub virtual_8086: bool,
     pub alignment_check: bool,
     pub virtual_intr_flag: bool,
     pub virtual_intr_pending: bool,
     pub id: bool,
-    #[skip] __: B42,
+    #[skip]
+    __: B42,
 }
 impl Flags {
     pub fn get() -> Self {

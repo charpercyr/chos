@@ -1,3 +1,4 @@
+use core::arch::asm;
 
 #[derive(Debug)]
 pub struct CS;

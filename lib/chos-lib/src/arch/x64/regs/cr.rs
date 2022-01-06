@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use bitflags::bitflags;
 
 use crate::arch::mm::{FrameSize4K, PAddr, VAddr, PAGE_MASK};

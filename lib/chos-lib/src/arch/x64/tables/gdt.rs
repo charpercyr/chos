@@ -1,9 +1,10 @@
+use core::arch::asm;
 use core::convert::TryInto;
 use core::mem::size_of;
 
 use bit_field::BitField;
 
-use super::{Tss, DescriptorRegister};
+use super::{DescriptorRegister, Tss};
 use crate::arch::intr::IoPl;
 use crate::init::ConstInit;
 
@@ -66,7 +67,8 @@ impl Descriptor {
         // User
         self.0.set_bit(44, true);
         // IOPL
-        self.0.set_bits(45..47, u8::from(iopl).get_bits(0..2) as u64);
+        self.0
+            .set_bits(45..47, u8::from(iopl).get_bits(0..2) as u64);
         // Present
         self.0.set_bit(47, true);
         // 64-bit
@@ -82,7 +84,8 @@ impl Descriptor {
         // User
         self.0.set_bit(44, true);
         // IOPL
-        self.0.set_bits(45..47, u8::from(iopl).get_bits(0..2) as u64);
+        self.0
+            .set_bits(45..47, u8::from(iopl).get_bits(0..2) as u64);
         // Present
         self.0.set_bit(47, true);
         // 64-bit
@@ -93,7 +96,7 @@ impl Descriptor {
         assert_eq!(descs.len(), 2);
         let descs: &mut [Self; 2] = unsafe { descs.try_into().unwrap_unchecked() };
         *descs = [Descriptor::INIT; 2];
-        
+
         let tss = tss as *const Tss as u64;
         // Base
         descs[0].0.set_bits(16..40, tss.get_bits(0..24));

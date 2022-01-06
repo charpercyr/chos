@@ -1,3 +1,4 @@
+use core::arch::asm;
 
 #[repr(C, packed)]
 pub struct Tss {

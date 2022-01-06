@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(allocator_api)]
-#![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(const_fn_fn_ptr_basics)]
 #![feature(const_fn_trait_bound)]

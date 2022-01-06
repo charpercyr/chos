@@ -41,7 +41,7 @@ impl<L: RawLock, T> Lock<L, T> {
         }
     }
 
-    pub const fn new_with_lock(value: T, lock: L) -> Self {
+    pub const fn new_with(value: T, lock: L) -> Self {
         Self {
             lock,
             value: UnsafeCell::new(value),

@@ -77,7 +77,7 @@ struct PagePoolImpl {
 impl PagePoolImpl {
     pub const unsafe fn new() -> Self {
         Self {
-            alloc: Lock::new_with_lock(ObjectAllocator::new(PageSlabAllocator), FakeLock::new()),
+            alloc: Lock::new_with(ObjectAllocator::new(PageSlabAllocator), FakeLock::new()),
         }
     }
 }

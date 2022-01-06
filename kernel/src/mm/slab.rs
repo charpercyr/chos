@@ -319,9 +319,15 @@ pub struct PoolObjectAllocator<L: RawLock, F: SlabAllocator, T> {
 }
 
 impl<L: RawLock, F: SlabAllocator, T> PoolObjectAllocator<L, F, T> {
-    pub const fn new(frame_alloc: F, lock: L) -> Self {
+    pub const fn new(frame_alloc: F) -> Self
+    where
+        L: ConstInit,
+    {
+        Self::new_with_lock(frame_alloc, L::INIT)
+    }
+    pub const fn new_with_lock(frame_alloc: F, lock: L) -> Self {
         Self {
-            alloc: Lock::new_with_lock(ObjectAllocator::new(frame_alloc), lock),
+            alloc: Lock::new_with(ObjectAllocator::new(frame_alloc), lock),
         }
     }
 }
@@ -329,7 +335,7 @@ impl<L: RawLock, F: SlabAllocator, T> PoolObjectAllocator<L, F, T> {
 impl<L: RawLock + ConstInit, F: SlabAllocator + ConstInit, T> ConstInit
     for PoolObjectAllocator<L, F, T>
 {
-    const INIT: Self = Self::new(ConstInit::INIT, ConstInit::INIT);
+    const INIT: Self = Self::new(ConstInit::INIT);
 }
 
 unsafe impl<L: RawLock, F: SlabAllocator, T> Pool<T> for PoolObjectAllocator<L, F, T> {

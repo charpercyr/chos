@@ -1,18 +1,19 @@
+use core::arch::asm;
 use core::convert::TryInto;
 use core::fmt;
 use core::intrinsics::transmute;
 use core::marker::PhantomData;
 use core::mem::size_of;
-use core::ops::{Index, IndexMut, Deref};
+use core::ops::{Deref, Index, IndexMut};
 
 use bit_field::BitField;
 use bitflags::bitflags;
 
 use super::DescriptorRegister;
-use crate::Volatile;
 use crate::arch::intr::IoPl;
 use crate::arch::mm::VAddr;
 use crate::arch::regs::{Flags, CS};
+use crate::Volatile;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -57,7 +58,6 @@ bitflags! {
         const RMP =                     1 << 8;
     }
 }
-
 
 pub type Handler = extern "x86-interrupt" fn(InterruptStackFrame);
 pub type NoReturnHandler = extern "x86-interrupt" fn(InterruptStackFrame) -> !;

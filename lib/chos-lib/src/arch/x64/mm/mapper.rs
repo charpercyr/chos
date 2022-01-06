@@ -1,3 +1,4 @@
+use core::arch::asm;
 use core::mem::MaybeUninit;
 
 use super::{FrameSize1G, FrameSize2M, FrameSize4K, PAddr, PageEntry, PageTable, VAddr};
@@ -45,13 +46,13 @@ impl<S: FrameSize> MapperFlush for Flush<S> {
                 if let Some(r) = r1.intersection(r2) {
                     if r.frame_count() <= FLUSH_MAX_INVLPG_FRAMES {
                         Self::Range(r)
-                    } else{
+                    } else {
                         Self::All
                     }
                 } else {
                     Self::All
                 }
-            },
+            }
             (Self::None, flush) | (flush, Self::None) => flush,
         }
     }

@@ -2,7 +2,6 @@
 #![allow(incomplete_features)]
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(allocator_api)]
-#![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]

@@ -1,4 +1,4 @@
-
+use core::arch::asm;
 use core::convert::TryFrom;
 
 use modular_bitfield::BitfieldSpecifier;
@@ -45,11 +45,12 @@ pub fn without_interrupts<R, F: FnOnce() -> R>(f: F) -> R {
 }
 
 pub fn breakpoint() {
-    unsafe { asm! { "int3" }}
+    unsafe {
+        asm! { "int3" }
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[derive(BitfieldSpecifier)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BitfieldSpecifier)]
 #[bits = 2]
 pub enum IoPl {
     Ring0 = 0,
