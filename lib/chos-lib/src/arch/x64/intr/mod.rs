@@ -1,4 +1,8 @@
 
+use core::convert::TryFrom;
+
+use modular_bitfield::BitfieldSpecifier;
+
 use super::regs::Flags;
 
 pub struct IntrStatus(Flags);
@@ -38,4 +42,47 @@ pub fn without_interrupts<R, F: FnOnce() -> R>(f: F) -> R {
     let res = f();
     restore_interrupts(flags);
     res
+}
+
+pub fn breakpoint() {
+    unsafe { asm! { "int3" }}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(BitfieldSpecifier)]
+#[bits = 2]
+pub enum IoPl {
+    Ring0 = 0,
+    Ring1 = 1,
+    Ring2 = 2,
+    Ring3 = 3,
+}
+impl IoPl {
+    pub const KERNEL: Self = Self::Ring0;
+    pub const USER: Self = Self::Ring3;
+}
+impl From<IoPl> for u8 {
+    fn from(iopl: IoPl) -> Self {
+        use IoPl::*;
+        match iopl {
+            Ring0 => 0,
+            Ring1 => 1,
+            Ring2 => 2,
+            Ring3 => 3,
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidIoPl;
+impl TryFrom<u8> for IoPl {
+    type Error = InvalidIoPl;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Ring0),
+            1 => Ok(Self::Ring1),
+            2 => Ok(Self::Ring2),
+            3 => Ok(Self::Ring3),
+            _ => Err(InvalidIoPl),
+        }
+    }
 }

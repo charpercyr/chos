@@ -1,11 +1,10 @@
 use core::convert::TryInto;
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering::Relaxed;
 use core::time::Duration;
 
+use chos_lib::arch::tables::InterruptStackFrame;
 use chos_lib::arch::x64::acpi::hpet::Hpet;
+use chos_lib::sync::spin::lock::Spinlock;
 use chos_lib::sync::spin::sem::SpinSem;
-use x86_64::structures::idt::InterruptStackFrame;
 
 static DONE: SpinSem = SpinSem::new(0);
 
@@ -33,18 +32,11 @@ pub fn initialize(hpet_table: &Hpet) {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DelayInProgressError;
 
-static IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+static IN_PROGRESS: Spinlock<()> = Spinlock::new(());
 
 pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
-    if IN_PROGRESS
-        .compare_exchange(false, true, Relaxed, Relaxed)
-        .is_err()
-    {
-        return Err(DelayInProgressError);
-    }
-    let hpet = unsafe { &mut HPET }
-        .as_mut()
-        .expect("Timer not initialized");
+    let _guard = IN_PROGRESS.try_lock().ok_or(DelayInProgressError)?;
+    let hpet = unsafe { HPET.as_mut() }.expect("Timer not initialized");
     let period = hpet.period() as u128;
     let mut tim0 = hpet.get_timer(0);
 
@@ -70,7 +62,5 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
         tim0.disable();
         hpet.disable();
     };
-
-    IN_PROGRESS.store(false, Relaxed);
     Ok(())
 }

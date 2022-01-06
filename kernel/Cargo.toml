@@ -26,6 +26,3 @@ default-features = false
 [dependencies.intrusive-collections]
 git = "https://github.com/charpercyr/intrusive-rs"
 features = ["nightly"]
-
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-x86_64 = "0.14.1"

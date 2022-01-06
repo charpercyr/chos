@@ -1,6 +1,6 @@
 use chos_lib::arch::x64::qemu::{exit_qemu, QemuStatus};
 use chos_lib::boot::KernelBootInfo;
-use chos_lib::check_kernel_entry;
+use chos_lib::{check_kernel_entry};
 use chos_lib::log::*;
 
 use crate::mm::init_early_memory;

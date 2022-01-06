@@ -1,5 +1,7 @@
 use core::hint::unreachable_unchecked;
 
+use crate::arch::port::PortWriteOnly;
+
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QemuStatus {
@@ -9,12 +11,7 @@ pub enum QemuStatus {
 
 pub fn exit_qemu(status: QemuStatus) -> ! {
     unsafe {
-        let status = status as u32;
-        asm! {
-            "outl %eax, $0xf4",
-            in("eax") status,
-            options(att_syntax),
-        };
+        PortWriteOnly::new(0xf4).write(status as u32);
         unreachable_unchecked()
     }
 }

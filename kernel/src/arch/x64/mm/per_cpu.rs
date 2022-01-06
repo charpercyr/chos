@@ -24,6 +24,7 @@ struct TlsIndex {
 
 #[derive(Debug)]
 struct TlsData {
+    id: u64,
     kernel_tls_base: u64,
     mods_tls_base: *const [u64],
 }
@@ -40,7 +41,6 @@ unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
             idx
         ),
     };
-    debug!("Addr for {:?}: {:p}", idx, addr);
     addr
 }
 
@@ -103,12 +103,15 @@ pub unsafe fn init_per_cpu_data(
     let mut tls_data = Box::new_uninit_slice(info.core_count);
     for i in 0..info.core_count {
         *tls_data[i].assume_init_mut() = TlsData {
+            id: i as u64,
             kernel_tls_base: vbase.add((i as u64) * total_pages).addr().as_u64(),
             mods_tls_base: from_raw_parts(null(), 0),
         };
     }
     let tls_data = tls_data.assume_init();
-    debug!("Using TLSData: {:#x?}", tls_data);
+    for entry in tls_data.iter() {
+        debug!("TLS Base [{}] -> {:#x}", entry.id, entry.kernel_tls_base);
+    }
     TLS_DATA = MaybeUninit::new(Box::leak(tls_data));
     init_per_cpu_data_for_cpu(0);
 }

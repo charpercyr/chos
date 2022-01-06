@@ -1,7 +1,9 @@
-use x86_64::VirtAddr;
-
 mod reg;
+use core::time::Duration;
+
 use reg::*;
+
+use super::mm::VAddr;
 
 pub struct Apic {
     registers: &'static mut ApicRegisters,
@@ -32,8 +34,8 @@ impl Apic {
             .write(value | (1 << 8));
     }
 
-    pub fn base(&self) -> VirtAddr {
-        unsafe { VirtAddr::new_unsafe(self.registers as *const _ as u64) }
+    pub fn base(&self) -> VAddr {
+        unsafe { VAddr::new_unchecked(self.registers as *const _ as u64) }
     }
 
     pub unsafe fn id(&self) -> u8 {
@@ -43,7 +45,7 @@ impl Apic {
     pub unsafe fn version(&self) -> u32 {
         (*self.registers).lapic_version.read()
     }
-    pub unsafe fn start_ap(&mut self, lapic_id: u8, code_page: usize, delay_us: fn(usize)) {
+    pub unsafe fn start_ap(&mut self, lapic_id: u8, code_page: usize, delay_us: fn(Duration)) {
         start_ap(
             &mut self.registers.interrupt_command,
             lapic_id,
@@ -67,12 +69,12 @@ unsafe fn start_ap(
     cmd: &mut CommandRegisters,
     lapic_id: u8,
     code_page: usize,
-    delay_us: fn(usize),
+    delay: fn(Duration),
 ) {
     cmd.send_command(lapic_id, Command::Init);
     cmd.send_command(lapic_id, Command::InitDeassert);
 
-    delay_us(10_000);
+    delay(Duration::from_millis(10));
 
     for _ in 0..2 {
         cmd.send_command_nowait(
@@ -81,7 +83,7 @@ unsafe fn start_ap(
                 page_number: code_page as u8,
             },
         );
-        delay_us(200);
+        delay(Duration::from_micros(200));
         cmd.wait_for_delivery();
     }
 }

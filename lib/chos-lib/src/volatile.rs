@@ -1,4 +1,4 @@
-use core::intrinsics::volatile_copy_memory;
+use core::intrinsics::{unaligned_volatile_load, unaligned_volatile_store, volatile_copy_memory};
 use core::marker::PhantomData;
 use core::mem::{forget, transmute, ManuallyDrop};
 use core::ptr;
@@ -28,12 +28,27 @@ impl<T, P> Volatile<T, P> {
         unsafe { ptr::write_volatile(&mut self.0, value) }
     }
 
+    pub unsafe fn write_unaligned(this: *mut Self, value: T)
+    where
+        P: WriteAccess,
+    {
+        unaligned_volatile_store(this.cast(), value)
+    }
+
     pub fn read(&self) -> T
     where
         T: Copy,
         P: ReadAccess,
     {
         unsafe { ptr::read_volatile(&self.0) }
+    }
+
+    pub unsafe fn read_unaligned(this: *const Self) -> T
+    where
+        T: Copy,
+        P: ReadAccess,
+    {
+        unaligned_volatile_load(this.cast())
     }
 
     pub fn update(&mut self, f: impl FnOnce(&mut T))

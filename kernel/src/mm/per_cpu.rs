@@ -1,4 +1,6 @@
-use chos_lib::arch::intr::without_interrupts;
+use chos_lib::arch::{intr::without_interrupts, mm::{PAddr, VAddr}};
+
+use super::virt::paddr_of;
 
 #[macro_export]
 macro_rules! per_cpu {
@@ -63,14 +65,37 @@ macro_rules! per_cpu_with_all {
 }
 
 pub unsafe trait PerCpu {
-    type Target: ?Sized;
+    type Target: 'static + ?Sized;
     fn get(&self) -> *mut Self::Target;
+
+    unsafe fn get_ref(&self) -> &'static Self::Target {
+        &*self.get()
+    }
+    unsafe fn get_mut(&self) -> &'static mut Self::Target {
+        &mut *self.get()
+    }
+
+    fn paddr(&self) -> PAddr {
+        unsafe {
+            let (addr, _) = self.get().to_raw_parts();
+            let vaddr = VAddr::new_unchecked(addr as u64);
+            paddr_of(vaddr, super::virt::MemoryRegion::PerCpu).expect("PAddr should be valid")
+        }
+    }
+
+    unsafe fn with_static<R, F: FnOnce(&'static mut Self::Target) -> R>(&self, f: F) -> R {
+        without_interrupts(move || unsafe { self.with_static_nosave_interrupts(f) })
+    }
 
     fn with<R, F: FnOnce(&mut Self::Target) -> R>(&self, f: F) -> R {
         without_interrupts(move || unsafe { self.with_nosave_interrupts(f) })
     }
 
     unsafe fn with_nosave_interrupts<R, F: FnOnce(&mut Self::Target) -> R>(&self, f: F) -> R {
+        f(&mut *self.get())
+    }
+
+    unsafe fn with_static_nosave_interrupts<R, F: FnOnce(&'static mut Self::Target) -> R>(&self, f: F) -> R {
         f(&mut *self.get())
     }
 }

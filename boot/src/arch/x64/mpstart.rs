@@ -1,7 +1,8 @@
 use core::mem::MaybeUninit;
 use core::ptr::null;
-use core::time::Duration;
 
+use chos_lib::arch::mm::PAGE_SHIFT;
+use chos_lib::arch::regs::Cr3;
 use chos_lib::arch::x64::acpi::madt;
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::sync::spin::barrier::Barrier;
@@ -28,9 +29,9 @@ static MPSTART_STACK_BASE: usize = 0x9000;
 static MPSTART_STACK_STRIDE: usize = 0x4000;
 
 unsafe fn start_processor(apic: &mut Apic, lapic_id: u8) {
-    let mpstart_page = MPSTART_RELOC_ADDRESS as usize / 4096;
-    apic.start_ap(lapic_id, mpstart_page, |us| {
-        super::timer::delay(Duration::from_micros(us as _)).unwrap()
+    let mpstart_page = MPSTART_RELOC_ADDRESS as usize >> PAGE_SHIFT;
+    apic.start_ap(lapic_id, mpstart_page, |d| {
+        super::timer::delay(d).unwrap()
     });
 }
 
@@ -63,9 +64,9 @@ pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) 
     MPSTART_APIC_BASE = madt.lapic_address as usize;
     MPSTART_BARRIER = MaybeUninit::new(Barrier::new(count));
 
-    MPSTART_PDT4 = x86_64::registers::control::Cr3::read()
+    MPSTART_PDT4 = Cr3::read()
         .0
-        .start_address()
+        .addr()
         .as_u64() as usize;
 
     for lapic_id in entries {

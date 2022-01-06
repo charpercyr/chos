@@ -16,7 +16,7 @@
 #![feature(ptr_metadata)]
 #![feature(thread_local)]
 #![warn(clippy::disallowed_method)]
-// #![warn(unsafe_op_in_unsafe_fn)]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 
 extern crate alloc;
 

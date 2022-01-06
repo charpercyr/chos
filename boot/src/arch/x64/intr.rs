@@ -1,14 +1,13 @@
 use core::mem::MaybeUninit;
 
+use chos_lib::arch::intr::enable_interrupts;
+use chos_lib::arch::port::PortWriteOnly;
+use chos_lib::arch::regs::Cr2;
+use chos_lib::arch::tables::{InterruptStackFrame, PageFaultError, Idt, Handler};
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::arch::x64::intr::without_interrupts;
 use chos_lib::arch::x64::ioapic::{self, IOApic};
 use rustc_demangle::demangle;
-use x86_64::instructions::port::PortWriteOnly;
-use x86_64::registers::control::Cr2;
-use x86_64::structures::idt::{
-    HandlerFunc, InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode,
-};
 
 use chos_lib::arch::x64::acpi::madt::{self, Madt};
 
@@ -16,31 +15,39 @@ pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
 
 extern "x86-interrupt" fn intr_breakpoint(f: InterruptStackFrame) {
-    unsafe { crate::unsafe_println!("BREAKPOINT: {:?}", f) };
+    unsafe { crate::unsafe_println!("BREAKPOINT: {:#x?}", f) };
 }
 
 extern "x86-interrupt" fn intr_double_fault(f: InterruptStackFrame, _: u64) -> ! {
-    panic!("DOUBLE FAULT: {:?}", f);
+    panic!("DOUBLE FAULT: {:#x?}", f);
 }
 
-extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, e: PageFaultErrorCode) {
+extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, e: PageFaultError) {
     use crate::unsafe_println;
     unsafe {
         if let Some((name, offset)) =
-            super::symbols::find_symbol(f.instruction_pointer.as_u64() as _)
+            super::symbols::find_symbol(f.ip.as_u64() as _)
         {
             unsafe_println!(
                 "PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]",
-                f.instruction_pointer.as_u64(),
+                f.ip,
                 demangle(name),
                 offset,
             )
         } else {
-            unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.instruction_pointer.as_u64());
+            unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.ip);
         }
-        unsafe_println!("Tried to access 0x{:x} : {:?}", Cr2::read().as_u64(), e);
+        unsafe_println!("Tried to access 0x{:x} : {:?}", Cr2::read(), e);
     }
     panic!();
+}
+
+extern "x86-interrupt" fn intr_general_protection_fault(f: InterruptStackFrame, _: u64) {
+    panic!("GPF: {:#x?}", f);
+}
+
+extern "x86-interrupt" fn intr_invalid_opcode(f: InterruptStackFrame) {
+    panic!("Invalid Instruction: {:#x?}", f)
 }
 
 extern "x86-interrupt" fn intr_spurious(_: InterruptStackFrame) {
@@ -54,7 +61,7 @@ fn disable_pic() {
     }
 }
 
-static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+static mut IDT: Idt = Idt::empty();
 static mut APIC: MaybeUninit<Apic> = MaybeUninit::uninit();
 static mut IO_APIC: MaybeUninit<IOApic> = MaybeUninit::uninit();
 
@@ -62,9 +69,11 @@ pub fn initalize(madt: &Madt) {
     disable_pic();
 
     let idt = unsafe { &mut IDT };
-    idt.breakpoint.set_handler_fn(intr_breakpoint);
-    idt.double_fault.set_handler_fn(intr_double_fault);
-    idt.page_fault.set_handler_fn(intr_page_fault);
+    idt.breakpoint.set_handler(intr_breakpoint);
+    idt.double_fault.set_handler(intr_double_fault);
+    idt.page_fault.set_handler(intr_page_fault);
+    idt.general_protection_fault.set_handler(intr_general_protection_fault);
+    idt.invalid_opcode.set_handler(intr_invalid_opcode);
 
     let ioapic = madt
         .entries()
@@ -86,13 +95,13 @@ pub fn initalize(madt: &Madt) {
     }
 
     unsafe {
-        IDT[INTERRUPT_SPURIOUS as usize].set_handler_fn(intr_spurious);
+        idt[INTERRUPT_SPURIOUS as usize].set_handler(intr_spurious);
         apic.initialize(INTERRUPT_SPURIOUS);
     }
 
-    idt.load();
+    unsafe { Idt::load(&IDT) };
 
-    x86_64::instructions::interrupts::enable();
+    enable_interrupts();
 }
 
 pub unsafe fn apic() -> &'static mut Apic {
@@ -105,7 +114,7 @@ pub struct IOApicAllocFailed;
 pub fn try_ioapic_alloc<R, F: FnOnce(&mut ioapic::RedirectionEntry) -> R>(
     n: u8,
     f: F,
-    handler: HandlerFunc,
+    handler: Handler,
 ) -> Result<R, IOApicAllocFailed> {
     without_interrupts(move || {
         let ioapic = unsafe { IO_APIC.assume_init_mut() };
@@ -118,7 +127,7 @@ pub fn try_ioapic_alloc<R, F: FnOnce(&mut ioapic::RedirectionEntry) -> R>(
         }
 
         let idt = unsafe { &mut IDT };
-        idt[(INTERRUPT_IOAPIC_BASE + n) as usize].set_handler_fn(handler);
+        idt[(INTERRUPT_IOAPIC_BASE + n) as usize].set_handler(handler);
 
         let res = f(&mut red);
         red.enable();

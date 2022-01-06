@@ -1,13 +1,13 @@
 mod mapper;
 mod paging;
 
-use core::{fmt, ops};
 use core::ptr::{from_raw_parts, from_raw_parts_mut, Pointee};
-
-use crate::int::align_upu64;
+use core::{fmt, ops};
 
 pub use mapper::*;
 pub use paging::*;
+
+use crate::int::align_upu64;
 
 pub const PAGE_SHIFT: u32 = 12;
 pub const PAGE_MASK: u64 = (1 << PAGE_SHIFT) - 1;
@@ -194,7 +194,10 @@ impl VAddr {
         from_raw_parts(self.as_ptr(), metadata)
     }
 
-    pub const fn from_raw_parts_mut_ptr<T: Pointee + ?Sized>(self, metadata: T::Metadata) -> *mut T {
+    pub const fn from_raw_parts_mut_ptr<T: Pointee + ?Sized>(
+        self,
+        metadata: T::Metadata,
+    ) -> *mut T {
         from_raw_parts_mut(self.as_mut_ptr(), metadata)
     }
 
@@ -206,7 +209,10 @@ impl VAddr {
         &mut *self.as_mut_ptr()
     }
 
-    pub const unsafe fn from_raw_parts<'a, T: Pointee + ?Sized>(self, metadata: T::Metadata) -> &'a T {
+    pub const unsafe fn from_raw_parts<'a, T: Pointee + ?Sized>(
+        self,
+        metadata: T::Metadata,
+    ) -> &'a T {
         &*self.from_raw_parts_ptr(metadata)
     }
 

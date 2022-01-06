@@ -1,11 +1,13 @@
 #![no_std]
 #![allow(incomplete_features)]
+#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
 #![feature(core_intrinsics)]
+#![feature(const_fn_fn_ptr_basics)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(decl_macro)]
@@ -17,6 +19,10 @@
 #![feature(negative_impls)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
+#![cfg_attr(
+    any(target_arch = "x86", target_arch = "x86_64"),
+    feature(abi_x86_interrupt)
+)]
 
 pub mod access;
 

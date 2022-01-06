@@ -1,6 +1,6 @@
 use core::{fmt, hint};
 
-use x86_64::instructions::port::Port;
+use chos_lib::arch::port::Port;
 
 pub struct Serial {
     ports: [Port<u8>; 6],

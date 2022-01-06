@@ -8,5 +8,7 @@ pub mod intr;
 pub mod ioapic;
 pub mod mm;
 pub mod msr;
+pub mod port;
 pub mod qemu;
 pub mod regs;
+pub mod tables;

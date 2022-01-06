@@ -10,7 +10,7 @@ mod timer;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::boot::ArchKernelBootInfo;
-use chos_lib::arch::mm::PAddr;
+use chos_lib::arch::mm::{PAddr, VAddr};
 use chos_lib::arch::x64::acpi::Rsdt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
@@ -128,10 +128,13 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 multiboot_header: mbp,
             },
         },
-        page_table: unsafe { PageTable::get_current_page_table() },
+        page_table: unsafe {
+            (VAddr::null() + PageTable::get_current_page_table().addr()).as_mut_ptr()
+        },
     };
 
     timer::initialize(hpet);
+
     unsafe {
         mpstart::start_mp(
             madt,
@@ -146,6 +149,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             &mp_info as *const _ as _,
         )
     };
+
     mp_info.barrier.wait();
 
     entry(&mp_info.kbi, unsafe { apic().id() });
