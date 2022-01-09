@@ -1,12 +1,9 @@
 use crate::arch::boot::ArchKernelBootInfo;
-use crate::arch::x64::mm::{PAddr, VAddr};
+use crate::arch::x64::mm::PAddr;
 use crate::log::LogHandler;
-
-mod macros;
 
 #[derive(Copy, Clone, Debug)]
 pub struct KernelMemEntry {
-    pub virt: VAddr,
     pub phys: PAddr,
     pub size: usize,
 }
@@ -14,7 +11,6 @@ pub struct KernelMemEntry {
 #[derive(Copy, Clone, Debug)]
 pub struct KernelMemInfo {
     pub code: KernelMemEntry,
-    pub pt: KernelMemEntry,
     pub total_size: u64,
 }
 
@@ -22,12 +18,13 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub core_count: usize,
     pub elf: *const [u8],
+    pub initrd: *const [u8],
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelBootInfo,
 }
 
-pub type KernelEntry = fn(&KernelBootInfo, u8) -> !;
+pub type KernelEntry = fn(&KernelBootInfo, usize) -> !;
 
 #[macro_export]
 macro_rules! check_kernel_entry {

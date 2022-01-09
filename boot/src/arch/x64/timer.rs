@@ -3,8 +3,7 @@ use core::time::Duration;
 
 use chos_lib::arch::tables::InterruptStackFrame;
 use chos_lib::arch::x64::acpi::hpet::Hpet;
-use chos_lib::sync::spin::lock::Spinlock;
-use chos_lib::sync::spin::sem::SpinSem;
+use chos_lib::sync::{SpinSem, Spinlock, Sem};
 
 static DONE: SpinSem = SpinSem::new(0);
 

@@ -14,7 +14,7 @@ extern "C" {
     static MPSTART_16_LEN: usize;
 }
 
-type MpStartFn = fn(u8, *const ()) -> !;
+type MpStartFn = fn(usize, *const ()) -> !;
 
 static mut MPSTART_FN: MaybeUninit<MpStartFn> = MaybeUninit::uninit();
 static mut MPSTART_USER: *const () = null();
@@ -86,6 +86,6 @@ extern "C" fn secondary_main() -> ! {
         let apic = Apic::with_address(MPSTART_APIC_BASE);
         let id = apic.id();
         MPSTART_BARRIER.assume_init_ref().wait();
-        (MPSTART_FN.assume_init())(id, MPSTART_USER);
+        (MPSTART_FN.assume_init())(id as usize, MPSTART_USER);
     }
 }

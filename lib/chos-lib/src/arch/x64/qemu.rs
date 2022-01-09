@@ -9,6 +9,12 @@ pub enum QemuStatus {
     Error = 0x11,
 }
 
+impl QemuStatus {
+    pub fn exit(self) -> ! {
+        exit_qemu(self)
+    }
+}
+
 pub fn exit_qemu(status: QemuStatus) -> ! {
     unsafe {
         PortWriteOnly::new(0xf4).write(status as u32);

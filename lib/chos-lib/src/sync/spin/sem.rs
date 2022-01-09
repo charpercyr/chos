@@ -1,6 +1,8 @@
 use core::hint::spin_loop;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::sync::sem::Sem;
+
 pub struct SpinSem {
     count: AtomicUsize,
 }
@@ -11,8 +13,13 @@ impl SpinSem {
             count: AtomicUsize::new(count),
         }
     }
+}
 
-    pub fn wait(&self) {
+impl Sem for SpinSem {
+    fn new_with_count(count: usize) -> Self {
+        Self::new(count)
+    }
+    fn wait(&self) {
         loop {
             let count = loop {
                 let count = self.count.load(Ordering::Relaxed);
@@ -31,7 +38,7 @@ impl SpinSem {
         }
     }
 
-    pub fn signal(&self) {
+    fn signal(&self) {
         self.count.fetch_add(1, Ordering::Release);
     }
 }

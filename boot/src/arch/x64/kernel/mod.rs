@@ -98,13 +98,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     KernelMemInfo {
         code: KernelMemEntry {
             phys: phys::KERNEL_DATA_BASE,
-            virt: virt::STATIC_BASE,
             size: (pmap_end - pmap_start) as usize,
-        },
-        pt: KernelMemEntry {
-            phys: phys::KERNEL_DATA_BASE + pmap_end - pmap_start,
-            virt: virt::PHYSICAL_MAP_BASE + pmap_end,
-            size: palloc.total_size(),
         },
         total_size: memory
             .all_memory_areas()

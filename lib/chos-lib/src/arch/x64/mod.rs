@@ -11,4 +11,5 @@ pub mod msr;
 pub mod port;
 pub mod qemu;
 pub mod regs;
+pub mod serial;
 pub mod tables;

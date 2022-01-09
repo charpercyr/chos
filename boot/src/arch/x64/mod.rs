@@ -8,6 +8,8 @@ mod panic;
 mod symbols;
 mod timer;
 
+use core::ptr::{from_raw_parts, null};
+
 use chos_config::arch::mm::virt;
 use chos_lib::arch::boot::ArchKernelBootInfo;
 use chos_lib::arch::mm::{PAddr, VAddr};
@@ -127,6 +129,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 rsdt,
                 multiboot_header: mbp,
             },
+            initrd: from_raw_parts(null(), 0),
         },
         page_table: unsafe {
             (VAddr::null() + PageTable::get_current_page_table().addr()).as_mut_ptr()
@@ -152,5 +155,5 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     mp_info.barrier.wait();
 
-    entry(&mp_info.kbi, unsafe { apic().id() });
+    entry(&mp_info.kbi, unsafe { apic().id() as usize });
 }

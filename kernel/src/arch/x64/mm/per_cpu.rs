@@ -1,12 +1,11 @@
 use alloc::boxed::Box;
+use chos_lib::arch::regs::GS;
 use core::intrinsics::copy_nonoverlapping;
 use core::mem::MaybeUninit;
 use core::ptr::{from_raw_parts, null, write_bytes};
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{FrameSize4K, PAGE_SIZE64};
-use chos_lib::arch::msr::Msr;
-use chos_lib::boot::KernelBootInfo;
 use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::debug;
@@ -29,11 +28,10 @@ struct TlsData {
     mods_tls_base: *const [u64],
 }
 static mut TLS_DATA: MaybeUninit<&'static [TlsData]> = MaybeUninit::uninit();
-static GSBASE: Msr = Msr::new(0xc0000101);
 
 #[no_mangle]
 unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
-    let tls_data = &*(GSBASE.read() as *const TlsData);
+    let tls_data = GS::get().as_ref::<TlsData>();
     let addr = match idx.module {
         0 => (tls_data.kernel_tls_base + idx.offset) as *mut (),
         _ => unimplemented!(
@@ -45,7 +43,7 @@ unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
 }
 
 pub unsafe fn init_per_cpu_data(
-    info: &KernelBootInfo,
+    core_count: usize,
     elf: &Elf,
     mapper: &mut impl RangeMapper<FrameSize4K, PGTFrameSize = FrameSize4K>,
 ) {
@@ -54,6 +52,7 @@ pub unsafe fn init_per_cpu_data(
         .iter()
         .filter(|e| e.typ() == ProgramEntryType::Tls);
     if tls_entries.clone().count() == 0 {
+        TLS_DATA = MaybeUninit::new(&[]);
         return;
     }
     let total_size: u64 = tls_entries.clone().map(|e| e.mem_size()).sum();
@@ -61,7 +60,7 @@ pub unsafe fn init_per_cpu_data(
     let total_pages = total_size.ceil_div(PAGE_SIZE64);
     let vbase = VFrame::new_unchecked(virt::PER_CPU_BASE);
     let mut vcur = vbase;
-    for _ in 0..info.core_count {
+    for _ in 0..core_count {
         let mut remaining = total_pages;
         while remaining > 0 {
             let order = log2u64(remaining);
@@ -85,7 +84,7 @@ pub unsafe fn init_per_cpu_data(
     }
 
     for tls in tls_entries {
-        for i in 0..info.core_count {
+        for i in 0..core_count {
             let addr = vbase.add((i as u64) * total_pages).addr().as_mut_ptr();
             copy_nonoverlapping(
                 elf.get_buffer(tls.offset() as usize, tls.file_size() as usize)
@@ -100,15 +99,16 @@ pub unsafe fn init_per_cpu_data(
         }
     }
 
-    let mut tls_data = Box::new_uninit_slice(info.core_count);
-    for i in 0..info.core_count {
-        *tls_data[i].assume_init_mut() = TlsData {
+    let mut tls_data = Box::new_uninit_slice(core_count as usize);
+    for i in 0..core_count {
+        tls_data[i as usize] = MaybeUninit::new(TlsData {
             id: i as u64,
             kernel_tls_base: vbase.add((i as u64) * total_pages).addr().as_u64(),
             mods_tls_base: from_raw_parts(null(), 0),
-        };
+        });
     }
     let tls_data = tls_data.assume_init();
+    
     for entry in tls_data.iter() {
         debug!("TLS Base [{}] -> {:#x}", entry.id, entry.kernel_tls_base);
     }
@@ -116,6 +116,10 @@ pub unsafe fn init_per_cpu_data(
     init_per_cpu_data_for_cpu(0);
 }
 
-pub unsafe fn init_per_cpu_data_for_cpu(core_id: u8) {
-    GSBASE.write_shared((&TLS_DATA.assume_init_mut()[core_id as usize]) as *const TlsData as u64)
+pub unsafe fn init_per_cpu_data_for_cpu(core_id: usize) {
+    let tls_data = *TLS_DATA.assume_init_ref();
+    // Check that we have per-cpu data
+    if tls_data.len() != 0 {
+        GS::set((&TLS_DATA.assume_init_ref()[core_id]).into())
+    }
 }

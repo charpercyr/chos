@@ -16,4 +16,12 @@ pub mod virt {
     pub const HEAP_BASE: VAddr = KERNEL_BASE.add_u64(2 * MEMORY_ZONE_SIZE);
     pub const DEVICE_BASE: VAddr = KERNEL_BASE.add_u64(3 * MEMORY_ZONE_SIZE);
     pub const PER_CPU_BASE: VAddr = KERNEL_BASE.add_u64(4 * MEMORY_ZONE_SIZE);
+    pub const STACK_BASE: VAddr = KERNEL_BASE.add_u64(5 * MEMORY_ZONE_SIZE);
+}
+
+pub mod stack {
+    #[cfg(debug_assertions)]
+    pub const KERNEL_STACK_PAGE_ORDER: u8 = 5;
+    #[cfg(not(debug_assertions))]
+    pub const KERNEL_STACK_PAGE_ORDER: u8 = 4;
 }

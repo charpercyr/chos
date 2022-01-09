@@ -5,7 +5,7 @@ use modular_bitfield::prelude::*;
 
 use crate::{init::ConstInit, mm::{FrameSize, PFrame}, log::debug, arch::regs::{Cr3, Cr3Flags}};
 
-use super::{PAddr};
+use super::{PAddr, VAddr};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 
@@ -70,6 +70,10 @@ impl PageTable {
         PageTableIterMut {
             iter: self.entries.iter_mut(),
         }
+    }
+
+    pub fn as_vaddr(&self) -> VAddr {
+        VAddr::from(self)
     }
 
     pub unsafe fn set_page_table(addr: PFrame<FrameSize4K>) {

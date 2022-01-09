@@ -7,6 +7,7 @@
 #![feature(inline_const)]
 #![feature(never_type)]
 #![feature(once_cell)]
+#![feature(ptr_metadata)]
 #![feature(unboxed_closures)]
 
 mod arch;

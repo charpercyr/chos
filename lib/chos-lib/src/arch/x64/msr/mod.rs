@@ -23,7 +23,6 @@ impl<P> Msr<P> {
             in("ecx") self.0,
             lateout("edx") vh,
             lateout("eax") vl,
-            options(nostack, nomem),
         }
         u64::join(vh, vl)
     }
@@ -45,7 +44,6 @@ impl<P> Msr<P> {
             in("ecx") self.0,
             in("edx") vh,
             in("eax") vl,
-            options(nostack, nomem),
         }
     }
 
