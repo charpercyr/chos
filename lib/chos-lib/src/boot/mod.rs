@@ -1,3 +1,5 @@
+use core::ptr::NonNull;
+
 use crate::arch::boot::ArchKernelBootInfo;
 use crate::arch::x64::mm::PAddr;
 use crate::log::LogHandler;
@@ -17,8 +19,8 @@ pub struct KernelMemInfo {
 #[derive(Copy, Clone)]
 pub struct KernelBootInfo {
     pub core_count: usize,
-    pub elf: *const [u8],
-    pub initrd: *const [u8],
+    pub elf: Option<NonNull<[u8]>>,
+    pub initrd: Option<NonNull<[u8]>>,
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelBootInfo,

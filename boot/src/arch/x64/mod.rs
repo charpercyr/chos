@@ -8,7 +8,7 @@ mod panic;
 mod symbols;
 mod timer;
 
-use core::ptr::{from_raw_parts, null};
+use core::ptr::NonNull;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::boot::ArchKernelBootInfo;
@@ -122,14 +122,14 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         barrier: Barrier::new(apic_count),
         kbi: KernelBootInfo {
             core_count: apic_count,
-            elf: kernel.data(),
+            elf: Some(NonNull::from(kernel.data())),
             early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
             arch: ArchKernelBootInfo {
                 rsdt,
                 multiboot_header: mbp,
             },
-            initrd: from_raw_parts(null(), 0),
+            initrd: None,
         },
         page_table: unsafe {
             (VAddr::null() + PageTable::get_current_page_table().addr()).as_mut_ptr()

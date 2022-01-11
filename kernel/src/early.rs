@@ -1,6 +1,5 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
-use core::ptr::null;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -104,8 +103,9 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
             EARLY_DATA = MaybeUninit::new(EarlyData {
                 stacks,
                 kernel_args: Box::leak(Box::new(KernelArgs {
-                    kernel_elf: (info.elf.is_null()).then(|| (&*info.elf).to_owned().into()),
-                    initrd: None // (info.initrd.is_null()).then(|| (&*info.initrd).to_owned().into()),
+                    kernel_elf: info.elf.map(|elf| elf.as_ref().to_owned().into()),
+                    initrd: None,
+                    core_count: info.core_count,
                 })),
             });
         }

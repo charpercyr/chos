@@ -25,4 +25,10 @@ impl Barrier {
             }
         }
     }
+
+    /// # Safety
+    /// This can only be called if no other threads are waiting on this barrier
+    pub unsafe fn reset(&mut self) {
+        self.count.store(0, Ordering::Relaxed);
+    }
 }

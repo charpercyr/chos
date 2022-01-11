@@ -55,7 +55,11 @@ unsafe fn get_early_kernel_mapper() -> LoggingMapper<OffsetMapper<'static>> {
 }
 
 pub unsafe fn use_early_kernel_table() {
-    let page_paddr = paddr_of(get_early_kernel_mapper().inner().p4.as_vaddr(), MemoryRegion::Static).unwrap();
+    let page_paddr = paddr_of(
+        get_early_kernel_mapper().inner().p4.as_vaddr(),
+        MemoryRegion::Static,
+    )
+    .unwrap();
     PageTable::set_page_table(PFrame::new_unchecked(page_paddr));
 }
 
@@ -106,7 +110,7 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
         MapFlags::WRITE | MapFlags::NOCACHE | MapFlags::GLOBAL,
     );
 
-    let elf = Elf::new(&*info.elf).expect("Elf should be valid");
+    let elf = Elf::new(info.elf.unwrap().as_ref()).expect("Elf should be valid");
     mapper
         .map_elf_load_sections(
             &elf,
