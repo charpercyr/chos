@@ -5,9 +5,11 @@ use core::slice::from_raw_parts_mut;
 
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
+use chos_config::domain;
 use chos_lib::arch::mm::{PAddr, PAGE_SIZE64};
 use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
+use chos_lib::log::domain_debug;
 use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
@@ -300,6 +302,7 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
 }
 
 pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
+    domain_debug!(domain::PALLOC, "alloc_pages(order = {}, flags = {:?})", order, flags);
     for region in REGIONS.iter_mut() {
         if region.meta.biggest_order >= order && region.meta.free_pages >= (1 << order) {
             if let Ok(addr) = alloc_in_region(region, order, flags) {
@@ -311,6 +314,7 @@ pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr
 }
 
 pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
+    domain_debug!(domain::PALLOC, "dealloc_pages(page = {:x}, order = {})", page, order);
     for region in REGIONS.iter_mut() {
         if region.contains(page) {
             free_in_region(region, page, order);

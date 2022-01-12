@@ -1,7 +1,6 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use chos_lib::arch::mm::VAddr;
 use chos_lib::boot::KernelBootInfo;
@@ -34,7 +33,6 @@ mod stack {
 
     unsafe fn allocate_stack(order: u8) -> VAddr {
         let pages = raw_alloc::alloc_pages(order, AllocFlags::empty()).expect("Should not fail");
-
         map_stack(pages, 1 << order, true)
     }
 
@@ -103,7 +101,7 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
             EARLY_DATA = MaybeUninit::new(EarlyData {
                 stacks,
                 kernel_args: Box::leak(Box::new(KernelArgs {
-                    kernel_elf: info.elf.map(|elf| elf.as_ref().to_owned().into()),
+                    kernel_elf: info.elf.map(|elf| elf.as_ref().into()),
                     initrd: None,
                     core_count: info.core_count,
                 })),

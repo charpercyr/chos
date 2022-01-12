@@ -1,4 +1,6 @@
 use alloc::alloc::{GlobalAlloc, Layout};
+use chos_config::domain;
+use chos_lib::log::domain_debug;
 use core::mem::align_of;
 use core::ptr::null_mut;
 use core::slice;
@@ -73,6 +75,7 @@ struct KAlloc;
 
 unsafe impl GlobalAlloc for KAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        domain_debug!(domain::GLOBAL_ALLOC, "alloc(size={}, align={})", layout.size(), layout.align());
         assert!(
             layout.align() <= align_of::<usize>(),
             "Invalid alignment, use specialized slab allocator"
@@ -92,6 +95,7 @@ unsafe impl GlobalAlloc for KAlloc {
             .unwrap_or(null_mut())
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        domain_debug!(domain::GLOBAL_ALLOC, "dealloc(ptr={:p}, size={}, align={})", ptr, layout.size(), layout.align());
         assert!(
             layout.align() <= align_of::<usize>(),
             "Invalid alignment, use specialized slab allocator"

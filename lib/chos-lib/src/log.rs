@@ -195,17 +195,94 @@ impl fmt::Display for Bytes {
         const GB: u64 = 1024 * MB;
         write!(f, "(")?;
         if self.0 >= GB {
-            write!(f, "{}GB ", v / GB)?;
+            write!(f, "{}GiB ", v / GB)?;
             v -= v / GB * GB;
         }
         if self.0 >= MB {
-            write!(f, "{}MB ", v / MB)?;
+            write!(f, "{}MiB ", v / MB)?;
             v -= v / MB * MB;
         }
         if self.0 >= KB {
-            write!(f, "{}KB ", v / KB)?;
+            write!(f, "{}KiB ", v / KB)?;
             v -= v / KB * KB;
         }
         write!(f, "{}B)", v)
+    }
+}
+
+pub trait Domain {
+    fn name(&self) -> &str;
+    fn enabled(&self) -> bool;
+}
+
+pub macro domain_println($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::println!("{}: {}", $domain.name(), format_args!($($args)*));
+    }
+}
+
+pub macro unsafe_domain_println($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::unsafe_println!("{}: {}", $domain.name(), format_args!($($args)*));
+    }
+}
+
+pub macro domain_debug ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::debug!("{}: {}", $domain.name(), format_args!($($args)*));
+    }
+}
+
+pub macro unsafe_domain_debug ($domain:expr, $($args:tt)*) {
+    if $crate::domain::Domain::enabled(&$domain) {
+        $crate::log::unsafe_debug!("{}: {}", $domain.name(), format_args!($($args)*));
+    }
+}
+
+pub macro domain_info ($domain:expr, $($args:tt)*) {
+    if $crate::domain::Domain::enabled(&$domain) {
+        $crate::log::info!($($args)*);
+    }
+}
+
+pub macro unsafe_domain_info ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::unsafe_info!($($args)*);
+    }
+}
+
+pub macro domain_warn ($domain:expr, $($args:tt)*) {
+    if $crate::domain::Domain::enabled(&$domain) {
+        $crate::log::warn!($($args)*);
+    }
+}
+
+pub macro unsafe_domain_warn ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::unsafe_warn!($($args)*);
+    }
+}
+
+pub macro domain_error ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled($domain) {
+        $crate::log::error!($($args)*);
+    }
+}
+
+pub macro unsafe_domain_error ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::unsafe_error!($($args)*);
+    }
+}
+
+pub macro domain_critical ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::critical!($($args)*);
+    }
+}
+
+pub macro unsafe_domain_critical ($domain:expr, $($args:tt)*) {
+    if $crate::log::Domain::enabled(&$domain) {
+        $crate::log::unsafe_critical!($($args)*);
     }
 }

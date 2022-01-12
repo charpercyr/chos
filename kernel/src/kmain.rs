@@ -16,7 +16,7 @@ pub struct KernelArgs {
 extern "C" fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     if let Some(kernel_elf) = args.kernel_elf.as_deref() {
         println!(
-            "[{}] Kernel ELF @ {:p} len = {} ({:x})",
+            "[{}] Kernel ELF @ {:p} len = {} ({})",
             id,
             kernel_elf,
             Bytes(kernel_elf.len() as u64),
