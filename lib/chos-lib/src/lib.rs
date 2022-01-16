@@ -13,7 +13,6 @@
 #![feature(dropck_eyepatch)]
 #![feature(generic_associated_types)]
 #![feature(inherent_associated_types)]
-#![feature(maybe_uninit_extra)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(negative_impls)]
 #![feature(never_type)]
@@ -24,36 +23,23 @@
 )]
 
 pub mod access;
-
 pub mod arch;
-
 pub mod boot;
-
-mod macros;
-
 pub mod elf;
-
-pub mod int;
-
 pub mod init;
-
+pub mod int;
 pub mod intrusive;
-
 pub mod log;
-
+mod macros;
 pub mod mm;
-
 pub mod pool;
-
 pub mod ptr;
-
 pub mod str;
-
 pub mod stride;
-
 pub mod sync;
-
+pub mod tar;
 mod volatile;
+
 pub use chos_lib_macros::forward_fmt;
 pub use volatile::*;
 

@@ -38,9 +38,9 @@ pub unsafe fn map_page(page: &Page, region: MemoryRegion) -> Result<VAddr, Memor
 pub unsafe fn paddr_of(vaddr: VAddr, region: MemoryRegion) -> Option<PAddr> {
     match region {
         MemoryRegion::Static => Some(PAddr::new((vaddr - region_base(region)).as_u64()) + phys::KERNEL_DATA_BASE),
+        MemoryRegion::PerCpu => todo!("Walk page table fpr {:#x}", vaddr),
         _ => Some(PAddr::new((vaddr - region_base(region)).as_u64()))
     }
-    
 }
 
 pub unsafe fn unmap_page(_: VAddr) {

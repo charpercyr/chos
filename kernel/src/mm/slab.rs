@@ -10,9 +10,12 @@ use chos_lib::init::ConstInit;
 use chos_lib::int::{align_upusize, ceil_divusize};
 use chos_lib::pool::Pool;
 use chos_lib::sync::lock::{Lock, RawLock};
+use chos_lib::sync::spin::lock::RawSpinLock;
 use intrusive_collections::{
     intrusive_adapter, linked_list, LinkedList, LinkedListAtomicLink, UnsafeMut,
 };
+
+use super::phys::MMSlabAllocator;
 
 pub trait Slab: Sized {
     const SIZE: usize;
@@ -346,3 +349,6 @@ unsafe impl<L: RawLock, F: SlabAllocator, T> Pool<T> for PoolObjectAllocator<L, 
         self.alloc.lock().dealloc(ptr)
     }
 }
+
+pub type DefaultPoolObjectAllocator<T, const O: u8> =
+    PoolObjectAllocator<RawSpinLock, MMSlabAllocator<O>, T>;

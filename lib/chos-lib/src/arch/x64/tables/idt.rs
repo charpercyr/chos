@@ -262,13 +262,20 @@ impl<H> Entry<H> {
     where
         H: HandlerFn,
     {
+        let cs = CS::get();
+        self.set_handler_gdt_selector(h, cs)
+    }
+
+    pub fn set_handler_gdt_selector(&mut self, h: H, gdt_selector: u16) -> &mut EntryOptions
+    where
+        H: HandlerFn,
+    {
         let h = h.to_u64();
         self.pointer_low = h.get_bits(0..16) as u16;
         self.pointer_mid = h.get_bits(16..32) as u16;
         self.pointer_hig = h.get_bits(32..64) as u32;
 
-        let cs = CS::get();
-        self.gdt_selector = cs;
+        self.gdt_selector = gdt_selector;
 
         self.options.set_present(true)
     }

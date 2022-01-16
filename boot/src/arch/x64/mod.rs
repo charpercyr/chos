@@ -81,7 +81,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let kernel = if let Some(kernel) = mbh
         .module_tags()
-        .find(|m| matches!(iter_cmdline(m.name()).next(), Some(("kernel", _))))
+        .find(|&m| matches!(iter_cmdline(m.name()).next(), Some(("kernel", _))))
     {
         let kernel = unsafe {
             core::slice::from_raw_parts(
@@ -93,6 +93,18 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     } else {
         panic!("No kernel")
     };
+
+    let initrd = mbh
+        .module_tags()
+        .find(|&m| matches!(iter_cmdline(m.name()).next(), Some(("initrd", _))))
+        .map(|initrd| unsafe {
+            core::slice::from_raw_parts(
+                initrd.start_address() as *const u8,
+                (initrd.end_address() - initrd.start_address()) as usize,
+            )
+        });
+    
+    println!("Initrd: {:?}", initrd.map(<[u8]>::len));
 
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
     debug!("Memory map");
@@ -122,14 +134,14 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         barrier: Barrier::new(apic_count),
         kbi: KernelBootInfo {
             core_count: apic_count,
-            elf: Some(NonNull::from(kernel.data())),
+            elf: NonNull::from(kernel.data()),
             early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
             arch: ArchKernelBootInfo {
                 rsdt,
                 multiboot_header: mbp,
             },
-            initrd: None,
+            initrd: initrd.map(NonNull::from),
         },
         page_table: unsafe {
             (VAddr::null() + PageTable::get_current_page_table().addr()).as_mut_ptr()

@@ -19,7 +19,7 @@ pub struct KernelMemInfo {
 #[derive(Copy, Clone)]
 pub struct KernelBootInfo {
     pub core_count: usize,
-    pub elf: Option<NonNull<[u8]>>,
+    pub elf: NonNull<[u8]>,
     pub initrd: Option<NonNull<[u8]>>,
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,

@@ -1,6 +1,8 @@
 use core::arch::asm;
 use core::convert::TryInto;
 use core::mem::size_of;
+use core::ops::{Index, IndexMut};
+use core::slice::SliceIndex;
 
 use bit_field::BitField;
 
@@ -26,7 +28,7 @@ impl<const N: usize> Gdt<N> {
     pub unsafe fn load(this: &'static Self) {
         let reg = DescriptorRegister::new(this);
         asm! {
-            "ldt ({})",
+            "lgdt ({})",
             in(reg) &reg,
             options(att_syntax, nostack),
         }
@@ -34,6 +36,18 @@ impl<const N: usize> Gdt<N> {
 }
 impl<const N: usize> ConstInit for Gdt<N> {
     const INIT: Self = Self::new();
+}
+
+impl<I: SliceIndex<[Descriptor]>, const N: usize> Index<I> for Gdt<N> {
+    type Output = I::Output;
+    fn index(&self, index: I) -> &Self::Output {
+        self.descriptors.index(index)
+    }
+}
+impl<I: SliceIndex<[Descriptor]>, const N: usize> IndexMut<I> for Gdt<N> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.descriptors.index_mut(index)
+    }
 }
 
 #[derive(Debug)]

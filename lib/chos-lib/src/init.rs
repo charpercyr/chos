@@ -2,6 +2,9 @@ use core::cell::{Cell, RefCell, UnsafeCell};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
+use intrusive_collections::linked_list::LinkedListOps;
+use intrusive_collections::{Adapter, LinkedList};
+
 pub trait ConstInit: Sized {
     const INIT: Self;
 }
@@ -33,6 +36,10 @@ impl<T: ?Sized> ConstInit for PhantomData<T> {
 #[cfg(feature = "alloc")]
 impl ConstInit for alloc::alloc::Global {
     const INIT: Self = Self;
+}
+
+impl<A: Adapter<LinkOps: LinkedListOps> + ConstInit> ConstInit for LinkedList<A> {
+    const INIT: Self = LinkedList::new(ConstInit::INIT);
 }
 
 macro_rules! const_init_tuple {

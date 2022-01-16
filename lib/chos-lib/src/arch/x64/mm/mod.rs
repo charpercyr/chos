@@ -365,14 +365,14 @@ impl ops::Sub for VAddr {
     }
 }
 
-impl<T> From<&T> for VAddr {
+impl<T: ?Sized> From<&T> for VAddr {
     fn from(v: &T) -> Self {
-        unsafe { Self::new_unchecked(v as *const T as u64) }
+        unsafe { Self::new_unchecked(v as *const T as *const () as u64) }
     }
 }
 
-impl<T> From<&mut T> for VAddr {
+impl<T: ?Sized> From<&mut T> for VAddr {
     fn from(v: &mut T) -> Self {
-        unsafe { Self::new_unchecked(v as *mut T as u64) }
+        unsafe { Self::new_unchecked(v as *mut T as *mut () as u64) }
     }
 }

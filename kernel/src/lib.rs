@@ -16,7 +16,6 @@
 #![feature(ptr_metadata)]
 #![feature(thread_local)]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
-
 #![allow(improper_ctypes)]
 #![warn(clippy::disallowed_method)]
 
@@ -25,6 +24,8 @@ extern crate alloc;
 mod arch;
 mod dummy;
 mod early;
+mod intr;
 mod kmain;
 mod mm;
 mod panic;
+mod sched;

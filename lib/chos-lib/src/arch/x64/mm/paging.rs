@@ -1,11 +1,13 @@
-
-use core::{ops::{Index, IndexMut}, slice::{Iter, IterMut}};
+use core::ops::{Index, IndexMut};
+use core::slice::{Iter, IterMut};
 
 use modular_bitfield::prelude::*;
 
-use crate::{init::ConstInit, mm::{FrameSize, PFrame}, log::debug, arch::regs::{Cr3, Cr3Flags}};
-
 use super::{PAddr, VAddr};
+use crate::arch::regs::{Cr3, Cr3Flags};
+use crate::init::ConstInit;
+use crate::log::debug;
+use crate::mm::{FrameSize, PFrame};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 

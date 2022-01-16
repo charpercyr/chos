@@ -1,4 +1,5 @@
 use chos_config::arch::mm::{phys, virt};
+use chos_lib::arch::boot::ArchKernelBootInfo;
 use chos_lib::arch::mm::{FrameSize1G, FrameSize4K, OffsetMapper, PAddr, PageTable, VAddr};
 use chos_lib::boot::KernelBootInfo;
 use chos_lib::elf::Elf;
@@ -8,12 +9,11 @@ use chos_lib::mm::{
 };
 use multiboot2::MemoryArea;
 
+use super::kmain::ArchKernelArgs;
 use super::mm::virt::MMFrameAllocator;
 use crate::arch::mm::per_cpu::init_per_cpu_data;
 use crate::mm::phys::{add_regions, RegionFlags};
 use crate::mm::virt::{paddr_of, MemoryRegion};
-
-static mut STACK_BASE: VFrame<FrameSize4K> = unsafe { VFrame::new_unchecked(virt::STACK_BASE) };
 
 fn is_early_memory(area: &MemoryArea, info: &KernelBootInfo) -> bool {
     area.typ() == multiboot2::MemoryAreaType::Available
@@ -46,8 +46,9 @@ pub unsafe fn arch_init_early_memory(info: &KernelBootInfo) {
     init_early_kernel_table(info);
 }
 
+static mut EARLY_KERNEL_TABLE: PageTable = PageTable::empty();
+
 unsafe fn get_early_kernel_mapper() -> LoggingMapper<OffsetMapper<'static>> {
-    static mut EARLY_KERNEL_TABLE: PageTable = PageTable::empty();
     LoggingMapper::new(OffsetMapper::new(
         &mut EARLY_KERNEL_TABLE,
         virt::PHYSICAL_MAP_BASE,
@@ -110,7 +111,7 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
         MapFlags::WRITE | MapFlags::NOCACHE | MapFlags::GLOBAL,
     );
 
-    let elf = Elf::new(info.elf.unwrap().as_ref()).expect("Elf should be valid");
+    let elf = Elf::new(info.elf.as_ref()).expect("Elf should be valid");
     mapper
         .map_elf_load_sections(
             &elf,
@@ -127,6 +128,7 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
 }
 
 pub unsafe fn map_stack(pages: PAddr, count: u64, add_guard_page: bool) -> VAddr {
+    static mut STACK_BASE: VFrame<FrameSize4K> = unsafe { VFrame::new_unchecked(virt::STACK_BASE) };
     let pages = PFrame::new_unchecked(pages);
     let mut mapper = get_early_kernel_mapper();
     let vbase = STACK_BASE;
@@ -141,4 +143,17 @@ pub unsafe fn map_stack(pages: PAddr, count: u64, add_guard_page: bool) -> VAddr
         .ignore();
     STACK_BASE = STACK_BASE.add(count + add_guard_page.then_some(1).unwrap_or(0));
     vbase.addr()
+}
+
+pub unsafe fn arch_copy_boot_data(data: &ArchKernelBootInfo) -> ArchKernelArgs {
+    ArchKernelArgs {
+        rsdt: (VAddr::new_unchecked(data.rsdt as u64) + virt::PHYSICAL_MAP_BASE).as_ptr(),
+    }
+}
+
+pub unsafe fn copy_early_kernel_table_to(pgt: &mut PageTable) {
+    for i in 256..512 {
+        // core::ptr::write_volatile(&mut pgt[i], EARLY_KERNEL_TABLE[i]);
+        pgt[i] = EARLY_KERNEL_TABLE[i];
+    }
 }

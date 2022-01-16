@@ -20,4 +20,5 @@ macro domains ($($name:ident = $value:expr),* $(,)?) {
 domains!{
     PALLOC = false,
     GLOBAL_ALLOC = false,
+    SLAB_ALLOC = false,
 }
