@@ -5,8 +5,9 @@ use modular_bitfield::prelude::*;
 
 use super::{PAddr, VAddr};
 use crate::arch::regs::{Cr3, Cr3Flags};
+use crate::config::domain;
 use crate::init::ConstInit;
-use crate::log::debug;
+use crate::log::domain_debug;
 use crate::mm::{FrameSize, PFrame};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
@@ -34,16 +35,16 @@ impl PageEntry {
         Self::new()
     }
 
-    pub fn phys_addr(&self) -> PAddr {
+    pub fn paddr(&self) -> PAddr {
         PAddr::new(self.addr() << 12)
     }
 
-    pub fn set_phys_addr(&mut self, addr: PAddr) {
+    pub fn set_paddr(&mut self, addr: PAddr) {
         assert!(addr.is_page_aligned(), "Address is not page aligned");
         self.set_addr(addr.page());
     }
 
-    pub fn with_phys_addr(self, addr: PAddr) -> Self {
+    pub fn with_paddr(self, addr: PAddr) -> Self {
         assert!(addr.is_page_aligned(), "Address is not page aligned");
         self.with_addr(addr.page())
     }
@@ -79,7 +80,7 @@ impl PageTable {
     }
 
     pub unsafe fn set_page_table(addr: PFrame<FrameSize4K>) {
-        debug!("Using {:#x} as page table", addr);
+        domain_debug!(domain::PAGE_TABLE, "Using {:?} as page table", addr);
         Cr3::write(addr, Cr3Flags::empty())
     }
 
@@ -154,7 +155,7 @@ impl ConstInit for FrameSize4K {
     const INIT: Self = Self;
 }
 impl FrameSize for FrameSize4K {
-    const PAGE_SIZE: u64 = 4096;
+    const PAGE_SHIFT: u8 = 12;
     const DEBUG_STR: &'static str = "4K";
 }
 
@@ -164,7 +165,7 @@ impl ConstInit for FrameSize2M {
     const INIT: Self = Self;
 }
 impl FrameSize for FrameSize2M {
-    const PAGE_SIZE: u64 = 512 * 4096;
+    const PAGE_SHIFT: u8 = 21;
     const DEBUG_STR: &'static str = "2M";
 }
 
@@ -174,6 +175,6 @@ impl ConstInit for FrameSize1G {
     const INIT: Self = Self;
 }
 impl FrameSize for FrameSize1G {
-    const PAGE_SIZE: u64 = 512 * 512 * 4096;
+    const PAGE_SHIFT: u8 = 30;
     const DEBUG_STR: &'static str = "1G";
 }

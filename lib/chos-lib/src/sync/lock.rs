@@ -78,6 +78,10 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.value.get() }
     }
+
+    pub fn get_ptr(&self) -> *mut T {
+        self.value.get()
+    }
 }
 
 impl<L: RawLock + ConstInit, T: ConstInit> ConstInit for Lock<L, T> {

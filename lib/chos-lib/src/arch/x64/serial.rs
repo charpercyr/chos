@@ -8,7 +8,7 @@ use super::port::Port;
 pub struct Uninit;
 pub struct Init;
 
-pub struct Serial<S> {
+pub struct Serial<S = Init> {
     ports: [Port<u8>; 6],
     state: PhantomData<S>,
 }
@@ -91,11 +91,11 @@ impl SerialDyn {
             SerialState::Uninit(serial) => {
                 self.state = SerialState::Init(serial.init());
                 Ok(())
-            },
+            }
             SerialState::Init(serial) => {
                 self.state = SerialState::Init(serial);
                 Err(AlreadyInitializedError)
-            },
+            }
             SerialState::Tmp => unreachable!(),
         }
     }

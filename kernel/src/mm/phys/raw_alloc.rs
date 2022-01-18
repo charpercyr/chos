@@ -5,13 +5,14 @@ use core::slice::from_raw_parts_mut;
 
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
-use chos_config::domain;
 use chos_lib::arch::mm::{PAddr, PAGE_SIZE64};
 use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::domain_debug;
 use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
+
+use crate::config::domain;
 
 #[derive(Debug, Clone, Copy)]
 struct Metadata {

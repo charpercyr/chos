@@ -8,6 +8,7 @@ pub use mapper::*;
 pub use paging::*;
 
 use crate::int::align_upu64;
+use crate::mm::{FrameSize, PFrame, VFrame};
 
 pub const PAGE_SHIFT: u32 = 12;
 pub const PAGE_MASK: u64 = (1 << PAGE_SHIFT) - 1;
@@ -61,6 +62,12 @@ impl PAddr {
 
     pub const fn sub_paddr(self, rhs: PAddr) -> Self {
         Self::new(self.0 - rhs.0)
+    }
+
+    pub const fn frame_offset<S: FrameSize>(&self) -> (PFrame<S>, u64) {
+        let page = self.0 & S::PAGE_MASK;
+        let off = self.0 & !S::PAGE_MASK;
+        (unsafe { PFrame::new_unchecked(PAddr::new(page)) }, off)
     }
 }
 
@@ -180,6 +187,12 @@ impl VAddr {
 
     pub const fn page(self) -> u64 {
         self.0 >> PAGE_SHIFT
+    }
+
+    pub const fn frame_offset<S: FrameSize>(&self) -> (VFrame<S>, u64) {
+        let page = self.0 & S::PAGE_MASK;
+        let off = self.0 & !S::PAGE_MASK;
+        (unsafe { VFrame::new_unchecked(VAddr::new_unchecked(page)) }, off)
     }
 
     pub const fn as_ptr<T>(self) -> *const T {

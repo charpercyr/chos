@@ -13,6 +13,8 @@ use super::DescriptorRegister;
 use crate::arch::intr::IoPl;
 use crate::arch::mm::VAddr;
 use crate::arch::regs::{Flags, CS};
+use crate::config::domain;
+use crate::log::domain_debug;
 use crate::Volatile;
 
 #[repr(C)]
@@ -157,6 +159,7 @@ impl Idt {
     }
 
     pub unsafe fn load(this: &'static Self) {
+        domain_debug!(domain::IDT, "Using {:p} as IDT", this);
         let reg = DescriptorRegister::new(this);
         asm! {
             "lidt ({})",

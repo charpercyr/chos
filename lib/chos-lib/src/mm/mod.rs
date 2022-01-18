@@ -188,7 +188,9 @@ frame!(PFrame: PAddr);
 frame!(VFrame: VAddr);
 
 pub trait FrameSize: Clone + Copy + Debug {
-    const PAGE_SIZE: u64;
+    const PAGE_SHIFT: u8;
+    const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;
+    const PAGE_MASK: u64 = !(Self::PAGE_SIZE - 1);
     const DEBUG_STR: &'static str;
 }
 
@@ -330,6 +332,10 @@ pub trait RangeMapper<S: FrameSize>: Mapper<S> {
     }
 }
 
+pub trait PAddrResolver {
+    fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr>;
+}
+
 pub struct LoggingMapper<M> {
     mapper: M,
 }
@@ -406,5 +412,11 @@ impl<S: FrameSize, M: RangeMapper<S>> RangeMapper<S> for LoggingMapper<M> {
             S::DEBUG_STR
         );
         self.mapper.unmap_range(vrange, alloc)
+    }
+}
+
+impl<M: PAddrResolver> PAddrResolver for LoggingMapper<M> {
+    fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr> {
+        self.mapper.paddr_of(vaddr)
     }
 }

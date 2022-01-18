@@ -5,7 +5,7 @@ use chos_lib::boot::KernelBootInfo;
 use chos_lib::elf::Elf;
 use chos_lib::log::debug;
 use chos_lib::mm::{
-    LoggingMapper, MapFlags, MapperFlush, PFrame, PFrameRange, RangeMapper, VFrame,
+    LoggingMapper, MapFlags, MapperFlush, PAddrResolver, PFrame, PFrameRange, RangeMapper, VFrame, VFrameRange,
 };
 use multiboot2::MemoryArea;
 
@@ -156,4 +156,18 @@ pub unsafe fn copy_early_kernel_table_to(pgt: &mut PageTable) {
         // core::ptr::write_volatile(&mut pgt[i], EARLY_KERNEL_TABLE[i]);
         pgt[i] = EARLY_KERNEL_TABLE[i];
     }
+}
+
+pub fn early_paddr_of(vaddr: VAddr) -> Option<PAddr> {
+    unsafe { get_early_kernel_mapper().paddr_of(vaddr) }
+}
+
+pub unsafe fn unmap_lower_memory(mem_size: u64) {
+    get_early_kernel_mapper().unmap_range(
+        VFrameRange::<FrameSize1G>::new(
+            VFrame::null(),
+            VFrame::new_align_up(VAddr::new(mem_size)),
+        ),
+        &mut MMFrameAllocator,
+    ).unwrap().ignore();
 }

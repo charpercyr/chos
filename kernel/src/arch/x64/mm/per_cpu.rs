@@ -13,8 +13,7 @@ use chos_lib::mm::{MapFlags, MapperFlush, PFrame, PFrameRange, RangeMapper, VFra
 
 use super::virt::MMFrameAllocator;
 use crate::mm::phys::{raw_alloc, AllocFlags};
-use crate::mm::PerCpu;
-use crate::per_cpu;
+use crate::mm::{per_cpu, PerCpu};
 
 #[repr(C)]
 #[derive(Debug)]

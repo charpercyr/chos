@@ -1,6 +1,9 @@
-use core::{arch::asm, mem::size_of};
+use core::arch::asm;
+use core::mem::size_of;
 
 use crate::arch::mm::VAddr;
+use crate::config::domain;
+use crate::log::domain_debug;
 
 #[repr(C, packed)]
 pub struct Tss {
@@ -25,6 +28,7 @@ impl Tss {
     }
 
     pub unsafe fn load(segment: u16) {
+        domain_debug!(domain::TSS, "Using segment {:#x} as TSS", segment);
         asm! {
             "ltr {:x}",
             in(reg) segment,

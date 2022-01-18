@@ -105,7 +105,7 @@ impl Mapper<FrameSize4K> for OffsetMapper<'_> {
         _frame: VFrame<FrameSize4K>,
         _alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
-        Err(UnmapError::NotMapped)
+        todo!("Unmap(4K)")
     }
 }
 
@@ -140,7 +140,7 @@ impl Mapper<FrameSize2M> for OffsetMapper<'_> {
         _frame: VFrame<FrameSize2M>,
         _alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
-        Err(UnmapError::NotMapped)
+        todo!("Unmap(2M)")
     }
 }
 
@@ -174,7 +174,7 @@ impl Mapper<FrameSize1G> for OffsetMapper<'_> {
         _frame: VFrame<FrameSize1G>,
         _alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
-        Err(UnmapError::NotMapped)
+        todo!("Unmap(1G)")
     }
 }
 
@@ -212,6 +212,24 @@ where
     }
 }
 
+impl PAddrResolver for OffsetMapper<'_> {
+    fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr> {
+        let (p4i, p3i, p2i, p1i, off) = vaddr.split();
+        unsafe {
+            let p3 = page_table_from_entry(self.base, self.p4[p4i])?;
+            let p2 = match (p3[p3i].present(), p3[p3i].huge_page()) {
+                (true, true) => return Some(p3[p3i].paddr() + ((p2i as u64) << 21) + ((p1i as u64) << 12) + off as u64),
+                _ => page_table_from_entry(self.base, p3[p3i])?,
+            };
+            let p1 = match (p2[p2i].present(), p2[p2i].huge_page()) {
+                (true, true) => return Some(p2[p2i].paddr() + ((p1i as u64) << 12) + off as u64),
+                _ => page_table_from_entry(self.base, p2[p2i])?,
+            };
+            p1[p1i].present().then(|| p1[p1i].paddr() + off as u64)
+        }
+    }
+}
+
 unsafe fn resolve_page_vaddr(base: VAddr, addr: PAddr) -> VAddr {
     VAddr::new_unchecked(addr.as_u64() + base.as_u64())
 }
@@ -237,13 +255,13 @@ unsafe fn get_page_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?
         update_page_entry(&mut entry, flags);
     }
     table[i] = entry;
-    let addr = resolve_page_vaddr(base, entry.phys_addr());
+    let addr = resolve_page_vaddr(base, entry.paddr());
     Ok((&mut *(addr.as_u64() as *mut PageTable), allocated))
 }
 
 fn create_page_entry(paddr: PAddr, flags: MapFlags) -> PageEntry {
     let mut entry = PageEntry::zero();
-    entry.set_phys_addr(paddr);
+    entry.set_paddr(paddr);
     if !flags.contains(MapFlags::EXEC) {
         entry.set_no_execute(true);
     }
@@ -318,7 +336,7 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> AllocCleaner<'
             update_page_entry(&mut entry, flags);
         }
         table[i] = entry;
-        let addr = resolve_page_vaddr(base, entry.phys_addr());
+        let addr = resolve_page_vaddr(base, entry.paddr());
         Ok(&mut *addr.as_mut_ptr())
     }
 
@@ -338,4 +356,8 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> Drop for Alloc
             }
         }
     }
+}
+
+unsafe fn page_table_from_entry(base: VAddr, entry: PageEntry) -> Option<&'static PageTable> {
+    entry.present().then(|| (base + entry.paddr()).as_ref())
 }

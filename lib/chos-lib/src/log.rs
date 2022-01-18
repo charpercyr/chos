@@ -286,3 +286,22 @@ pub macro unsafe_domain_critical ($domain:expr, $($args:tt)*) {
         $crate::log::unsafe_critical!($($args)*);
     }
 }
+
+pub macro domain ($($name:ident = $value:expr),* $(,)?) {
+    $(
+        paste::item! {
+            pub struct [<__ $name:camel>];
+            pub const $name: [<__ $name:camel>] = [<__ $name:camel>];
+            impl $crate::log::Domain for [<__ $name:camel>] {
+                #[inline]
+                fn name(&self) -> &str {
+                    stringify!($name)
+                }
+                #[inline]
+                fn enabled(&self) -> bool {
+                    $value
+                }
+            }
+        }
+    )*
+}

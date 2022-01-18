@@ -1,7 +1,9 @@
-use chos_lib::{init::ConstInit, pool::PoolBox};
+use chos_lib::init::ConstInit;
+use chos_lib::pool::PoolBox;
 use intrusive_collections::{LinkedList, LinkedListAtomicLink};
 
-use crate::{mm::slab::{DefaultPoolObjectAllocator}, per_cpu};
+use crate::mm::per_cpu;
+use crate::mm::slab::DefaultPoolObjectAllocator;
 
 const N_PRIO: usize = 16;
 

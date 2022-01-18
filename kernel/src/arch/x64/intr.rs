@@ -1,12 +1,12 @@
-use chos_config::arch::mm::{virt, stack};
+use chos_config::arch::mm::{stack, virt};
 use chos_lib::arch::intr::IoPl;
 use chos_lib::arch::mm::VAddr;
-use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, Tss};
+use chos_lib::arch::regs::Cr2;
+use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, PageFaultError, Tss};
 use chos_lib::log::debug;
 use chos_lib::sync::SpinLazy;
 
-use crate::mm::PerCpu;
-use crate::{per_cpu_lazy, per_cpu};
+use crate::mm::{per_cpu, per_cpu_lazy, PerCpu};
 
 const TSS_SEGMENT: u16 = 0x18;
 
@@ -69,6 +69,15 @@ extern "x86-interrupt" fn intr_breakpoint(frame: InterruptStackFrame) {
     debug!("Kernel BREAKPOINT @ {:#x}", frame.ip);
 }
 
+extern "x86-interrupt" fn intr_page_fault(frame: InterruptStackFrame, error: PageFaultError) {
+    panic!(
+        "PAGE FAULT, TRYING TO ACCESS {:x}[{:?}]\n{:#?}",
+        Cr2::read(),
+        error,
+        frame
+    )
+}
+
 static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
     let mut idt = Idt::empty();
 
@@ -83,6 +92,9 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
 
     // Breakpoint
     idt.breakpoint.set_handler(intr_breakpoint);
+
+    // Page Fault
+    idt.page_fault.set_handler(intr_page_fault);
 
     // Double Fault
     idt.double_fault

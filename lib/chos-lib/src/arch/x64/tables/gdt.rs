@@ -8,7 +8,9 @@ use bit_field::BitField;
 
 use super::{DescriptorRegister, Tss};
 use crate::arch::intr::IoPl;
+use crate::config::domain;
 use crate::init::ConstInit;
+use crate::log::domain_debug;
 
 #[repr(C, align(8))]
 #[derive(Debug)]
@@ -26,6 +28,7 @@ impl<const N: usize> Gdt<N> {
     }
 
     pub unsafe fn load(this: &'static Self) {
+        domain_debug!(domain::GDT, "Using {:p} as GDT", this);
         let reg = DescriptorRegister::new(this);
         asm! {
             "lgdt ({})",

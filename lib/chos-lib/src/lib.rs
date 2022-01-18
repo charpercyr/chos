@@ -25,6 +25,7 @@
 pub mod access;
 pub mod arch;
 pub mod boot;
+mod config;
 pub mod elf;
 pub mod init;
 pub mod int;

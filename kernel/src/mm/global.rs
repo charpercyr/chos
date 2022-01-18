@@ -1,16 +1,16 @@
 use alloc::alloc::{GlobalAlloc, Layout};
-use chos_config::domain;
-use chos_lib::log::domain_debug;
 use core::mem::align_of;
 use core::ptr::null_mut;
 use core::slice;
 
 use chos_lib::arch::mm::{VAddr, PAGE_SHIFT};
 use chos_lib::int::ceil_log2u64;
+use chos_lib::log::domain_debug;
 use chos_lib::sync::spin::lock::Spinlock;
 
 use super::phys::MMSlabAllocator;
 use super::slab::RawObjectAllocator;
+use crate::config::domain;
 use crate::mm::phys::raw_alloc::{self, AllocFlags};
 use crate::mm::virt::{map_paddr, paddr_of};
 
@@ -75,7 +75,12 @@ struct KAlloc;
 
 unsafe impl GlobalAlloc for KAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        domain_debug!(domain::GLOBAL_ALLOC, "alloc(size={}, align={})", layout.size(), layout.align());
+        domain_debug!(
+            domain::GLOBAL_ALLOC,
+            "alloc(size={}, align={})",
+            layout.size(),
+            layout.align()
+        );
         assert!(
             layout.align() <= align_of::<usize>(),
             "Invalid alignment, use specialized slab allocator"
@@ -95,7 +100,13 @@ unsafe impl GlobalAlloc for KAlloc {
             .unwrap_or(null_mut())
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        domain_debug!(domain::GLOBAL_ALLOC, "dealloc(ptr={:p}, size={}, align={})", ptr, layout.size(), layout.align());
+        domain_debug!(
+            domain::GLOBAL_ALLOC,
+            "dealloc(ptr={:p}, size={}, align={})",
+            ptr,
+            layout.size(),
+            layout.align()
+        );
         assert!(
             layout.align() <= align_of::<usize>(),
             "Invalid alignment, use specialized slab allocator"
@@ -106,7 +117,11 @@ unsafe impl GlobalAlloc for KAlloc {
             }
         }
         let order = ceil_log2u64(layout.size() as u64) - PAGE_SHIFT;
-        let paddr = paddr_of(VAddr::new(ptr as u64), crate::mm::virt::MemoryRegion::Normal).expect("Should exist");
+        let paddr = paddr_of(
+            VAddr::new(ptr as u64),
+            crate::mm::virt::MemoryRegion::Normal,
+        )
+        .expect("Should exist");
         raw_alloc::dealloc_pages(paddr, order as u8);
     }
 }

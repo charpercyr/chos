@@ -10,7 +10,6 @@ use chos_lib::sync::{Barrier, SpinOnceCell};
 use crate::arch::asm::call_with_stack;
 use crate::arch::early::{arch_copy_boot_data, arch_init_early_memory, use_early_kernel_table};
 use crate::arch::mm::per_cpu::init_per_cpu_data_for_cpu;
-use crate::arch::mm::virt::init_kernel_virt;
 use crate::early::stack::Stacks;
 use crate::kmain::{kernel_main, KernelArgs};
 
@@ -82,13 +81,14 @@ unsafe fn copy_boot_data(info: &KernelBootInfo) -> KernelArgs {
         kernel_elf: info.elf.as_ref().into(),
         initrd: info.initrd.map(|ird| ird.as_ref().into()),
         core_count: info.core_count,
+        mem_info: info.mem_info,
         arch: arch_copy_boot_data(&info.arch),
     }
 }
 
 unsafe fn enter_kernel_main(id: usize, args: &KernelArgs, stack: VAddr) -> ! {
     extern "C" fn call_kernel_main(id: u64, args: u64, _: u64, _: u64) -> ! {
-        kernel_main(id as usize, unsafe { &*(args as *const KernelArgs) })
+        kernel_main(id as usize, args as *const KernelArgs)
     }
     call_with_stack(
         call_kernel_main,
@@ -132,7 +132,6 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
     }
 
     unsafe {
-        init_kernel_virt();
         let EarlyData {
             stacks,
             kernel_args,
