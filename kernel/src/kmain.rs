@@ -70,9 +70,9 @@ pub fn kernel_main(id: usize, args: *const KernelArgs) -> ! {
 
     if id == 0 {
         unsafe { unmap_lower_memory(args.mem_info.total_size) };
-        debug!("Kernel len={}", Bytes(args.kernel_elf.len() as u64));
+        debug!("[{}] Kernel len={}", id, Bytes(args.kernel_elf.len() as u64));
         if let Some(i) = args.initrd.as_deref() {
-            debug!("Initrd len={}", Bytes(i.len() as u64));
+            debug!("[{}] Initrd len={}", id, Bytes(i.len() as u64));
         }
         exit_qemu(QemuStatus::Success)
     }

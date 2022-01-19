@@ -8,7 +8,7 @@ use crate::arch::regs::{Cr3, Cr3Flags};
 use crate::config::domain;
 use crate::init::ConstInit;
 use crate::log::domain_debug;
-use crate::mm::{FrameSize, PFrame};
+use crate::mm::{FrameSize, PFrame, VFrame};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 
@@ -24,9 +24,12 @@ pub struct PageEntry {
     pub dirty: bool,
     pub huge_page: bool,
     pub global: bool,
-    pub os0: B3,
+    // OS free (3 bits)
+    #[skip] __: B3,
     addr: B40,
-    pub os1: B11,
+    // OS free (11 bits)
+    pub child_alloc_count: B10,
+    #[skip] __: B1,
     pub no_execute: bool,
 }
 
@@ -177,4 +180,31 @@ impl ConstInit for FrameSize1G {
 impl FrameSize for FrameSize1G {
     const PAGE_SHIFT: u8 = 30;
     const DEBUG_STR: &'static str = "1G";
+}
+
+impl VFrame<FrameSize4K> {
+    pub fn split(&self) -> (u16, u16, u16, u16) {
+        let (p4, p3, p2, p1, off) = self.addr().split();
+        debug_assert_eq!(off, 0);
+        (p4, p3, p2, p1)
+    }
+}
+
+impl VFrame<FrameSize2M> {
+    pub fn split(&self) -> (u16, u16, u16) {
+        let (p4, p3, p2, p1, off) = self.addr().split();
+        debug_assert_eq!(p1, 0);
+        debug_assert_eq!(off, 0);
+        (p4, p3, p2)
+    }
+}
+
+impl VFrame<FrameSize1G> {
+    pub fn split(&self) -> (u16, u16) {
+        let (p4, p3, p2, p1, off) = self.addr().split();
+        debug_assert_eq!(p2, 0);
+        debug_assert_eq!(p1, 0);
+        debug_assert_eq!(off, 0);
+        (p4, p3)
+    }
 }

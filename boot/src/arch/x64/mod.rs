@@ -103,8 +103,6 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 (initrd.end_address() - initrd.start_address()) as usize,
             )
         });
-    
-    println!("Initrd: {:?}", initrd.map(<[u8]>::len));
 
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
     debug!("Memory map");

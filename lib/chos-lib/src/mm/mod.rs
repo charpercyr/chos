@@ -253,8 +253,7 @@ impl<FE> MapError<FE> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnmapError<FE> {
     NotMapped,
-    InvalidFrame,
-    InvalidPage,
+    InvalidSize,
     FrameAllocError(FE),
 }
 

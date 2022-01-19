@@ -284,9 +284,9 @@ impl VAddr {
         Self::new(self.0 - other.0)
     }
 
-    pub const fn split(self) -> (u16, u16, u16, u16, u16) {
+    pub const fn split(self) -> (u16, u16, u16, u16, u64) {
         let addr = self.0;
-        let off = (addr & 0xfff) as u16;
+        let off = addr & 0xfff;
         let p1 = ((addr & (0x1ff << 12)) >> 12) as u16;
         let p2 = ((addr & (0x1ff << 21)) >> 21) as u16;
         let p3 = ((addr & (0x1ff << 30)) >> 30) as u16;

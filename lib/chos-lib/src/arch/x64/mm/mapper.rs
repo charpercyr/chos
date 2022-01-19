@@ -86,16 +86,23 @@ impl Mapper<FrameSize4K> for OffsetMapper<'_> {
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
         let mut alloc_cleaner = AllocCleaner::<A, 3>::new(alloc);
-        let (p4i, p3i, p2i, p1i, _) = vframe.addr().split();
-        let p3 = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
-        let p2 = alloc_cleaner.get_page_or_alloc(p3, self.base, flags, p3i)?;
-        let p1 = alloc_cleaner.get_page_or_alloc(p2, self.base, flags, p2i)?;
+        let (p4i, p3i, p2i, p1i) = vframe.split();
+        let (p3, p3_a) = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
+        let (p2, p2_a) = alloc_cleaner.get_page_or_alloc(p3, self.base, flags, p3i)?;
+        let (p1, _) = alloc_cleaner.get_page_or_alloc(p2, self.base, flags, p2i)?;
         let entry = p1[p1i];
         if entry.present() {
             Err(MapError::AlreadyMapped)
         } else {
             alloc_cleaner.forget();
             p1[p1i] = create_page_entry(pframe.addr(), flags);
+            inc_child_alloc_count(&mut p2[p2i]);
+            if p2_a {
+                inc_child_alloc_count(&mut p3[p3i]);
+            }
+            if p3_a {
+                inc_child_alloc_count(&mut self.p4[p4i]);
+            }
             Ok(Flush::All)
         }
     }
@@ -120,9 +127,9 @@ impl Mapper<FrameSize2M> for OffsetMapper<'_> {
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
         let mut alloc_cleaner = AllocCleaner::<A, 2>::new(alloc);
-        let (p4i, p3i, p2i, _, _) = vframe.addr().split();
-        let p3 = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
-        let p2 = alloc_cleaner.get_page_or_alloc(p3, self.base, flags, p3i)?;
+        let (p4i, p3i, p2i) = vframe.split();
+        let (p3, p3_a) = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
+        let (p2, _) = alloc_cleaner.get_page_or_alloc(p3, self.base, flags, p3i)?;
         let mut entry = p2[p2i];
         if entry.present() {
             Err(MapError::AlreadyMapped)
@@ -131,6 +138,10 @@ impl Mapper<FrameSize2M> for OffsetMapper<'_> {
             entry = create_page_entry(pframe.addr(), flags);
             entry.set_huge_page(true);
             p2[p2i] = entry;
+            inc_child_alloc_count(&mut p3[p3i]);
+            if p3_a {
+                inc_child_alloc_count(&mut self.p4[p4i]);
+            }
             Ok(Flush::All)
         }
     }
@@ -155,8 +166,8 @@ impl Mapper<FrameSize1G> for OffsetMapper<'_> {
         alloc: &mut A,
     ) -> Result<Self::Flush, MapError<A::Error>> {
         let mut alloc_cleaner = AllocCleaner::<A, 1>::new(alloc);
-        let (p4i, p3i, _, _, _) = vframe.addr().split();
-        let p3 = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
+        let (p4i, p3i) = vframe.split();
+        let (p3, _) = alloc_cleaner.get_page_or_alloc(self.p4, self.base, flags, p4i)?;
         let mut entry = p3[p3i];
         if entry.present() {
             Err(MapError::AlreadyMapped)
@@ -165,16 +176,36 @@ impl Mapper<FrameSize1G> for OffsetMapper<'_> {
             entry = create_page_entry(pframe.addr(), flags);
             entry.set_huge_page(true);
             p3[p3i] = entry;
+            inc_child_alloc_count(&mut self.p4[p4i]);
             Ok(Flush::All)
         }
     }
 
     unsafe fn unmap<A: FrameAllocator<FrameSize4K> + ?Sized>(
         &mut self,
-        _frame: VFrame<FrameSize1G>,
-        _alloc: &mut A,
+        frame: VFrame<FrameSize1G>,
+        alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
-        todo!("Unmap(1G)")
+        let (p4i, p3i) = frame.split();
+        let p3 = get_page_table(self.p4, self.base, p4i).ok_or(UnmapError::NotMapped)?;
+        let entry = &mut p3[p3i];
+        if !entry.present() {
+            return Err(UnmapError::NotMapped);
+        }
+        if !entry.huge_page() {
+            return Err(UnmapError::InvalidSize);
+        }
+        *entry = PageEntry::new();
+        if dec_child_alloc_count(&mut self.p4[p4i]) {
+            alloc
+                .dealloc_frame(VFrame::new_unchecked(resolve_page_vaddr(
+                    self.base,
+                    self.p4[p4i].paddr(),
+                )))
+                .map_err(UnmapError::FrameAllocError)?;
+            self.p4[p4i] = PageEntry::new();
+        }
+        Ok(Flush::Range(VFrameRange::new(frame, frame.add(1))))
     }
 }
 
@@ -218,7 +249,11 @@ impl PAddrResolver for OffsetMapper<'_> {
         unsafe {
             let p3 = page_table_from_entry(self.base, self.p4[p4i])?;
             let p2 = match (p3[p3i].present(), p3[p3i].huge_page()) {
-                (true, true) => return Some(p3[p3i].paddr() + ((p2i as u64) << 21) + ((p1i as u64) << 12) + off as u64),
+                (true, true) => {
+                    return Some(
+                        p3[p3i].paddr() + ((p2i as u64) << 21) + ((p1i as u64) << 12) + off as u64,
+                    )
+                }
                 _ => page_table_from_entry(self.base, p3[p3i])?,
             };
             let p1 = match (p2[p2i].present(), p2[p2i].huge_page()) {
@@ -238,7 +273,14 @@ unsafe fn resolve_page_paddr(base: VAddr, addr: VAddr) -> PAddr {
     PAddr::new(addr.as_u64() - base.as_u64())
 }
 
-unsafe fn get_page_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?Sized>(
+unsafe fn get_page_table(table: &mut PageTable, base: VAddr, i: u16) -> Option<&mut PageTable> {
+    let entry = table[i];
+    entry
+        .present()
+        .then(|| resolve_page_vaddr(base, entry.paddr()).as_mut())
+}
+
+unsafe fn get_page_table_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?Sized>(
     table: &'p mut PageTable,
     base: VAddr,
     flags: MapFlags,
@@ -256,7 +298,7 @@ unsafe fn get_page_or_alloc<'p, S: FrameSize, A: FrameAllocator<FrameSize4K> + ?
     }
     table[i] = entry;
     let addr = resolve_page_vaddr(base, entry.paddr());
-    Ok((&mut *(addr.as_u64() as *mut PageTable), allocated))
+    Ok((addr.as_mut(), allocated))
 }
 
 fn create_page_entry(paddr: PAddr, flags: MapFlags) -> PageEntry {
@@ -301,8 +343,19 @@ fn update_page_entry(entry: &mut PageEntry, flags: MapFlags) {
     }
 }
 
-struct AllocCleaner<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> {
-    alloc: &'a mut A,
+fn inc_child_alloc_count(entry: &mut PageEntry) {
+    let new = entry.child_alloc_count() + 1;
+    entry.set_child_alloc_count(new);
+}
+
+fn dec_child_alloc_count(entry: &mut PageEntry) -> bool {
+    let new = entry.child_alloc_count() - 1;
+    entry.set_child_alloc_count(new);
+    new == 0
+}
+
+struct AllocCleaner<'alloc, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> {
+    alloc: &'alloc mut A,
     addrs: [MaybeUninit<VFrame<FrameSize4K>>; N],
     n: usize,
 }
@@ -322,22 +375,24 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> AllocCleaner<'
         base: VAddr,
         flags: MapFlags,
         i: u16,
-    ) -> Result<&'p mut PageTable, MapError<A::Error>> {
-        let mut entry = table[i];
+    ) -> Result<(&'p mut PageTable, bool), MapError<A::Error>> {
+        let entry = &mut table[i];
+        let allocated;
         if !entry.present() {
             let vframe = self
                 .alloc
                 .alloc_frame()
                 .map_err(MapError::from_frame_alloc_error)?;
-            entry = create_page_entry(resolve_page_paddr(base, vframe.addr()), flags);
+            *entry = create_page_entry(resolve_page_paddr(base, vframe.addr()), flags);
             self.addrs[self.n] = MaybeUninit::new(vframe);
             self.n += 1;
+            allocated = true;
         } else {
-            update_page_entry(&mut entry, flags);
+            update_page_entry(entry, flags);
+            allocated = false;
         }
-        table[i] = entry;
         let addr = resolve_page_vaddr(base, entry.paddr());
-        Ok(&mut *addr.as_mut_ptr())
+        Ok((addr.as_mut(), allocated))
     }
 
     fn forget(self) {
