@@ -66,7 +66,7 @@ extern "x86-interrupt" fn intr_gpf(frame: InterruptStackFrame, _: u64) {
 }
 
 extern "x86-interrupt" fn intr_breakpoint(frame: InterruptStackFrame) {
-    debug!("Kernel BREAKPOINT @ {:#x}", frame.ip);
+    debug!("BREAKPOINT @ {:#x}, rsp = {:#x}", frame.ip, frame.sp);
 }
 
 extern "x86-interrupt" fn intr_page_fault(frame: InterruptStackFrame, error: PageFaultError) {

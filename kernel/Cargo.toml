@@ -23,6 +23,10 @@ version= "0.22.3"
 default-features = false
 # features = []
 
+[dependencies.cstr_core]
+version = "0.2.5"
+features = ["alloc", "nightly"]
+
 [dependencies.intrusive-collections]
 git = "https://github.com/charpercyr/intrusive-rs"
 features = ["nightly"]

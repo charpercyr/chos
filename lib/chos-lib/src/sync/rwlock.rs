@@ -110,6 +110,10 @@ impl<L: RawRWLock, T> RWLock<L, T> {
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.value.get() }
     }
+
+    pub fn get_ptr(&self) -> *mut T {
+        self.value.get()
+    }
 }
 
 pub struct RWLockReadGuard<'a, L: RawRWLock, T: ?Sized> {

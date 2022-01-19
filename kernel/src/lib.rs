@@ -30,3 +30,4 @@ mod kmain;
 mod mm;
 mod panic;
 mod sched;
+mod symbols;

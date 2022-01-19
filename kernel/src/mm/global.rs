@@ -75,6 +75,9 @@ struct KAlloc;
 
 unsafe impl GlobalAlloc for KAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout.size() == 0 {
+            return layout.align() as _
+        }
         domain_debug!(
             domain::GLOBAL_ALLOC,
             "alloc(size={}, align={})",
@@ -100,6 +103,9 @@ unsafe impl GlobalAlloc for KAlloc {
             .unwrap_or(null_mut())
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if layout.size() == 0 {
+            return;
+        }
         domain_debug!(
             domain::GLOBAL_ALLOC,
             "dealloc(ptr={:p}, size={}, align={})",

@@ -81,7 +81,7 @@ impl<'a> SectionEntry<'a> {
         self.hdr.entsize
     }
 
-    pub fn as_symtab(&'a self, elf: &Elf<'a>) -> Option<Symtab<'a>> {
+    pub fn as_symtab(self, elf: &Elf<'a>) -> Option<Symtab<'a>> {
         if self.typ() == SectionEntryType::Symtab || self.typ() == SectionEntryType::DynSym {
             unsafe {
                 Some(Symtab::new(
@@ -94,7 +94,7 @@ impl<'a> SectionEntry<'a> {
         }
     }
 
-    pub fn as_strtab(&'a self, elf: &'a Elf<'a>) -> Option<StrTab<'a>> {
+    pub fn as_strtab(self, elf: &'a Elf<'a>) -> Option<StrTab<'a>> {
         if self.typ() == SectionEntryType::Strtab {
             Some(StrTab::new(
                 elf.get_buffer(self.hdr.off as usize, self.hdr.size as usize),
