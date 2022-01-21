@@ -52,6 +52,7 @@ dependencies = [
  "modular-bitfield",
  "multiboot2",
  "paste",
+ "rustc-demangle",
 ]
 
 [[package]]

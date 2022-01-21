@@ -88,7 +88,7 @@ unsafe fn copy_boot_data(info: &KernelBootInfo) -> KernelArgs {
 
 unsafe fn enter_kernel_main(id: usize, args: &KernelArgs, stack: VAddr) -> ! {
     extern "C" fn call_kernel_main(id: u64, args: u64, _: u64, _: u64) -> ! {
-        kernel_main(id as usize, args as *const KernelArgs)
+        kernel_main(id as usize, unsafe { &*(args as *const KernelArgs) })
     }
     call_with_stack(
         call_kernel_main,

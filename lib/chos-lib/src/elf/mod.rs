@@ -85,6 +85,11 @@ impl<'a> Elf<'a> {
         Ok(Self { hdr, data })
     }
 
+    pub unsafe fn new_unchecked(data: &'a [u8]) -> Self {
+        let hdr: *const Elf64Hdr = data.as_ptr().cast();
+        Self { hdr: &*hdr, data }
+    }
+
     pub fn get_buffer(&self, offset: usize, len: usize) -> &'a [u8] {
         &self.data[offset..(offset + len)]
     }

@@ -5,10 +5,11 @@ use core::slice::from_raw_parts_mut;
 
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
-use chos_lib::arch::mm::{PAddr, PAGE_SIZE64};
+use chos_lib::arch::mm::{FrameSize4K, PAddr, PAGE_SIZE64};
 use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::domain_debug;
+use chos_lib::mm::{PFrame, PFrameRange};
 use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
@@ -137,11 +138,12 @@ fn calculate_meta(total_pages: u64) -> Metadata {
     }
 }
 
-pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
+pub unsafe fn add_region(frame: PFrameRange<FrameSize4K>, flags: RegionFlags) {
+    let paddr = frame.start().addr();
     assert!(paddr.is_page_aligned());
     let region = (paddr.as_u64() + virt::PHYSICAL_MAP_BASE.as_u64()) as *mut Region;
 
-    let total_pages = size / PAGE_SIZE64;
+    let total_pages = frame.frame_count();
 
     write(
         region,
@@ -203,9 +205,9 @@ pub unsafe fn add_region(paddr: PAddr, size: u64, flags: RegionFlags) {
     REGIONS.push_front(UnsafeMut::from_raw(region));
 }
 
-pub unsafe fn add_regions(it: impl IntoIterator<Item = (PAddr, u64, RegionFlags)>) {
-    for (paddr, size, flags) in it {
-        add_region(paddr, size, flags)
+pub unsafe fn add_regions(it: impl IntoIterator<Item = (PFrameRange<FrameSize4K>, RegionFlags)>) {
+    for (paddr, flags) in it {
+        add_region(paddr, flags)
     }
 }
 
@@ -236,6 +238,8 @@ unsafe fn alloc_in_region(
             bitmap[word as usize] ^= 1 << bit;
         }
 
+        region.meta.free_pages -= 1 << order;
+
         Ok(PAddr::new(paddr))
     } else {
         let block = alloc_in_region(region, order + 1, flags)?;
@@ -265,6 +269,8 @@ unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
     let word = page_bit / (size_of::<usize>() as u64);
     let bit = page_bit % (size_of::<usize>() as u64);
     bitmap[word as usize] ^= 1 << bit;
+
+    region.meta.free_pages += 1 << order;
 }
 
 unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
@@ -303,7 +309,12 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
 }
 
 pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
-    domain_debug!(domain::PALLOC, "alloc_pages(order = {}, flags = {:?})", order, flags);
+    domain_debug!(
+        domain::PALLOC,
+        "alloc_pages(order = {}, flags = {:?})",
+        order,
+        flags
+    );
     for region in REGIONS.iter_mut() {
         if region.meta.biggest_order >= order && region.meta.free_pages >= (1 << order) {
             if let Ok(addr) = alloc_in_region(region, order, flags) {
@@ -315,7 +326,12 @@ pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr
 }
 
 pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
-    domain_debug!(domain::PALLOC, "dealloc_pages(page = {:x}, order = {})", page, order);
+    domain_debug!(
+        domain::PALLOC,
+        "dealloc_pages(page = {:x}, order = {})",
+        page,
+        order
+    );
     for region in REGIONS.iter_mut() {
         if region.contains(page) {
             free_in_region(region, page, order);
@@ -335,4 +351,27 @@ pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PAddr, AllocEr
 pub unsafe fn dealloc_pages(page: PAddr, order: u8) {
     let _guard = ALLOC_LOCK.lock();
     dealloc_pages_unlocked(page, order)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RegionInfo {
+    pub range: PFrameRange<FrameSize4K>,
+    pub free_pages: u64,
+    pub total_pages: u64,
+    pub biggest_order: u8,
+}
+
+pub fn get_regions_info(mut callback: impl FnMut(RegionInfo)) {
+    let _guard = ALLOC_LOCK.lock();
+    for region in unsafe { &REGIONS } {
+        callback(RegionInfo {
+            biggest_order: region.meta.biggest_order,
+            free_pages: region.meta.free_pages,
+            total_pages: region.meta.total_pages,
+            range: PFrameRange::new(
+                unsafe { PFrame::new_unchecked(region.base_paddr()) },
+                unsafe { PFrame::new_unchecked(region.base_paddr()).add(region.meta.total_pages) },
+            ),
+        })
+    }
 }

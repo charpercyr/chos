@@ -1,20 +1,20 @@
 use alloc::boxed::Box;
-use chos_config::arch::mm::virt;
-use chos_lib::arch::intr::breakpoint;
-use chos_lib::elf::Elf;
 use core::fmt::Write;
 use core::mem::MaybeUninit;
 
+use chos_config::arch::mm::virt;
 use chos_lib::arch::qemu::{exit_qemu, QemuStatus};
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
-use chos_lib::log::{debug, Bytes, LogHandler, TermColorLogHandler};
+use chos_lib::elf::Elf;
+use chos_lib::log::{debug, Bytes, LogHandler, TermColorLogHandler, println};
 use chos_lib::sync::{Barrier, SpinOnceCell, Spinlock};
 
-use crate::arch::early::unmap_lower_memory;
+use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::intr::init_interrupts;
+use crate::mm::phys::raw_alloc::get_regions_info;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols_to_tree;
 
@@ -60,27 +60,29 @@ fn setup_logger() {
     }
 }
 
-pub fn kernel_main(id: usize, args: *const KernelArgs) -> ! {
-    let args = unsafe { core::ptr::read(args) };
-
+pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     if id == 0 {
         setup_logger();
-        let kernel_elf = Elf::new(&args.kernel_elf).expect("Should be a valid elf");
-        add_elf_symbols_to_tree(virt::STATIC_BASE, &kernel_elf);
+        add_elf_symbols_to_tree(
+            virt::STATIC_BASE,
+            &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
+        );
+
+        // ANYTHING THAT NEEDS TO ACCESS EARLY MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+
+        unsafe {
+            unmap_early_lower_memory(args.mem_info.total_size);
+            init_non_early_memory(args);
+        };
     }
 
     barrier!(args.core_count);
 
     unsafe { init_interrupts() };
 
-    // ANYTHING THAT NEEDS TO ACCESS EARLY MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-
     unsafe { init_kernel_virt() };
 
-    breakpoint();
-
     if id == 0 {
-        unsafe { unmap_lower_memory(args.mem_info.total_size) };
         debug!(
             "[{}] Kernel len={}",
             id,

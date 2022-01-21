@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 use core::marker::PhantomData;
 use core::{cmp, hash};
 
@@ -179,6 +179,16 @@ macro_rules! frame {
                     } else {
                         None
                     }
+                }
+            }
+
+            impl<S: FrameSize> Debug for [<$name Range>]<S> {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.debug_struct(stringify!([<$name Range>]))
+                        .field("start", &self.start)
+                        .field("end", &self.end)
+                        .field("frame_size", &S::DEBUG_STR)
+                        .finish()
                 }
             }
         }

@@ -1,4 +1,4 @@
-use alloc::string::String;
+use alloc::vec::Vec;
 
 use chos_lib::arch::mm::VAddr;
 use chos_lib::elf::{Elf, SymtabEntryType};
@@ -10,98 +10,129 @@ use intrusive_collections::{Bound, KeyAdapter};
 
 use crate::mm::slab::DefaultPoolObjectAllocator;
 
-struct Symbol {
-    address: VAddr,
+struct ElfSymbols {
     link: rbtree::AtomicLink,
-    name: String,
+    base: VAddr,
+    symbols: Vec<(u64, usize)>,
+    elf_data: Vec<u8>,
 }
 
-impl PartialEq for Symbol {
+impl PartialEq for ElfSymbols {
     fn eq(&self, other: &Self) -> bool {
-        self.address == other.address
+        self.base == other.base
     }
 }
-impl Eq for Symbol {}
+impl Eq for ElfSymbols {}
 
-impl PartialOrd for Symbol {
+impl PartialOrd for ElfSymbols {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
-impl Ord for Symbol {
+impl Ord for ElfSymbols {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.address.cmp(&other.address)
+        self.base.cmp(&other.base)
     }
 }
 
-static SYMBOL_POOL: DefaultPoolObjectAllocator<Symbol, 0> = DefaultPoolObjectAllocator::INIT;
-chos_lib::pool!(struct SymbolPool: Symbol => &SYMBOL_POOL);
+static ELF_SYMBOLS_POOL: DefaultPoolObjectAllocator<ElfSymbols, 0> =
+    DefaultPoolObjectAllocator::INIT;
+chos_lib::pool!(struct ElfSymbolsPool: ElfSymbols => &ELF_SYMBOLS_POOL);
 
-type SymbolBox = PoolBox<Symbol, SymbolPool>;
+type ElfSymbolBox = PoolBox<ElfSymbols, ElfSymbolsPool>;
 
-chos_lib::intrusive_adapter!(SymbolAdapter = SymbolBox: Symbol { link: rbtree::AtomicLink });
-impl<'a> KeyAdapter<'a> for SymbolAdapter {
+chos_lib::intrusive_adapter!(ElfSymbolsAdapter = ElfSymbolBox: ElfSymbols { link: rbtree::AtomicLink });
+impl<'a> KeyAdapter<'a> for ElfSymbolsAdapter {
     type Key = VAddr;
     fn get_key(
         &self,
         value: &'a <Self::PointerOps as intrusive_collections::PointerOps>::Value,
     ) -> Self::Key {
-        value.address
+        value.base
     }
 }
 
-static SYMBOLS: SpinRWLock<RBTree<SymbolAdapter>> =
-    SpinRWLock::new(RBTree::new(SymbolAdapter::new()));
-
-fn add_symbol_to_tree(symbols: &mut RBTree<SymbolAdapter>, address: VAddr, name: String) {
-    symbols.insert(PoolBox::new(Symbol {
-        address,
-        name: String::new(),
-        link: rbtree::AtomicLink::new(),
-    }));
-}
+static SYMBOLS: SpinRWLock<RBTree<ElfSymbolsAdapter>> =
+    SpinRWLock::new(RBTree::new(ElfSymbolsAdapter::new()));
 
 pub fn add_elf_symbols_to_tree(base: VAddr, elf: &Elf) {
-    let symtab = elf
+    if let Some(symtab) = elf
         .sections()
         .iter()
-        .find(|s| s.name(elf) == Some(".symtab"))
-        .and_then(|s| s.as_symtab(elf));
-    let strtab = elf
-        .sections()
-        .iter()
-        .find(|s| s.name(elf) == Some(".strtab"))
-        .and_then(|s| s.as_strtab(elf));
-    if let Some((symtab, strtab)) = symtab.zip(strtab) {
-        let mut symbols = SYMBOLS.lock_write();
-        for sym in symtab {
-            if sym.typ() == SymtabEntryType::Func {
-                if let Some(name) = sym.name(&strtab) {
-                    add_symbol_to_tree(&mut symbols, base + sym.value(), name.into())
-                }
+        .find(|s| s.name(&elf) == Some(".symtab"))
+        .and_then(|s| s.as_symtab(&elf))
+    {
+        let sym_iter = symtab
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.typ() == SymtabEntryType::Func);
+        let sym_count = sym_iter.clone().count();
+        let mut symbols = Vec::with_capacity(sym_count);
+
+        let mut needs_sorting = false;
+        let mut last_value: u64 = 0;
+        symbols.extend(sym_iter.map(|(i, sym)| {
+            if sym.value() < last_value {
+                needs_sorting = true;
             }
+            last_value = sym.value();
+            (sym.value(), i)
+        }));
+        debug_assert_eq!(symbols.len(), sym_count);
+
+        if needs_sorting {
+            symbols.sort_unstable_by_key(|(k, _)| *k);
         }
+
+        SYMBOLS.lock_write().insert(ElfSymbolBox::new(ElfSymbols {
+            base,
+            link: rbtree::AtomicLink::new(),
+            symbols,
+            elf_data: elf.data().into(),
+        }));
     }
 }
 
-fn lookup_symbol_in_tree<R>(
-    symbols: &RBTree<SymbolAdapter>,
+fn lookup_symbol_impl<R>(
+    elf_symbols: &RBTree<ElfSymbolsAdapter>,
     address: VAddr,
     callback: impl FnOnce(&str, VAddr, u64) -> R,
 ) -> Option<R> {
-    let sym = symbols.upper_bound(Bound::Included(&address));
-    sym.get()
-        .map(|sym| callback(&sym.name, sym.address, (address - sym.address).as_u64()))
+    elf_symbols
+        .upper_bound(Bound::Included(&address))
+        .get()
+        .and_then(|syms| {
+            let value = (address - syms.base).as_u64();
+            let sym_array_idx = match syms.symbols.binary_search_by_key(&value, |(k, _)| *k) {
+                Ok(sym_idx) => sym_idx,
+                Err(0) => return None,
+                Err(sym_idx) => sym_idx - 1,
+            };
+            let sym_idx = syms.symbols[sym_array_idx].1;
+            let elf = unsafe { Elf::new_unchecked(&syms.elf_data) };
+            elf.sections()
+                .symtab_strtab(&elf)
+                .and_then(|(symtab, strtab)| {
+                    let sym = symtab.get(sym_idx);
+                    sym.name(&strtab).map(|name| {
+                        callback(
+                            name,
+                            syms.base + sym.value(),
+                            (address - (syms.base + sym.value())).as_u64(),
+                        )
+                    })
+                })
+        })
 }
 
 pub fn lookup_symbol<R>(address: VAddr, callback: impl FnOnce(&str, VAddr, u64) -> R) -> Option<R> {
-    let symbols = SYMBOLS.lock_read();
-    lookup_symbol_in_tree(&symbols, address, callback)
+    let elf_symbols = SYMBOLS.lock_read();
+    lookup_symbol_impl(&elf_symbols, address, callback)
 }
 
 pub unsafe fn lookup_symbol_unlocked<R>(
     address: VAddr,
     callback: impl FnOnce(&str, VAddr, u64) -> R,
 ) -> Option<R> {
-    lookup_symbol_in_tree(&*SYMBOLS.get_ptr(), address, callback)
+    lookup_symbol_impl(&*SYMBOLS.get_ptr(), address, callback)
 }

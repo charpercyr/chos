@@ -15,6 +15,19 @@ impl<'a> Sections<'a> {
             entries: from_raw_parts(buf.as_ptr().cast(), buf.len() / entsize, entsize),
         }
     }
+
+    pub fn symtab_strtab(&'a self, elf: &'a Elf<'a>) -> Option<(Symtab<'a>, StrTab<'a>)> {
+        let mut symtab = None;
+        let mut strtab = None;
+        for section in self.iter() {
+            if section.name(elf) == Some(".strtab") {
+                strtab = section.as_strtab(elf);
+            } else if section.name(elf) == Some(".symtab") {
+                symtab = section.as_symtab(elf);
+            }
+        }
+        symtab.zip(strtab)
+    }
 }
 crate::elf_table!('a, Sections, entries, SectionEntry, SectionEntryIter, StrideSliceIter<'a, Elf64Shdr>);
 
