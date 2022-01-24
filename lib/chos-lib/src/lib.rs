@@ -17,6 +17,7 @@
 #![feature(negative_impls)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
+#![feature(untagged_unions)]
 #![cfg_attr(
     any(target_arch = "x86", target_arch = "x86_64"),
     feature(abi_x86_interrupt)
@@ -39,6 +40,7 @@ pub mod str;
 pub mod stride;
 pub mod sync;
 pub mod tar;
+pub mod tuple;
 mod volatile;
 
 pub use chos_lib_macros::forward_fmt;

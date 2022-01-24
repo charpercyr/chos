@@ -19,6 +19,7 @@ impl ConstInit for RawSpinLock {
 }
 
 unsafe impl RawLock for RawSpinLock {
+    #[inline]
     fn lock(&self) {
         loop {
             if likely(self.try_lock()) {
@@ -27,12 +28,15 @@ unsafe impl RawLock for RawSpinLock {
             spin_loop();
         }
     }
+
+    #[inline]
     unsafe fn unlock(&self) {
         self.lock.store(false, Ordering::Release);
     }
 }
 
 unsafe impl RawTryLock for RawSpinLock {
+    #[inline]
     fn try_lock(&self) -> bool {
         self.lock
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -61,6 +65,7 @@ impl ConstInit for RawSpinRWLock {
 }
 
 unsafe impl RawRWLock for RawSpinRWLock {
+    #[inline]
     fn lock_read(&self) {
         self.lock.lock();
         if self.readers.get() == 0 {
@@ -69,6 +74,7 @@ unsafe impl RawRWLock for RawSpinRWLock {
         self.readers.set(self.readers.get() + 1);
         unsafe { self.lock.unlock() };
     }
+    #[inline]
     unsafe fn unlock_read(&self) {
         self.lock.lock();
         if self.readers.get() == 1 {
@@ -78,15 +84,18 @@ unsafe impl RawRWLock for RawSpinRWLock {
         self.lock.unlock();
     }
 
+    #[inline]
     fn lock_write(&self) {
         self.write_lock.lock();
     }
+    #[inline]
     unsafe fn unlock_write(&self) {
         self.write_lock.unlock();
     }
 }
 
 unsafe impl RawTryRWLock for RawSpinRWLock {
+    #[inline]
     fn try_lock_read(&self) -> bool {
         if !self.lock.try_lock() {
             return false;
@@ -98,6 +107,7 @@ unsafe impl RawTryRWLock for RawSpinRWLock {
         true
     }
 
+    #[inline]
     fn try_lock_write(&self) -> bool {
         self.write_lock.try_lock()
     }

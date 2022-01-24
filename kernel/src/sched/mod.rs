@@ -30,7 +30,5 @@ per_cpu! {
 }
 
 pub fn enter_schedule() -> ! {
-    loop {
-        todo!();
-    }
+    todo!("enter_schedule()")
 }

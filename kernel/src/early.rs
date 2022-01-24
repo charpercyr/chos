@@ -82,6 +82,7 @@ unsafe fn copy_boot_data(info: &KernelBootInfo) -> KernelArgs {
         initrd: info.initrd.map(|ird| ird.as_ref().into()),
         core_count: info.core_count,
         mem_info: info.mem_info,
+        command_line: info.command_line.into(),
         arch: arch_copy_boot_data(&info.arch),
     }
 }

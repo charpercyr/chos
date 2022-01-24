@@ -8,6 +8,7 @@ mod panic;
 mod symbols;
 mod timer;
 
+use core::mem::transmute;
 use core::ptr::NonNull;
 
 use chos_config::arch::mm::virt;
@@ -37,13 +38,15 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let mbh = unsafe { mb::load(mbp) };
 
-    if let Some(cmdline) = mbh.command_line_tag() {
-        for kv in iter_cmdline(cmdline.command_line()) {
-            match kv {
-                ("output", Some("serial")) => logdev = log::Device::Serial,
-                ("output", Some("vga")) => logdev = log::Device::Vga,
-                _ => (),
-            }
+    let command_line: &'static str = mbh
+        .command_line_tag()
+        .map(|tag| unsafe { transmute(tag.command_line()) })
+        .unwrap_or("");
+    for kv in iter_cmdline(command_line) {
+        match kv {
+            ("output", Some("serial")) => logdev = log::Device::Serial,
+            ("output", Some("vga")) => logdev = log::Device::Vga,
+            _ => (),
         }
     }
 
@@ -139,6 +142,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 rsdt,
                 multiboot_header: mbp,
             },
+            command_line,
             initrd: initrd.map(NonNull::from),
         },
         page_table: unsafe {

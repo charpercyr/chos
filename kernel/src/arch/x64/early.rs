@@ -211,12 +211,12 @@ pub unsafe fn init_non_early_memory(args: &KernelArgs) {
                 PFrame::new_align_down(paddr + size),
             );
             debug!(
-                "Using {:#016x}-{:#016x}",
+                "Using {:#016x}-{:#016x} as kernel memory",
                 before.start(),
                 before.end(),
             );
             debug!(
-                "Using {:#016x}-{:#016x}",
+                "Using {:#016x}-{:#016x} as kernel memory",
                 after.start(),
                 after.end(),
             );
@@ -232,7 +232,7 @@ pub unsafe fn init_non_early_memory(args: &KernelArgs) {
                 PFrame::new_align_down(paddr + size),
             );
             debug!(
-                "Using {:#016x}-{:#016x}",
+                "Using {:#016x}-{:#016x} as kernel memory",
                 area.start(),
                 area.end(),
             );

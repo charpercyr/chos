@@ -2,6 +2,7 @@ use chos_lib::arch::intr::without_interrupts;
 use chos_lib::arch::mm::{PAddr, VAddr};
 
 use super::virt::paddr_of;
+use crate::arch::mm::per_cpu::{per_cpu_base, per_cpu_base_for};
 
 pub macro per_cpu ($($(pub $(($($vis:tt)*))?)? static mut ref $name:ident: $ty:ty = $init:expr;)*) {
     paste::item! {
@@ -95,5 +96,17 @@ pub unsafe trait PerCpu {
         f: F,
     ) -> R {
         f(&mut *self.get())
+    }
+
+    fn get_for(&self, id: usize) -> *mut Self::Target
+    where
+        Self::Target: Sized,
+    {
+        unsafe {
+            let value: *mut u8 = self.get().cast();
+            let value = value.sub(per_cpu_base().as_u64() as usize);
+            let value = value.add(per_cpu_base_for(id).as_u64() as usize);
+            value.cast()
+        }
     }
 }

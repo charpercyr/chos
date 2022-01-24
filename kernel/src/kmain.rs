@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::string::String;
 use core::fmt::Write;
 use core::mem::MaybeUninit;
 
@@ -7,14 +8,13 @@ use chos_lib::arch::qemu::{exit_qemu, QemuStatus};
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, Bytes, LogHandler, TermColorLogHandler, println};
+use chos_lib::log::{debug, Bytes, LogHandler, TermColorLogHandler};
 use chos_lib::sync::{Barrier, SpinOnceCell, Spinlock};
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::intr::init_interrupts;
-use crate::mm::phys::raw_alloc::get_regions_info;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols_to_tree;
 
@@ -22,6 +22,7 @@ use crate::symbols::add_elf_symbols_to_tree;
 pub struct KernelArgs {
     pub kernel_elf: Box<[u8]>,
     pub initrd: Option<Box<[u8]>>,
+    pub command_line: String,
     pub core_count: usize,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelArgs,
@@ -51,10 +52,7 @@ fn setup_logger() {
     static mut LOGGER: MaybeUninit<TermColorLogHandler<Logger>> = MaybeUninit::uninit();
     unsafe {
         LOGGER = MaybeUninit::new(TermColorLogHandler::new(Logger {
-            serial: Spinlock::new({
-                let serial = Serial::new(0x3f8);
-                serial.init()
-            }),
+            serial: Spinlock::new(Serial::com1().defaults()),
         }));
         chos_lib::log::set_handler(LOGGER.assume_init_mut())
     }
@@ -73,13 +71,11 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
         unsafe {
             unmap_early_lower_memory(args.mem_info.total_size);
             init_non_early_memory(args);
-        };
+        }
     }
-
     barrier!(args.core_count);
 
     unsafe { init_interrupts() };
-
     unsafe { init_kernel_virt() };
 
     if id == 0 {

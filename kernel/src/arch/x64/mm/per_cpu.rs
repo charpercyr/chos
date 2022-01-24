@@ -32,9 +32,17 @@ struct TlsData {
 }
 static mut TLS_DATA: MaybeUninit<&'static [TlsData]> = MaybeUninit::uninit();
 
+pub fn per_cpu_base() -> VAddr {
+    GS::get()
+}
+
+pub fn per_cpu_base_for(id: usize) -> VAddr {
+    unsafe { TLS_DATA.assume_init_ref()[id].kernel_tls_base }
+}
+
 #[no_mangle]
 unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
-    let tls_data = GS::get().as_ref::<TlsData>();
+    let tls_data = per_cpu_base().as_ref::<TlsData>();
     let addr = match idx.module {
         0 => (tls_data.kernel_tls_base + idx.offset).as_mut_ptr(),
         _ => unimplemented!(
