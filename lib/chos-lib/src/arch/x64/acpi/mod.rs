@@ -7,6 +7,8 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem::{size_of, transmute};
 
+use super::mm::VAddr;
+
 #[derive(Clone, Copy)]
 #[repr(C, packed)]
 pub struct SDTHeader {
@@ -53,19 +55,41 @@ impl fmt::Debug for SDTHeader {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-#[repr(C, packed)]
-pub struct Rsdt {
-    pub hdr: SDTHeader,
+#[derive(Clone, Copy)]
+pub struct Rsdt<'a> {
+    base: VAddr,
+    addr: usize,
+    rsdt: PhantomData<&'a SDTHeader>,
 }
 
-impl Rsdt {
-    pub fn sdts(&self) -> RSDTIter {
-        let (ptr, len) = self.sdt_ptr();
-        RSDTIter {
-            cur: ptr,
-            end: unsafe { ptr.add(len) },
+impl<'a> Rsdt<'a> {
+    pub unsafe fn new(addr: usize) -> Self {
+        Self::new_base(addr, VAddr::null())
+    }
+
+    pub unsafe fn new_base(addr: usize, base: VAddr) -> Self {
+        Self {
+            base,
+            addr,
             rsdt: PhantomData,
+        }
+    }
+
+    pub fn hdr(&self) -> &SDTHeader {
+        unsafe { (self.base + self.addr as u64).as_ref() }
+    }
+
+    pub fn tables(&self) -> Iter<'a> {
+        unsafe {
+            let hdr: *const SDTHeader = (self.base + self.addr as u64).as_ptr();
+            let len = (*hdr).length as usize - size_of::<SDTHeader>();
+            let ptr = hdr.add(1).cast();
+            Iter {
+                cur: ptr,
+                end: ptr.add(len / size_of::<u32>()),
+                base: self.base,
+                rsdt: PhantomData,
+            }
         }
     }
 
@@ -86,36 +110,33 @@ impl Rsdt {
     }
 
     unsafe fn find_table<T>(&self, sig: &[u8; 4]) -> Option<&T> {
-        self.sdts().find(|&sdt| &sdt.sig == sig).map(|hdr| unsafe { transmute(hdr) })
-    }
-
-    fn sdt_ptr(&self) -> (*const u32, usize) {
-        unsafe {
-            let ptr = (self as *const Self).offset(1) as *const u8;
-            let byte_len = self.hdr.length as usize - size_of::<Self>();
-            assert!(byte_len % size_of::<u32>() == 0);
-            (ptr as _, byte_len / size_of::<u32>())
-        }
+        self.tables()
+            .find(|&sdt| &sdt.sig == sig)
+            .map(|hdr| unsafe { transmute(hdr) })
     }
 }
 
-pub struct RSDTIter<'a> {
+pub struct Iter<'a> {
     cur: *const u32,
     end: *const u32,
-    rsdt: PhantomData<&'a Rsdt>,
+    base: VAddr,
+    rsdt: PhantomData<&'a Rsdt<'a>>,
 }
-
-impl<'a> Iterator for RSDTIter<'a> {
+impl<'a> Iterator for Iter<'a> {
     type Item = &'a SDTHeader;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cur != self.end {
-            unsafe {
-                let hdr = &*((*self.cur) as *const SDTHeader);
-                self.cur = self.cur.offset(1);
-                Some(hdr)
-            }
-        } else {
-            None
-        }
+        (self.cur != self.end).then(|| unsafe {
+            let hdr = (self.base + (*self.cur) as u64).as_ref();
+            self.cur = self.cur.add(1);
+            hdr
+        })
+    }
+}
+
+impl<'a> IntoIterator for &'a Rsdt<'a> {
+    type Item = &'a SDTHeader;
+    type IntoIter = Iter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.tables()
     }
 }

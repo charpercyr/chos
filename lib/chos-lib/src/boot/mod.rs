@@ -23,7 +23,7 @@ pub struct KernelBootInfo {
     pub initrd: Option<NonNull<[u8]>>,
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
-    pub command_line: &'static str,
+    pub command_line: Option<&'static str>,
     pub arch: ArchKernelBootInfo,
 }
 

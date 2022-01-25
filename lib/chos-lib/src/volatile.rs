@@ -1,6 +1,6 @@
 use core::intrinsics::{unaligned_volatile_load, unaligned_volatile_store, volatile_copy_memory};
 use core::marker::PhantomData;
-use core::mem::{forget, transmute, ManuallyDrop};
+use core::mem::{forget, transmute, ManuallyDrop, MaybeUninit};
 use core::ptr;
 
 pub use crate::access::*;
@@ -88,7 +88,7 @@ crate::forward_fmt!(
 #[repr(C)]
 union PaddedVolatileInner<T, P, const N: usize> {
     volatile: ManuallyDrop<Volatile<T, P>>,
-    _pad: [u8; N],
+    _pad: MaybeUninit<[u8; N]>,
 }
 
 #[repr(transparent)]

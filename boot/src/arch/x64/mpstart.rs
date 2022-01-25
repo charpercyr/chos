@@ -1,13 +1,14 @@
 use core::mem::MaybeUninit;
 use core::ptr::null;
 
-use chos_lib::arch::mm::PAGE_SHIFT;
+use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::regs::Cr3;
 use chos_lib::arch::x64::acpi::madt;
 use chos_lib::arch::x64::apic::Apic;
+use chos_lib::mm::VFrame;
 use chos_lib::sync::spin::barrier::Barrier;
 
-const MPSTART_RELOC_ADDRESS: *mut u8 = 0x8000 as _;
+const MPSTART_RELOC_ADDRESS: VAddr = VAddr::new(0x8000);
 
 extern "C" {
     static MPSTART_16: u8;
@@ -18,7 +19,7 @@ type MpStartFn = fn(usize, *const ()) -> !;
 
 static mut MPSTART_FN: MaybeUninit<MpStartFn> = MaybeUninit::uninit();
 static mut MPSTART_USER: *const () = null();
-static mut MPSTART_APIC_BASE: usize = 0;
+static mut MPSTART_APIC_BASE: VAddr = VAddr::null();
 static mut MPSTART_BARRIER: MaybeUninit<Barrier> = MaybeUninit::uninit();
 
 #[no_mangle]
@@ -29,10 +30,9 @@ static MPSTART_STACK_BASE: usize = 0x9000;
 static MPSTART_STACK_STRIDE: usize = 0x4000;
 
 unsafe fn start_processor(apic: &mut Apic, lapic_id: u8) {
-    let mpstart_page = MPSTART_RELOC_ADDRESS as usize >> PAGE_SHIFT;
-    apic.start_ap(lapic_id, mpstart_page, |d| {
-        super::timer::delay(d).unwrap()
-    });
+    let mpstart_page = VFrame::new(MPSTART_RELOC_ADDRESS);
+    apic.commands()
+        .start_ap(lapic_id, mpstart_page, |d| super::timer::delay(d).unwrap());
 }
 
 pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) -> usize {
@@ -42,7 +42,7 @@ pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) 
     );
     core::ptr::copy_nonoverlapping(
         &MPSTART_16,
-        MPSTART_RELOC_ADDRESS as *mut u8,
+        MPSTART_RELOC_ADDRESS.as_mut_ptr(),
         MPSTART_16_LEN,
     );
 
@@ -61,13 +61,10 @@ pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) 
 
     MPSTART_FN = MaybeUninit::new(start_fn);
     MPSTART_USER = user;
-    MPSTART_APIC_BASE = madt.lapic_address as usize;
+    MPSTART_APIC_BASE = VAddr::new_unchecked(madt.lapic_address as u64);
     MPSTART_BARRIER = MaybeUninit::new(Barrier::new(count));
 
-    MPSTART_PDT4 = Cr3::read()
-        .0
-        .addr()
-        .as_u64() as usize;
+    MPSTART_PDT4 = Cr3::read().0.addr().as_u64() as usize;
 
     for lapic_id in entries {
         if lapic_id != this_apic_id as u8 {
@@ -83,7 +80,7 @@ pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) 
 #[no_mangle]
 extern "C" fn secondary_main() -> ! {
     unsafe {
-        let apic = Apic::with_address(MPSTART_APIC_BASE);
+        let apic = Apic::new(MPSTART_APIC_BASE);
         let id = apic.id();
         MPSTART_BARRIER.assume_init_ref().wait();
         (MPSTART_FN.assume_init())(id as usize, MPSTART_USER);

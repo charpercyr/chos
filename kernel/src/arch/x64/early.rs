@@ -158,7 +158,7 @@ pub unsafe fn map_stack(pages: PAddr, count: u64, add_guard_page: bool) -> VAddr
 
 pub unsafe fn arch_copy_boot_data(data: &ArchKernelBootInfo) -> ArchKernelArgs {
     ArchKernelArgs {
-        rsdt: (VAddr::new_unchecked(data.rsdt as u64) + virt::PHYSICAL_MAP_BASE).as_ptr(),
+        rsdt: data.rsdt,
         mbh: data.multiboot_header,
     }
 }

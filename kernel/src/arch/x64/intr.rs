@@ -1,5 +1,5 @@
 use chos_config::arch::mm::{stack, virt};
-use chos_lib::arch::intr::IoPl;
+use chos_lib::arch::intr::{enable_interrupts, IoPl};
 use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::regs::Cr2;
 use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, PageFaultError, Tss};
@@ -71,7 +71,7 @@ extern "x86-interrupt" fn intr_breakpoint(frame: InterruptStackFrame) {
 
 extern "x86-interrupt" fn intr_page_fault(frame: InterruptStackFrame, error: PageFaultError) {
     panic!(
-        "PAGE FAULT, TRYING TO ACCESS {:x}[{:?}]\n{:#?}",
+        "PAGE FAULT, TRYING TO ACCESS {:#016x} [{:?}]\n{:#?}",
         Cr2::read(),
         error,
         frame
@@ -100,6 +100,7 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
     idt.double_fault
         .set_handler(intr_double_fault)
         .set_stack_index(Some(1));
+
     idt
 });
 
@@ -107,4 +108,5 @@ pub unsafe fn arch_init_interrupts() {
     Gdt::load(GDT.get_ref());
     Tss::load(TSS_SEGMENT);
     Idt::load(&IDT);
+    enable_interrupts();
 }

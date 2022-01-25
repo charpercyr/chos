@@ -17,7 +17,8 @@ use chos_lib::arch::mm::{PAddr, VAddr};
 use chos_lib::arch::x64::acpi::Rsdt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
-use chos_lib::log::{debug, println, Bytes};
+use chos_lib::fmt::Bytes;
+use chos_lib::log::{debug, println};
 use chos_lib::mm::PFrame;
 use chos_lib::sync::spin::barrier::Barrier;
 use cmdline::iter_cmdline;
@@ -38,11 +39,10 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let mbh = unsafe { mb::load(mbp) };
 
-    let command_line: &'static str = mbh
+    let command_line: Option<&'static str> = mbh
         .command_line_tag()
-        .map(|tag| unsafe { transmute(tag.command_line()) })
-        .unwrap_or("");
-    for kv in iter_cmdline(command_line) {
+        .map(|tag| unsafe { transmute(tag.command_line()) });
+    for kv in command_line.map(iter_cmdline).into_iter().flatten() {
         match kv {
             ("output", Some("serial")) => logdev = log::Device::Serial,
             ("output", Some("vga")) => logdev = log::Device::Vga,
@@ -72,11 +72,11 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
         symbols::init_symbols(sections);
     }
 
-    let rsdt = mbh
+    let rsdt_addr = mbh
         .rsdp_v1_tag()
         .expect("No RSDT from Multiboot")
         .rsdt_address();
-    let rsdt = unsafe { &*(rsdt as *const Rsdt) };
+    let rsdt = unsafe { Rsdt::new(rsdt_addr) };
     let madt = rsdt.madt().unwrap();
     let hpet = rsdt.hpet().unwrap();
 
@@ -139,7 +139,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
             early_log: &log::BOOT_LOG_HANDLER,
             mem_info,
             arch: ArchKernelBootInfo {
-                rsdt,
+                rsdt: rsdt_addr,
                 multiboot_header: mbp,
             },
             command_line,

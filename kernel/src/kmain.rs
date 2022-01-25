@@ -8,7 +8,8 @@ use chos_lib::arch::qemu::{exit_qemu, QemuStatus};
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, Bytes, LogHandler, TermColorLogHandler};
+use chos_lib::fmt::Bytes;
+use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::sync::{Barrier, SpinOnceCell, Spinlock};
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
@@ -22,7 +23,7 @@ use crate::symbols::add_elf_symbols_to_tree;
 pub struct KernelArgs {
     pub kernel_elf: Box<[u8]>,
     pub initrd: Option<Box<[u8]>>,
-    pub command_line: String,
+    pub command_line: Option<String>,
     pub core_count: usize,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelArgs,
@@ -59,6 +60,8 @@ fn setup_logger() {
 }
 
 pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
+    barrier!(args.core_count);
+
     if id == 0 {
         setup_logger();
         add_elf_symbols_to_tree(
@@ -73,19 +76,18 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
             init_non_early_memory(args);
         }
     }
+
     barrier!(args.core_count);
 
     unsafe { init_interrupts() };
     unsafe { init_kernel_virt() };
 
+    barrier!(args.core_count);
+
     if id == 0 {
-        debug!(
-            "[{}] Kernel len={}",
-            id,
-            Bytes(args.kernel_elf.len() as u64)
-        );
+        debug!("Kernel len={}", Bytes(args.kernel_elf.len() as u64));
         if let Some(i) = args.initrd.as_deref() {
-            debug!("[{}] Initrd len={}", id, Bytes(i.len() as u64));
+            debug!("Initrd len={}", Bytes(i.len() as u64));
         }
         exit_qemu(QemuStatus::Success)
     }

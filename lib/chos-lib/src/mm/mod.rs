@@ -107,6 +107,10 @@ macro_rules! frame {
             pub const fn sub(self, count: u64) -> Self {
                 unsafe { Self::new_unchecked(self.addr.sub_u64(count * S::PAGE_SIZE)) }
             }
+
+            pub const fn page(self) -> u64 {
+                self.addr.page()
+            }
         }
 
         paste::item! {

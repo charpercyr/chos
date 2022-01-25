@@ -27,6 +27,7 @@ mod dummy;
 mod early;
 mod intr;
 mod kmain;
+mod log;
 mod mm;
 mod panic;
 mod sched;

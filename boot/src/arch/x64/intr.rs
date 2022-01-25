@@ -1,15 +1,15 @@
 use core::mem::MaybeUninit;
 
 use chos_lib::arch::intr::enable_interrupts;
+use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::port::PortWriteOnly;
 use chos_lib::arch::regs::Cr2;
-use chos_lib::arch::tables::{InterruptStackFrame, PageFaultError, Idt, Handler};
+use chos_lib::arch::tables::{Handler, Idt, InterruptStackFrame, PageFaultError};
+use chos_lib::arch::x64::acpi::madt::{self, Madt};
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::arch::x64::intr::without_interrupts;
 use chos_lib::arch::x64::ioapic::{self, IOApic};
 use rustc_demangle::demangle;
-
-use chos_lib::arch::x64::acpi::madt::{self, Madt};
 
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
@@ -25,9 +25,7 @@ extern "x86-interrupt" fn intr_double_fault(f: InterruptStackFrame, _: u64) -> !
 extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, e: PageFaultError) {
     use crate::unsafe_println;
     unsafe {
-        if let Some((name, offset)) =
-            super::symbols::find_symbol(f.ip.as_u64() as _)
-        {
+        if let Some((name, offset)) = super::symbols::find_symbol(f.ip.as_u64() as _) {
             unsafe_println!(
                 "PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]",
                 f.ip,
@@ -72,7 +70,8 @@ pub fn initalize(madt: &Madt) {
     idt.breakpoint.set_handler(intr_breakpoint);
     idt.double_fault.set_handler(intr_double_fault);
     idt.page_fault.set_handler(intr_page_fault);
-    idt.general_protection_fault.set_handler(intr_general_protection_fault);
+    idt.general_protection_fault
+        .set_handler(intr_general_protection_fault);
     idt.invalid_opcode.set_handler(intr_invalid_opcode);
 
     let ioapic = madt
@@ -88,7 +87,7 @@ pub fn initalize(madt: &Madt) {
 
     let apic;
     unsafe {
-        APIC = MaybeUninit::new(Apic::with_address(madt.lapic_address as usize));
+        APIC = MaybeUninit::new(Apic::new(VAddr::new_unchecked(madt.lapic_address as u64)));
         IO_APIC = MaybeUninit::new(IOApic::with_address(ioapic.ioapic_address as usize));
 
         apic = APIC.assume_init_mut();
@@ -96,7 +95,7 @@ pub fn initalize(madt: &Madt) {
 
     unsafe {
         idt[INTERRUPT_SPURIOUS as usize].set_handler(intr_spurious);
-        apic.initialize(INTERRUPT_SPURIOUS);
+        apic.initialize();
     }
 
     unsafe { Idt::load(&IDT) };
@@ -104,7 +103,7 @@ pub fn initalize(madt: &Madt) {
     enable_interrupts();
 }
 
-pub unsafe fn apic() -> &'static mut Apic {
+pub unsafe fn apic() -> &'static mut Apic<'static> {
     APIC.assume_init_mut()
 }
 

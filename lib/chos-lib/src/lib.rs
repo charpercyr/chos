@@ -28,6 +28,7 @@ pub mod arch;
 pub mod boot;
 mod config;
 pub mod elf;
+pub mod fmt;
 pub mod init;
 pub mod int;
 pub mod intrusive;

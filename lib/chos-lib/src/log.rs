@@ -1,4 +1,4 @@
-use core::fmt::{self, Arguments};
+use core::fmt::Arguments;
 
 use cfg_if::cfg_if;
 
@@ -181,32 +181,6 @@ cfg_if! {
     } else {
         pub macro critical ($($args:tt)*) {}
         pub macro unsafe_critical ($($args:tt)*) {}
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Bytes(pub u64);
-
-impl fmt::Display for Bytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut v = self.0;
-        const KB: u64 = 1024;
-        const MB: u64 = 1024 * KB;
-        const GB: u64 = 1024 * MB;
-        write!(f, "(")?;
-        if self.0 >= GB {
-            write!(f, "{}GiB ", v / GB)?;
-            v -= v / GB * GB;
-        }
-        if self.0 >= MB {
-            write!(f, "{}MiB ", v / MB)?;
-            v -= v / MB * MB;
-        }
-        if self.0 >= KB {
-            write!(f, "{}KiB ", v / KB)?;
-            v -= v / KB * KB;
-        }
-        write!(f, "{}B)", v)
     }
 }
 
