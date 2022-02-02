@@ -5,7 +5,7 @@ use chos_lib::arch::mm::VAddr;
 use chos_lib::boot::KernelBootInfo;
 use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
-use chos_lib::sync::{Barrier, SpinOnceCell};
+use chos_lib::sync::{SpinBarrier, SpinOnceCell};
 
 use crate::arch::asm::call_with_stack;
 use crate::arch::early::{arch_copy_boot_data, arch_init_early_memory, use_early_kernel_table};
@@ -103,16 +103,18 @@ unsafe fn enter_kernel_main(id: usize, args: &KernelArgs, stack: VAddr) -> ! {
 
 #[no_mangle]
 pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
-    static BARRIER: SpinOnceCell<Barrier> = SpinOnceCell::new();
+    static BARRIER: SpinOnceCell<SpinBarrier> = SpinOnceCell::new();
     static mut EARLY_DATA: MaybeUninit<EarlyData> = MaybeUninit::uninit();
-    let barrier = BARRIER.get_or_init(|| Barrier::new(info.core_count));
+    let barrier = BARRIER.get_or_init(|| SpinBarrier::new(info.core_count));
 
     if id == 0 {
         unsafe { chos_lib::log::set_handler(info.early_log) };
 
+        debug!();
         debug!("####################");
         debug!("### EARLY KERNEL ###");
         debug!("####################");
+        debug!();
 
         unsafe {
             init_early_memory(info);

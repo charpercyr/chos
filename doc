@@ -4,7 +4,10 @@ cwd=$(realpath $(dirname $0))
 
 pushd $cwd &> /dev/null
 
-cargo doc --workspace --document-private-items --no-deps
+cmd="cargo doc --workspace --document-private-items --no-deps"
+echo $cmd
+exec $cmd
+
 e=$?
 
 popd &> /dev/null

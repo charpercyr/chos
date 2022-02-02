@@ -36,6 +36,9 @@ pub struct RunOpts {
     pub mem: String,
     #[structopt(long, short, default_value = "2")]
     pub smp: usize,
+    /// Don't rebuild before deploying
+    #[structopt(long)]
+    pub no_build: bool,
 }
 
 #[derive(StructOpt, Debug)]

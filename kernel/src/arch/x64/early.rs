@@ -30,7 +30,7 @@ fn is_non_early_memory(area: &MemoryArea, mem_info: &KernelMemInfo) -> bool {
 }
 
 unsafe fn setup_early_memory_allocator(info: &KernelBootInfo) {
-    let mbh = multiboot2::load(info.arch.multiboot_header as usize);
+    let mbh = multiboot2::load(info.arch.multiboot_header as usize).expect("Could not load multiboot structure");
     if let Some(mem) = mbh.memory_map_tag() {
         let iter = mem.all_memory_areas().filter_map(|area| {
             is_early_memory(area, &info.mem_info).then(|| {
@@ -189,7 +189,7 @@ pub unsafe fn unmap_early_lower_memory(mem_size: u64) {
 
 pub unsafe fn init_non_early_memory(args: &KernelArgs) {
     let mbh =
-        multiboot2::load_with_offset(args.arch.mbh, virt::PHYSICAL_MAP_BASE.as_u64() as usize);
+        multiboot2::load_with_offset(args.arch.mbh, virt::PHYSICAL_MAP_BASE.as_usize()).expect("Could not load multiboot structure");
     let mem_entries: Vec<_> = mbh
         .memory_map_tag()
         .expect("Should have a memory map")

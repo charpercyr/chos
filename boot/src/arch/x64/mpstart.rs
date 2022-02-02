@@ -6,7 +6,7 @@ use chos_lib::arch::regs::Cr3;
 use chos_lib::arch::x64::acpi::madt;
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::mm::VFrame;
-use chos_lib::sync::spin::barrier::Barrier;
+use chos_lib::sync::spin::barrier::SpinBarrier;
 
 const MPSTART_RELOC_ADDRESS: VAddr = VAddr::new(0x8000);
 
@@ -20,7 +20,7 @@ type MpStartFn = fn(usize, *const ()) -> !;
 static mut MPSTART_FN: MaybeUninit<MpStartFn> = MaybeUninit::uninit();
 static mut MPSTART_USER: *const () = null();
 static mut MPSTART_APIC_BASE: VAddr = VAddr::null();
-static mut MPSTART_BARRIER: MaybeUninit<Barrier> = MaybeUninit::uninit();
+static mut MPSTART_BARRIER: MaybeUninit<SpinBarrier> = MaybeUninit::uninit();
 
 #[no_mangle]
 static mut MPSTART_PDT4: usize = 0;
@@ -62,7 +62,7 @@ pub unsafe fn start_mp(madt: &madt::Madt, start_fn: MpStartFn, user: *const ()) 
     MPSTART_FN = MaybeUninit::new(start_fn);
     MPSTART_USER = user;
     MPSTART_APIC_BASE = VAddr::new_unchecked(madt.lapic_address as u64);
-    MPSTART_BARRIER = MaybeUninit::new(Barrier::new(count));
+    MPSTART_BARRIER = MaybeUninit::new(SpinBarrier::new(count));
 
     MPSTART_PDT4 = Cr3::read().0.addr().as_u64() as usize;
 

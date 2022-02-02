@@ -11,7 +11,7 @@ mod timer;
 use core::mem::transmute;
 use core::ptr::NonNull;
 
-use chos_config::arch::mm::virt;
+use chos_config::arch::mm::{virt, phys};
 use chos_lib::arch::boot::ArchKernelBootInfo;
 use chos_lib::arch::mm::{PAddr, VAddr};
 use chos_lib::arch::x64::acpi::Rsdt;
@@ -20,7 +20,7 @@ use chos_lib::boot::{KernelBootInfo, KernelEntry};
 use chos_lib::fmt::Bytes;
 use chos_lib::log::{debug, println};
 use chos_lib::mm::PFrame;
-use chos_lib::sync::spin::barrier::Barrier;
+use chos_lib::sync::spin::barrier::SpinBarrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
 
@@ -28,7 +28,7 @@ use crate::arch::x64::intr::apic;
 
 struct MpInfo {
     entry: KernelEntry,
-    barrier: Barrier,
+    barrier: SpinBarrier,
     kbi: KernelBootInfo,
     page_table: *mut PageTable,
 }
@@ -37,7 +37,7 @@ struct MpInfo {
 pub extern "C" fn boot_main(mbp: usize) -> ! {
     let mut logdev = log::Device::Serial;
 
-    let mbh = unsafe { mb::load(mbp) };
+    let mbh = unsafe { mb::load(mbp).expect("Could not load multiboot structure") };
 
     let command_line: Option<&'static str> = mbh
         .command_line_tag()
@@ -64,9 +64,13 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 "#
     );
 
+    debug!();
     debug!("############");
     debug!("### BOOT ###");
     debug!("############");
+    debug!();
+
+    debug!("Multiboot structure @ {:#x} (len={} [{}])", mbp, Bytes(mbh.total_size() as u64), mbh.total_size());
 
     if let Some(sections) = mbh.elf_sections_tag() {
         symbols::init_symbols(sections);
@@ -84,7 +88,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let kernel = if let Some(kernel) = mbh
         .module_tags()
-        .find(|&m| matches!(iter_cmdline(m.name()).next(), Some(("kernel", _))))
+        .find(|&m| matches!(iter_cmdline(m.cmdline()).next(), Some(("kernel", _))))
     {
         let kernel = unsafe {
             core::slice::from_raw_parts(
@@ -92,6 +96,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 (kernel.end_address() - kernel.start_address()) as usize,
             )
         };
+        assert!(kernel.as_ptr() as usize + kernel.len() <= phys::KERNEL_DATA_BASE.as_usize(), "Kernel ELF is too big, it will overlap with the data base");
         chos_lib::elf::Elf::new(kernel).expect("Invalid kernel ELF")
     } else {
         panic!("No kernel")
@@ -99,7 +104,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let initrd = mbh
         .module_tags()
-        .find(|&m| matches!(iter_cmdline(m.name()).next(), Some(("initrd", _))))
+        .find(|&m| matches!(iter_cmdline(m.cmdline()).next(), Some(("initrd", _))))
         .map(|initrd| unsafe {
             core::slice::from_raw_parts(
                 initrd.start_address() as *const u8,
@@ -132,7 +137,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
 
     let mp_info = MpInfo {
         entry,
-        barrier: Barrier::new(apic_count),
+        barrier: SpinBarrier::new(apic_count),
         kbi: KernelBootInfo {
             core_count: apic_count,
             elf: NonNull::from(kernel.data()),

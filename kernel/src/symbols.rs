@@ -55,7 +55,7 @@ impl<'a> KeyAdapter<'a> for ElfSymbolsAdapter {
 static SYMBOLS: SpinRWLock<RBTree<ElfSymbolsAdapter>> =
     SpinRWLock::new(RBTree::new(ElfSymbolsAdapter::new()));
 
-pub fn add_elf_symbols_to_tree(base: VAddr, elf: &Elf) {
+pub fn add_elf_symbols(base: VAddr, elf: &Elf) {
     if let Some(symtab) = elf
         .sections()
         .iter()

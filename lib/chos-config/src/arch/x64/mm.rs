@@ -1,6 +1,10 @@
 pub mod phys {
     use chos_lib::arch::mm::PAddr;
 
+    // Extra space for the size of the debug ELF (extra 40 MB)
+    #[cfg(debug_assertions)]
+    pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0400_0000);
+    #[cfg(not(debug_assertions))]
     pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0100_0000);
 }
 

@@ -201,6 +201,12 @@ macro_rules! frame {
 frame!(PFrame: PAddr);
 frame!(VFrame: VAddr);
 
+impl<S: FrameSize> PFrame<S> {
+    pub const fn identity(self) -> VFrame<S> {
+        unsafe { VFrame::new_unchecked(self.addr.identity()) }
+    }
+}
+
 pub trait FrameSize: Clone + Copy + Debug {
     const PAGE_SHIFT: u8;
     const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;

@@ -32,6 +32,10 @@ impl PAddr {
         self.0
     }
 
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+
     pub const fn is_page_aligned(self) -> bool {
         (self.0 & PAGE_MASK) == 0
     }
@@ -68,6 +72,10 @@ impl PAddr {
         let page = self.0 & S::PAGE_MASK;
         let off = self.0 & !S::PAGE_MASK;
         (unsafe { PFrame::new_unchecked(PAddr::new(page)) }, off)
+    }
+
+    pub const fn identity(self) -> VAddr {
+        VAddr::null().add_paddr(self)
     }
 }
 
@@ -171,6 +179,10 @@ impl VAddr {
 
     pub const fn as_u64(self) -> u64 {
         self.0
+    }
+
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
     }
 
     pub const fn is_page_aligned(self) -> bool {

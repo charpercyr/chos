@@ -9,15 +9,16 @@ use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
 use chos_lib::fmt::Bytes;
-use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
-use chos_lib::sync::{Barrier, SpinOnceCell, Spinlock};
+use chos_lib::log::{info, LogHandler, TermColorLogHandler, debug};
+use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::intr::init_interrupts;
 use crate::sched::enter_schedule;
-use crate::symbols::add_elf_symbols_to_tree;
+use crate::symbols::add_elf_symbols;
+use crate::util::barrier;
 
 #[derive(Debug)]
 pub struct KernelArgs {
@@ -44,11 +45,6 @@ impl LogHandler for Logger {
     }
 }
 
-pub macro barrier($n:expr) {{
-    static BARRIER: SpinOnceCell<Barrier> = SpinOnceCell::new();
-    BARRIER.get_or_init(|| Barrier::new($n)).wait();
-}}
-
 fn setup_logger() {
     static mut LOGGER: MaybeUninit<TermColorLogHandler<Logger>> = MaybeUninit::uninit();
     unsafe {
@@ -64,17 +60,27 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
 
     if id == 0 {
         setup_logger();
-        add_elf_symbols_to_tree(
-            virt::STATIC_BASE,
-            &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
-        );
+    }
 
-        // ANYTHING THAT NEEDS TO ACCESS EARLY MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+    // ANYTHING THAT NEEDS TO ACCESS EARLY MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+    // IF IT NEEDS TO HAPPEN ON OTHER CORES THAN ID 0, DON'T FORGET TO USE A BARRIER
 
+    if id == 0 {
         unsafe {
             unmap_early_lower_memory(args.mem_info.total_size);
             init_non_early_memory(args);
         }
+
+        add_elf_symbols(
+            virt::STATIC_BASE,
+            &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
+        );
+        
+        debug!();
+        debug!("##############");
+        debug!("### KERNEL ###");
+        debug!("##############");
+        debug!();
     }
 
     barrier!(args.core_count);
@@ -82,12 +88,14 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     unsafe { init_interrupts() };
     unsafe { init_kernel_virt() };
 
-    barrier!(args.core_count);
-
     if id == 0 {
-        debug!("Kernel len={}", Bytes(args.kernel_elf.len() as u64));
+        info!(
+            "Kernel len={} ({})",
+            Bytes(args.kernel_elf.len() as u64),
+            args.kernel_elf.len()
+        );
         if let Some(i) = args.initrd.as_deref() {
-            debug!("Initrd len={}", Bytes(i.len() as u64));
+            info!("Initrd len={}", Bytes(i.len() as u64));
         }
         exit_qemu(QemuStatus::Success)
     }

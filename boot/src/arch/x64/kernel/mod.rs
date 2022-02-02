@@ -10,9 +10,10 @@ use chos_lib::arch::mm::{FrameSize4K, PAddr, PageTable};
 use chos_lib::arch::x64::mm::VAddr;
 use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
 use chos_lib::elf::{Elf, ProgramEntryType};
+use chos_lib::fmt::Bytes;
 use chos_lib::int::CeilDiv;
 use chos_lib::log::debug;
-use chos_lib::mm::{MapperFlush, PFrame, RangeMapper, VFrame, MapFlags};
+use chos_lib::mm::{MapFlags, MapperFlush, PFrame, RangeMapper, VFrame};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::BootMapper;
@@ -38,8 +39,13 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         pmap_end + phys::KERNEL_DATA_BASE.as_u64(),
     );
 
-    debug!("ELF @ {:08x}", kernel.raw() as *const _ as usize);
-    debug!("INIT {:08x} - {:08x}", pmap_start, pmap_end);
+    debug!(
+        "ELF @ {:#08x} - {:#08x} {}",
+        kernel.raw() as *const _ as usize,
+        kernel.raw() as *const _ as usize + kernel.data().len(),
+        Bytes(kernel.data().len() as u64)
+    );
+    debug!("INIT {:#08x} - {:#08x}", pmap_start, pmap_end);
     write_bytes(
         pmap_start as *mut u8,
         0xcc,
@@ -74,7 +80,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         }
     }
 
-    let mut palloc = PAlloc::new(pmap_end as *mut u8);
+    let mut palloc = PAlloc::new(PFrame::new_align_up(PAddr::new(pmap_end)));
     let mut mapper = BootMapper::new(&mut palloc);
     mapper.identity_map_memory(&mut palloc, memory, VFrame::new(VAddr::null()));
     mapper.identity_map_memory(&mut palloc, memory, VFrame::new(virt::PHYSICAL_MAP_BASE));

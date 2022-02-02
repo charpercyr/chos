@@ -15,7 +15,7 @@ cfg-if = "1.0.0"
 chos-config = { path = "../lib/chos-config" }
 chos-lib = { path = "../lib/chos-lib", features = ["alloc"] }
 modular-bitfield = "0.11.2"
-multiboot2 = "0.10.1"
+multiboot2 = "0.13.1"
 paste = "1.0.4"
 rustc-demangle = "0.1.18"
 

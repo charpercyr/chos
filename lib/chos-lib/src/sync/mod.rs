@@ -10,7 +10,7 @@ pub use lazy::Lazy;
 pub use lock::{Lock, LockGuard, RawLock, RawTryLock};
 pub use rwlock::{RWLock, RWLockReadGuard, RWLockWriteGuard, RawRWLock, RawTryRWLock};
 pub use sem::Sem;
-pub use spin::barrier::Barrier;
+pub use spin::barrier::SpinBarrier;
 pub use spin::lazy::{SpinLazy, SpinOnceCell};
 pub use spin::lock::{
     SpinRWLock, SpinRWLockReadGuard, SpinRWLockWriteGuard, Spinlock, SpinlockGuard,

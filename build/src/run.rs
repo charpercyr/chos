@@ -11,7 +11,9 @@ pub fn run_main(opts: &RunOpts, config: &[Project]) {
     if opts.build.arch != "x86_64" {
         panic!("Run not supported for {}", opts.build.arch);
     }
-    build_main(&opts.build, config);
+    if !opts.no_build {
+        build_main(&opts.build, config);
+    }
     let imgfile = Builder::new().prefix("chos").suffix(".img").tempfile().unwrap();
     crate::deploy(imgfile.path(), config, opts.build.release, crate::DEPLOY_DEFAULT_SIZE).unwrap();
 

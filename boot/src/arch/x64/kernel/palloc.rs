@@ -2,8 +2,8 @@ use core::mem::size_of;
 use core::ptr::write;
 
 use chos_lib::arch::mm::FrameSize4K;
-use chos_lib::arch::x64::mm::{PAddr, PageTable, VAddr, PAGE_SIZE, PAGE_SIZE64};
-use chos_lib::log::info;
+use chos_lib::arch::x64::mm::{PAddr, PageTable, VAddr, PAGE_SIZE64};
+use chos_lib::log::{info, debug};
 use chos_lib::mm::*;
 
 use super::mapper::BootMapper;
@@ -28,15 +28,12 @@ unsafe impl FrameAllocator<FrameSize4K> for PAlloc {
 }
 
 impl PAlloc {
-    pub unsafe fn new(pbase: *mut u8) -> Self {
-        assert_eq!(
-            pbase as usize % PAGE_SIZE,
-            0,
-            "Physical base must be aligned to a physical page boundary"
-        );
+    pub unsafe fn new(pbase: PFrame<FrameSize4K>) -> Self {
+        debug!("Using {:#x} as PAlloc base", pbase);
+        let pbase = pbase.identity();
         Self {
-            pbase: pbase.cast(),
-            pcur: pbase.cast(),
+            pbase: pbase.addr().as_mut_ptr(),
+            pcur: pbase.addr().as_mut_ptr(),
         }
     }
 

@@ -30,11 +30,13 @@ impl Iterator for Backtrace {
 }
 
 #[inline(always)]
-pub unsafe fn backtrace() -> Backtrace {
+pub fn backtrace() -> Backtrace {
     let mut frame: *const Frame;
-    asm!(
-        "mov {}, rbp",
-        out(reg) frame,
-    );
+    unsafe {
+        asm!(
+            "mov {}, rbp",
+            out(reg) frame,
+        );
+    }
     Backtrace { frame }
 }

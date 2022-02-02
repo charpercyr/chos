@@ -1,12 +1,12 @@
 use core::hint::spin_loop;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering, fence};
 
-pub struct Barrier {
+pub struct SpinBarrier {
     count: AtomicUsize,
     target: usize,
 }
 
-impl Barrier {
+impl SpinBarrier {
     pub const fn new(count: usize) -> Self {
         Self {
             count: AtomicUsize::new(0),
@@ -15,7 +15,7 @@ impl Barrier {
     }
 
     pub fn wait(&self) {
-        let c = self.count.fetch_add(1, Ordering::AcqRel);
+        let c = self.count.fetch_add(1, Ordering::Relaxed);
         if c < self.target - 1 {
             loop {
                 if self.count.load(Ordering::Relaxed) >= self.target {
@@ -24,6 +24,7 @@ impl Barrier {
                 spin_loop();
             }
         }
+        fence(Ordering::AcqRel)
     }
 
     /// # Safety

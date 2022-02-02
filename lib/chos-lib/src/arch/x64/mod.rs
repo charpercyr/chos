@@ -3,6 +3,7 @@ pub use bt::*;
 pub mod acpi;
 pub mod apic;
 pub mod boot;
+pub mod cache;
 pub mod hpet;
 pub mod intr;
 pub mod ioapic;
