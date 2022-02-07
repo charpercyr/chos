@@ -1,4 +1,5 @@
 use chos_lib::init::ConstInit;
+use chos_lib::log::println;
 use chos_lib::pool::PoolBox;
 use intrusive_collections::{LinkedList, LinkedListAtomicLink};
 
@@ -30,5 +31,22 @@ per_cpu! {
 }
 
 pub fn enter_schedule() -> ! {
-    todo!("enter_schedule()")
+    println!("enter_schedule()");
+    loop {
+        // TODO call scheduler
+        unsafe { core::arch::asm!("hlt") };
+    }
+}
+
+pub fn schedule_tick() {
+
+}
+
+#[no_mangle]
+fn __disable_sched_save() -> u64 {
+    0
+}
+
+#[no_mangle]
+fn __restore_sched(_: u64) {
 }

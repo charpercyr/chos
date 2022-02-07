@@ -29,15 +29,16 @@ pub struct Lazy<T, L: RawLazy> {
 }
 
 impl<T, L: RawLazy> Lazy<T, L> {
-    pub const fn new(init: fn() -> T) -> Self where L: ConstInit {
+    pub const fn new(init: fn() -> T) -> Self
+    where
+        L: ConstInit,
+    {
         Self::new_with(init, L::INIT)
     }
     pub const fn new_with(init: fn() -> T, lazy: L) -> Self {
         Self {
             lazy,
-            state: UnsafeCell::new(LazyState {
-                uninit: init,
-            }),
+            state: UnsafeCell::new(LazyState { uninit: init }),
         }
     }
 
@@ -53,7 +54,7 @@ impl<T, L: RawLazy> Lazy<T, L> {
                         self.init_value();
                         self.lazy.mark_init();
                         break;
-                    },
+                    }
                     RawLazyState::Busy => (),
                     RawLazyState::Init => break,
                 }
@@ -107,7 +108,10 @@ impl<T, L: RawLazy> OnceCell<T, L> {
         }
     }
 
-    pub const fn new() -> Self where L: ConstInit {
+    pub const fn new() -> Self
+    where
+        L: ConstInit,
+    {
         Self::new_with(L::INIT)
     }
 
@@ -127,7 +131,7 @@ impl<T, L: RawLazy> OnceCell<T, L> {
                         self.set_value(init());
                         self.lazy.mark_init();
                         break;
-                    },
+                    }
                     RawLazyState::Busy => (),
                     RawLazyState::Init => break,
                 }
@@ -137,12 +141,39 @@ impl<T, L: RawLazy> OnceCell<T, L> {
         }
     }
 
+    pub fn force_set(cell: &Self, value: T) -> Result<(), T> {
+        Self::force_init(cell, || value).map_err(|f| f())
+    }
+
+    pub fn force_init<F: FnOnce() -> T>(cell: &Self, init: F) -> Result<(), F> {
+        unsafe {
+            match cell.lazy.access() {
+                RawLazyState::First => {
+                    cell.set_value(init());
+                    cell.lazy.mark_init();
+                    Ok(())
+                }
+                RawLazyState::Busy | RawLazyState::Init => Err(init),
+            }
+        }
+    }
+
     unsafe fn get_value(&self) -> &T {
         (*self.value.get()).assume_init_ref()
     }
 
     unsafe fn set_value(&self, value: T) {
         *self.value.get() = MaybeUninit::new(value);
+    }
+
+    pub unsafe fn as_mut(&mut self) -> Option<&mut T> {
+        self.lazy
+            .is_init()
+            .then(move || unsafe { self.as_mut_unchecked() })
+    }
+
+    pub unsafe fn as_mut_unchecked(&mut self) -> &mut T {
+        (*self.value.get()).assume_init_mut()
     }
 }
 unsafe impl<T: Send, L: RawLazy + Send> Send for OnceCell<T, L> {}

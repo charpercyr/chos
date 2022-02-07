@@ -1,9 +1,11 @@
 use core::convert::TryInto;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
+use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::tables::InterruptStackFrame;
 use chos_lib::arch::x64::acpi::hpet::Hpet;
-use chos_lib::sync::{SpinSem, Spinlock, Sem};
+use chos_lib::sync::{Sem, SpinSem};
 
 static DONE: SpinSem = SpinSem::new(0);
 
@@ -16,25 +18,26 @@ extern "x86-interrupt" fn timer_callback(_: InterruptStackFrame) {
     }
 }
 
-static mut HPET: Option<chos_lib::arch::x64::hpet::HPET> = None;
+static mut HPET: Option<chos_lib::arch::x64::hpet::Hpet> = None;
 
 pub fn initialize(hpet_table: &Hpet) {
     super::intr::try_ioapic_alloc(IOAPIC_TIMER_ROUTE, |_| (), timer_callback)
         .expect("Could not allocate IOApic interrupt 8");
     unsafe {
-        HPET = Some(chos_lib::arch::x64::hpet::HPET::with_address(
+        HPET = Some(chos_lib::arch::x64::hpet::Hpet::new(VAddr::from_usize(
             hpet_table.address,
-        ));
+        )));
     };
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DelayInProgressError;
 
-static IN_PROGRESS: Spinlock<()> = Spinlock::new(());
-
 pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
-    let _guard = IN_PROGRESS.try_lock().ok_or(DelayInProgressError)?;
+    static IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+    IN_PROGRESS
+        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+        .map_err(|_| DelayInProgressError)?;
     let hpet = unsafe { HPET.as_mut() }.expect("Timer not initialized");
     let period = hpet.period() as u128;
     let mut tim0 = hpet.get_timer(0);
@@ -61,5 +64,7 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
         tim0.disable();
         hpet.disable();
     };
+
+    IN_PROGRESS.store(false, Ordering::Relaxed);
     Ok(())
 }

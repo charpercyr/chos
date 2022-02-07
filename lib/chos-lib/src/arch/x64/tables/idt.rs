@@ -94,7 +94,7 @@ handler_fns!(
     PageFaultHandler,
 );
 
-#[repr(C, align(8))]
+#[repr(C, align(16))]
 #[derive(Clone, Debug)]
 pub struct Idt {
     /* 00 */ pub divide_error: Entry<Handler>,
@@ -122,7 +122,7 @@ pub struct Idt {
     /* 29 */ pub vmm_communication_exception: Entry<HandlerWithError>,
     /* 30 */ pub security_exception: Entry<HandlerWithError>,
     res3: Entry<Handler>,
-    interrupts: [Entry<Handler>; 256 - 32],
+    pub interrupts: [Entry<Handler>; 256 - 32],
 }
 static_assertions::const_assert_eq!(size_of::<Idt>(), 4096);
 
@@ -213,8 +213,8 @@ impl EntryOptions {
         self
     }
 
-    pub fn set_stack_index(&mut self, idx: Option<u16>) -> &mut Self {
-        self.0.set_bits(0..3, idx.map(|idx| idx + 1).unwrap_or(0));
+    pub fn set_stack_index(&mut self, idx: Option<u8>) -> &mut Self {
+        self.0.set_bits(0..3, idx.map(|idx| idx + 1).unwrap_or(0) as u16);
         self
     }
 }

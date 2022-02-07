@@ -28,6 +28,10 @@ impl PAddr {
         Self(v)
     }
 
+    pub const fn from_usize(v: usize) -> Self {
+        Self::new(v as u64)
+    }
+
     pub const fn as_u64(self) -> u64 {
         self.0
     }
@@ -158,6 +162,10 @@ impl VAddr {
         }
     }
 
+    pub const fn try_from_usize(v: usize) -> Result<Self, NonCanonicalError>  {
+        Self::try_new(v as u64)
+    }
+
     pub const fn new(addr: u64) -> Self {
         match Self::try_new(addr) {
             Ok(vaddr) => vaddr,
@@ -165,8 +173,16 @@ impl VAddr {
         }
     }
 
+    pub const fn from_usize(v: usize) -> Self {
+        Self::new(v as u64)
+    }
+
     pub const unsafe fn new_unchecked(addr: u64) -> Self {
         Self(addr)
+    }
+
+    pub const unsafe fn from_usize_unchecked(v: usize) -> Self {
+        Self::new_unchecked(v as u64)
     }
 
     pub const fn make_canonical(addr: u64) -> Self {

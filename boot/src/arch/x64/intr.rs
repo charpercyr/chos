@@ -88,7 +88,7 @@ pub fn initalize(madt: &Madt) {
     let apic;
     unsafe {
         APIC = MaybeUninit::new(Apic::new(VAddr::new_unchecked(madt.lapic_address as u64)));
-        IO_APIC = MaybeUninit::new(IOApic::with_address(ioapic.ioapic_address as usize));
+        IO_APIC = MaybeUninit::new(IOApic::new(VAddr::new(ioapic.ioapic_address as u64)));
 
         apic = APIC.assume_init_mut();
     }

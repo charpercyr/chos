@@ -5,7 +5,7 @@ use core::ptr::{from_raw_parts, null, write_bytes};
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{FrameSize4K, PAddr, VAddr, PAGE_SIZE64};
-use chos_lib::arch::regs::GS;
+use chos_lib::arch::regs::{FS, GS};
 use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::debug;
@@ -13,7 +13,7 @@ use chos_lib::mm::{MapFlags, MapperFlush, PFrame, PFrameRange, RangeMapper, VFra
 
 use super::virt::MMFrameAllocator;
 use crate::mm::phys::{raw_alloc, AllocFlags};
-use crate::mm::{per_cpu, PerCpu};
+use crate::mm::{per_cpu, CpuInfo, PerCpu};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -139,7 +139,9 @@ pub unsafe fn init_per_cpu_data(
 }
 
 per_cpu! {
-    static mut ref APIC_ID: usize = 0;
+    pub static mut ref CPU_INFO: CpuInfo = CpuInfo {
+        id: usize::MAX,
+    };
 }
 
 pub unsafe fn init_per_cpu_data_for_cpu(core_id: usize) {
@@ -148,5 +150,12 @@ pub unsafe fn init_per_cpu_data_for_cpu(core_id: usize) {
     if tls_data.len() != 0 {
         GS::set((&TLS_DATA.assume_init_ref()[core_id]).into())
     }
-    APIC_ID.with(|id| *id = core_id);
+    CPU_INFO.with_static(|info| {
+        *info = CpuInfo { id: core_id };
+        FS::set(info.into());
+    });
+}
+
+pub fn arch_this_cpu_info() -> &'static CpuInfo {
+    unsafe { FS::get().as_ref() }
 }

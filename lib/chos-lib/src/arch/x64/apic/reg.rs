@@ -136,6 +136,13 @@ pub struct TimerInterrupt {
     __: B13,
 }
 
+#[derive(BitfieldSpecifier, Clone, Copy, Debug, PartialEq, Eq)]
+#[bits = 1]
+pub enum Polarity {
+    ActiveHigh = 0,
+    ActiveLow = 1,
+}
+
 #[bitfield(bits = 32)]
 #[derive(Clone, Copy, Debug)]
 pub struct LocalInterrupt {
@@ -144,7 +151,7 @@ pub struct LocalInterrupt {
     #[skip]
     __: B1,
     pub delivery_status: DeliveryStatus,
-    pub pin_polarity: bool,
+    pub pin_polarity: Polarity,
     pub remote_irr: bool,
     pub trigger_mode: TriggerMode,
     pub mask: InterruptMask,

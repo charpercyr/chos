@@ -1,23 +1,22 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use core::fmt::Write;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
-use chos_lib::arch::qemu::{exit_qemu, QemuStatus};
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::fmt::Bytes;
-use chos_lib::log::{info, LogHandler, TermColorLogHandler, debug};
+use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
-use crate::intr::init_interrupts;
+use crate::intr::{init_interrupts, init_interrupts_cpu};
+use crate::mm::this_cpu_info;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols;
+use crate::timer::init_timer;
 use crate::util::barrier;
 
 #[derive(Debug)]
@@ -31,26 +30,26 @@ pub struct KernelArgs {
 }
 
 struct Logger {
-    serial: Spinlock<Serial>,
+    serial: TermColorLogHandler<Spinlock<Serial>>,
 }
 
 impl LogHandler for Logger {
-    fn log(&self, args: core::fmt::Arguments<'_>, _: chos_lib::log::LogLevel) {
-        let mut serial = self.serial.lock();
-        write!(&mut *serial, "{}", args).unwrap();
+    fn log(&self, args: core::fmt::Arguments<'_>, lvl: chos_lib::log::LogLevel) {
+        self.serial
+            .log(format_args!("[{}] {}", this_cpu_info().id, args), lvl)
     }
-    unsafe fn log_unsafe(&self, args: core::fmt::Arguments<'_>, _: chos_lib::log::LogLevel) {
-        let serial = &mut *self.serial.get_ptr();
-        write!(&mut *serial, "{}", args).unwrap();
+    unsafe fn log_unsafe(&self, args: core::fmt::Arguments<'_>, lvl: chos_lib::log::LogLevel) {
+        self.serial
+            .log_unsafe(format_args!("[{}] {}", this_cpu_info().id, args), lvl)
     }
 }
 
 fn setup_logger() {
-    static mut LOGGER: MaybeUninit<TermColorLogHandler<Logger>> = MaybeUninit::uninit();
+    static mut LOGGER: MaybeUninit<Logger> = MaybeUninit::uninit();
     unsafe {
-        LOGGER = MaybeUninit::new(TermColorLogHandler::new(Logger {
-            serial: Spinlock::new(Serial::com1().defaults()),
-        }));
+        LOGGER = MaybeUninit::new(Logger {
+            serial: TermColorLogHandler::new(Spinlock::new(Serial::com1().defaults())),
+        });
         chos_lib::log::set_handler(LOGGER.assume_init_mut())
     }
 }
@@ -60,10 +59,15 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
 
     if id == 0 {
         setup_logger();
+
+        debug!();
+        debug!("##############");
+        debug!("### KERNEL ###");
+        debug!("##############");
+        debug!();
     }
 
-    // ANYTHING THAT NEEDS TO ACCESS EARLY MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-    // IF IT NEEDS TO HAPPEN ON OTHER CORES THAN ID 0, DON'T FORGET TO USE A BARRIER
+    // ANYTHING THAT NEEDS TO ACCESS LOWER HALF MEMORY NEEDS TO BE DONE BEFORE THIS POINT
 
     if id == 0 {
         unsafe {
@@ -75,30 +79,22 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
             virt::STATIC_BASE,
             &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
         );
-        
-        debug!();
-        debug!("##############");
-        debug!("### KERNEL ###");
-        debug!("##############");
-        debug!();
+
+        unsafe { init_interrupts(args) };
     }
 
     barrier!(args.core_count);
 
-    unsafe { init_interrupts() };
+    unsafe { init_interrupts_cpu(args) };
+
+    // ANYTHING THAT NEEDS TO ACCESS LOWER MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+
     unsafe { init_kernel_virt() };
 
     if id == 0 {
-        info!(
-            "Kernel len={} ({})",
-            Bytes(args.kernel_elf.len() as u64),
-            args.kernel_elf.len()
-        );
-        if let Some(i) = args.initrd.as_deref() {
-            info!("Initrd len={}", Bytes(i.len() as u64));
-        }
-        exit_qemu(QemuStatus::Success)
+        init_timer(args);
     }
+
     barrier!(args.core_count);
     enter_schedule()
 }

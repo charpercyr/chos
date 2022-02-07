@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use chos_lib::arch::mm::VAddr;
 use chos_lib::elf::{Elf, SymtabEntryType};
 use chos_lib::init::ConstInit;
+use chos_lib::log::debug;
 use chos_lib::pool::PoolBox;
 use chos_lib::sync::SpinRWLock;
 use intrusive_collections::rbtree::{self, RBTree};
@@ -68,6 +69,8 @@ pub fn add_elf_symbols(base: VAddr, elf: &Elf) {
             .filter(|(_, s)| s.typ() == SymtabEntryType::Func);
         let sym_count = sym_iter.clone().count();
         let mut symbols = Vec::with_capacity(sym_count);
+
+        debug!("Adding {} symbols to lookup", sym_count);
 
         let mut needs_sorting = false;
         let mut last_value: u64 = 0;

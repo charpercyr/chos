@@ -10,46 +10,9 @@ use chos_lib::sync::{SpinBarrier, SpinOnceCell};
 use crate::arch::asm::call_with_stack;
 use crate::arch::early::{arch_copy_boot_data, arch_init_early_memory, use_early_kernel_table};
 use crate::arch::mm::per_cpu::init_per_cpu_data_for_cpu;
-use crate::early::stack::Stacks;
 use crate::kmain::{kernel_main, KernelArgs};
-
-mod stack {
-    use chos_config::arch::mm::{stack, virt};
-    use chos_lib::arch::mm::{VAddr, PAGE_SIZE64};
-    use raw_alloc::AllocFlags;
-
-    use crate::arch::early::map_stack;
-    use crate::mm::phys::raw_alloc;
-
-    #[derive(Clone, Copy, Debug)]
-    pub struct Stacks {
-        pub base: VAddr,
-        pub size: u64,
-        pub stride: u64,
-    }
-
-    static mut STACKS_BASE: VAddr = virt::STACK_BASE;
-
-    unsafe fn allocate_kernel_stack(order: u8) -> VAddr {
-        let pages = raw_alloc::alloc_pages(order, AllocFlags::empty()).expect("Should not fail");
-        map_stack(pages, 1 << order, true)
-    }
-
-    pub unsafe fn allocate_stacks(stack_count: usize) -> Stacks {
-        let base = STACKS_BASE;
-        let stride = (PAGE_SIZE64 << stack::KERNEL_STACK_PAGE_ORDER) + PAGE_SIZE64;
-
-        for _ in 0..stack_count {
-            allocate_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER);
-        }
-
-        Stacks {
-            base,
-            size: PAGE_SIZE64 << stack::KERNEL_STACK_PAGE_ORDER,
-            stride,
-        }
-    }
-}
+use crate::mm::stack::Stacks;
+use crate::mm::stack::allocate_kernel_stacks;
 
 fn hlt_loop() -> ! {
     unsafe {
@@ -118,7 +81,7 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
 
         unsafe {
             init_early_memory(info);
-            let stacks = stack::allocate_stacks(info.core_count);
+            let stacks = allocate_kernel_stacks(info.core_count);
             EARLY_DATA = MaybeUninit::new(EarlyData {
                 stacks,
                 kernel_args: copy_boot_data(info),

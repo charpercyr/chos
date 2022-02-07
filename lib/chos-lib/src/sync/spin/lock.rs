@@ -45,7 +45,7 @@ unsafe impl RawTryLock for RawSpinLock {
 }
 
 pub type Spinlock<T> = Lock<RawSpinLock, T>;
-pub type SpinlockGuard<'a, T> = LockGuard<'a, RawSpinLock, T>;
+pub type SpinlockGuard<'a, P, T> = LockGuard<'a, P, RawSpinLock, T>;
 
 pub struct RawSpinRWLock {
     write_lock: RawSpinLock,

@@ -20,7 +20,7 @@ paste = "1.0.4"
 rustc-demangle = "0.1.18"
 
 [dependencies.bitvec]
-version= "0.22.3"
+version = "0.22.3"
 default-features = false
 # features = []
 

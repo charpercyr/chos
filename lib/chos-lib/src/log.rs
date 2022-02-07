@@ -1,6 +1,8 @@
-use core::fmt::Arguments;
+use core::fmt::{Arguments, Write};
 
 use cfg_if::cfg_if;
+
+use crate::sync::{RawLock, Lock};
 
 #[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
@@ -15,6 +17,17 @@ pub enum LogLevel {
 pub trait LogHandler {
     fn log(&self, args: Arguments<'_>, lvl: LogLevel);
     unsafe fn log_unsafe(&self, args: Arguments<'_>, lvl: LogLevel);
+}
+
+impl<L: RawLock, W: Write> LogHandler for Lock<L, W> {
+    fn log(&self, args: Arguments<'_>, _: LogLevel) {
+        let mut w = self.lock();
+        drop(w.write_fmt(args))
+    }
+    unsafe fn log_unsafe(&self, args: Arguments<'_>, _: LogLevel) {
+        let w = &mut *self.get_ptr();
+        drop(w.write_fmt(args))
+    }
 }
 
 pub struct TermColorLogHandler<H> {

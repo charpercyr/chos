@@ -1,9 +1,13 @@
 mod command;
+mod interrupt;
 mod reg;
 
 pub use command::*;
+pub use interrupt::*;
+pub use reg::*;
 
-use self::reg::{ApicEnabled, InterruptMask, SpuriousInterrupt};
+use crate::Volatile;
+
 use super::mm::VAddr;
 
 pub struct Apic<'a> {
@@ -23,6 +27,14 @@ impl Apic<'_> {
 
     pub fn id(&self) -> u8 {
         self.regs.lapic_id.read().lapic_id()
+    }
+
+    pub fn lint0_mut(&mut self) -> &mut Volatile<LocalInterrupt> {
+        self.regs.lvt_lint0.as_volatile_mut()
+    }
+
+    pub fn lint1_mut(&mut self) -> &mut Volatile<LocalInterrupt> {
+        self.regs.lvt_lint1.as_volatile_mut()
     }
 
     pub unsafe fn initialize(&mut self) {
@@ -57,6 +69,8 @@ impl Apic<'_> {
                 .with_enabled(ApicEnabled::Enabled)
                 .with_vector(vector),
         );
+
+        self.regs.logical_destination.write(1 << (24 + self.id()));
     }
 
     pub unsafe fn eoi(&mut self) {

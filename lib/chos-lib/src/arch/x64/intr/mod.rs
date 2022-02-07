@@ -32,8 +32,8 @@ pub fn disable_interrups_save() -> IntrStatus {
 }
 
 pub fn restore_interrupts(status: IntrStatus) {
-    unsafe {
-        Flags::set(status.0);
+    if status.0.intr_enable() {
+        enable_interrupts();
     }
 }
 
@@ -47,6 +47,15 @@ pub fn without_interrupts<R, F: FnOnce() -> R>(f: F) -> R {
 pub fn breakpoint() {
     unsafe {
         asm! { "int3" }
+    }
+}
+
+pub macro int($n:expr) {
+    unsafe {
+        core::arch::asm!(
+            "int {}",
+            const $n,
+        );
     }
 }
 

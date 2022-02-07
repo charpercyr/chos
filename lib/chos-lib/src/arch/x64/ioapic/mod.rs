@@ -1,10 +1,13 @@
 use core::mem::transmute;
 
-use crate::{NoAccess, ReadWrite, WriteOnly};
 use static_assertions as sa;
+
+use crate::{NoAccess, ReadWrite, WriteOnly};
 
 mod redirection;
 pub use redirection::*;
+
+use super::mm::VAddr;
 
 type Register<P> = crate::PaddedVolatile<u32, P, 0x10>;
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);
@@ -24,9 +27,9 @@ impl IOApic {
     const ADDR_VER: u32 = 0x1;
     const ADDR_RED_BASE: u32 = 0x10;
 
-    pub unsafe fn with_address(addr: usize) -> Self {
+    pub unsafe fn new(addr: VAddr) -> Self {
         Self {
-            registers: &mut *(addr as *mut Registers),
+            registers: addr.as_mut(),
         }
     }
 

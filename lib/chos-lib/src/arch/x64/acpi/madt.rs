@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 use core::mem::{size_of, transmute};
 
 use bitflags::bitflags;
+use modular_bitfield::prelude::*;
 
 use super::SDTHeader;
 
@@ -34,6 +35,43 @@ impl Madt {
             .filter(|e| matches!(e, Entry::LApic(_)))
             .count()
     }
+
+    pub fn lapics(&self) -> impl Iterator<Item = &LAPICEntry> {
+        self.entries().filter_map(|e| match e {
+            Entry::LApic(lapic) => Some(lapic),
+            _ => None,
+        })
+    }
+
+    pub fn ioapics(&self) -> impl Iterator<Item = &IoApicEntry> {
+        self.entries().filter_map(|e| match e {
+            Entry::IoApic(ioapic) => Some(ioapic),
+            _ => None,
+        })
+    }
+
+    pub fn interrupt_source_overrides(
+        &self,
+    ) -> impl Iterator<Item = &InterruptSourceOverrideEntry> {
+        self.entries().filter_map(|e| match e {
+            Entry::InterruptSourceOverride(iso) => Some(iso),
+            _ => None,
+        })
+    }
+
+    pub fn nmis(&self) -> impl Iterator<Item = &NmiEntry> {
+        self.entries().filter_map(|e| match e {
+            Entry::Nmi(nmi) => Some(nmi),
+            _ => None,
+        })
+    }
+
+    pub fn lapic_address_override(&self) -> impl Iterator<Item = &LAPICAddressOverrideEntry> {
+        self.entries().filter_map(|e| match e {
+            Entry::LApicAddressOverride(lapic_addr) => Some(lapic_addr),
+            _ => None,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -54,7 +92,7 @@ pub struct LAPICEntry {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct IOAPICEntry {
+pub struct IoApicEntry {
     pub hdr: EntryHeader,
     pub ioapic_id: u8,
     _res0: u8,
@@ -79,13 +117,38 @@ bitflags! {
     }
 }
 
+#[derive(BitfieldSpecifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum Polarity {
+    Conforming = 0b00,
+    ActiveHigh = 0b01,
+    ActiveLow = 0b11,
+}
+
+#[derive(BitfieldSpecifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum TriggerMode {
+    Conforming = 0b00,
+    Edge = 0b01,
+    Level = 0b11,
+}
+
+#[bitfield(bits = 16)]
+#[derive(Debug, Clone, Copy)]
+pub struct NmiFlags {
+    pub polarity: Polarity,
+    pub trigger_mode: TriggerMode,
+    #[skip]
+    __: B12,
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-pub struct NMIEntry {
+pub struct NmiEntry {
     pub hdr: EntryHeader,
-    acpi_processor_id: u8,
-    flags: u16,
-    lint: u8,
+    pub acpi_processor_id: u8,
+    pub flags: NmiFlags,
+    pub lint: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,9 +161,9 @@ pub struct LAPICAddressOverrideEntry {
 #[derive(Debug, Clone, Copy)]
 pub enum Entry<'a> {
     LApic(&'a LAPICEntry),
-    IoApic(&'a IOAPICEntry),
+    IoApic(&'a IoApicEntry),
     InterruptSourceOverride(&'a InterruptSourceOverrideEntry),
-    Nmi(&'a NMIEntry),
+    Nmi(&'a NmiEntry),
     LApicAddressOverride(&'a LAPICAddressOverrideEntry),
     Unknown(&'a EntryHeader),
 }

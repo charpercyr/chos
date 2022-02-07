@@ -1,6 +1,6 @@
-mod gdt;
-mod idt;
-mod tss;
+pub mod gdt;
+pub mod idt;
+pub mod tss;
 
 use core::{mem::size_of};
 

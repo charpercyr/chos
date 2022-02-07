@@ -51,15 +51,26 @@ impl<T, P> Volatile<T, P> {
         unaligned_volatile_load(this.cast())
     }
 
-    pub fn update(&mut self, f: impl FnOnce(&mut T))
+    pub fn update<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R
     where
         P: ReadAccess + WriteAccess,
     {
         unsafe {
             let mut v = ptr::read_volatile(&self.0);
-            f(&mut v);
+            let r = f(&mut v);
             ptr::write_volatile(&mut self.0, v);
+            r
         }
+    }
+
+    pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R
+    where
+        P: ReadAccess,
+    {
+        let v = unsafe { ptr::read_volatile(&self.0) };
+        let r = f(&v);
+        forget(v);
+        r
     }
 
     pub fn into_inner(self) -> T {
@@ -120,11 +131,18 @@ impl<T, P, const N: usize> PaddedVolatile<T, P, N> {
         self.as_volatile().read()
     }
 
-    pub fn update(&mut self, f: impl FnOnce(&mut T))
+    pub fn update<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R
     where
         P: ReadAccess + WriteAccess,
     {
         self.as_volatile_mut().update(f)
+    }
+
+    pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R
+    where
+        P: ReadAccess,
+    {
+        self.as_volatile().with(f)
     }
 
     pub fn into_inner(self) -> T {

@@ -2,9 +2,11 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
-use crate::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
-use modular_bitfield::bitfield;
 use modular_bitfield::specifiers::*;
+use modular_bitfield::{bitfield, BitfieldSpecifier};
+
+use super::mm::VAddr;
+use crate::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
 
 #[bitfield(bits = 64)]
 #[derive(Copy, Clone, Debug)]
@@ -28,14 +30,21 @@ struct Configuration {
     __: B62,
 }
 
+#[derive(BitfieldSpecifier, Copy, Clone, Debug)]
+#[bits = 1]
+pub enum TimerType {
+    OneShot = 0,
+    Periodic = 1,
+}
+
 #[bitfield(bits = 64)]
 #[derive(Copy, Clone, Debug)]
 struct TimerConfiguration {
     #[skip]
     __: B1,
-    int_type_cnf: bool,
+    int_typ: bool,
     int_enb_cnf: bool,
-    type_cnf: bool,
+    type_cnf: TimerType,
     per_int_cap: bool,
     size_cap: bool,
     val_set_cnf: bool,
@@ -79,14 +88,14 @@ impl fmt::Debug for Registers {
 }
 
 #[derive(Debug)]
-pub struct HPET {
+pub struct Hpet {
     registers: &'static mut Registers,
 }
 
-impl HPET {
-    pub unsafe fn with_address(address: usize) -> Self {
+impl Hpet {
+    pub unsafe fn new(address: VAddr) -> Self {
         Self {
-            registers: &mut *(address as *mut Registers),
+            registers: address.as_mut(),
         }
     }
 
@@ -144,7 +153,7 @@ impl HPET {
 
 pub struct Timer<'a> {
     registers: &'a mut TimerRegisters,
-    hpet: PhantomData<&'a mut HPET>,
+    hpet: PhantomData<&'a mut Hpet>,
 }
 
 impl Timer<'_> {
@@ -158,8 +167,18 @@ impl Timer<'_> {
         })
     }
 
+    pub fn int_route_mask(&self) -> u32 {
+        self.registers.configuration.read().int_route_cap()
+    }
+
     pub unsafe fn set_comparator(&mut self, value: u64) {
         self.registers.comparator.write(value)
+    }
+
+    pub unsafe fn set_type(&mut self, typ: TimerType) {
+        self.registers
+            .configuration
+            .update(|config| config.set_type_cnf(typ))
     }
 
     pub unsafe fn set_enabled(&mut self, enabled: bool) {

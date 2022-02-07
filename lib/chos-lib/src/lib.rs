@@ -12,6 +12,7 @@
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
 #![feature(generic_associated_types)]
+#![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(negative_impls)]
@@ -43,7 +44,6 @@ pub mod sync;
 pub mod tar;
 pub mod tuple;
 mod volatile;
-
 pub use chos_lib_macros::forward_fmt;
 pub use volatile::*;
 

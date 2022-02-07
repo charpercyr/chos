@@ -45,7 +45,7 @@ impl Flags {
                 "pushf",
                 "pop {flags}",
                 flags = out(reg) flags,
-                options(att_syntax, nomem),
+                options(att_syntax),
             }
         }
         Self::from_bytes(flags.to_ne_bytes())
@@ -56,7 +56,7 @@ impl Flags {
             "push {flags}",
             "popf",
             flags = in(reg) u64::from_ne_bytes(flags.into_bytes()),
-            options(att_syntax, nomem),
+            options(att_syntax),
         }
     }
 }

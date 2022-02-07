@@ -57,37 +57,37 @@ impl fmt::Debug for SDTHeader {
 
 #[derive(Clone, Copy)]
 pub struct Rsdt<'a> {
-    base: VAddr,
+    offset: VAddr,
     addr: usize,
     rsdt: PhantomData<&'a SDTHeader>,
 }
 
 impl<'a> Rsdt<'a> {
     pub unsafe fn new(addr: usize) -> Self {
-        Self::new_base(addr, VAddr::null())
+        Self::new_offset(addr, VAddr::null())
     }
 
-    pub unsafe fn new_base(addr: usize, base: VAddr) -> Self {
+    pub unsafe fn new_offset(addr: usize, offset: VAddr) -> Self {
         Self {
-            base,
+            offset,
             addr,
             rsdt: PhantomData,
         }
     }
 
     pub fn hdr(&self) -> &SDTHeader {
-        unsafe { (self.base + self.addr as u64).as_ref() }
+        unsafe { (self.offset + self.addr as u64).as_ref() }
     }
 
     pub fn tables(&self) -> Iter<'a> {
         unsafe {
-            let hdr: *const SDTHeader = (self.base + self.addr as u64).as_ptr();
+            let hdr: *const SDTHeader = (self.offset + self.addr as u64).as_ptr();
             let len = (*hdr).length as usize - size_of::<SDTHeader>();
             let ptr = hdr.add(1).cast();
             Iter {
                 cur: ptr,
                 end: ptr.add(len / size_of::<u32>()),
-                base: self.base,
+                base: self.offset,
                 rsdt: PhantomData,
             }
         }

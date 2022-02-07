@@ -138,11 +138,9 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
     init_per_cpu_data(info.core_count, &elf, &mut mapper);
 }
 
-pub unsafe fn map_stack(pages: PAddr, count: u64, add_guard_page: bool) -> VAddr {
-    static mut STACK_BASE: VFrame<FrameSize4K> = unsafe { VFrame::new_unchecked(virt::STACK_BASE) };
+pub unsafe fn map_stack(vbase: VFrame<FrameSize4K>, pages: PAddr, count: u64) {
     let pages = PFrame::new_unchecked(pages);
     let mut mapper = get_early_kernel_mapper();
-    let vbase = STACK_BASE;
     mapper
         .map_range(
             PFrameRange::new(pages, pages.add(count)),
@@ -152,8 +150,6 @@ pub unsafe fn map_stack(pages: PAddr, count: u64, add_guard_page: bool) -> VAddr
         )
         .unwrap()
         .ignore();
-    STACK_BASE = STACK_BASE.add(count + add_guard_page.then_some(1).unwrap_or(0));
-    vbase.addr()
 }
 
 pub unsafe fn arch_copy_boot_data(data: &ArchKernelBootInfo) -> ArchKernelArgs {

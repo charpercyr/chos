@@ -1,9 +1,17 @@
 use core::cell::UnsafeCell;
 use core::hint::spin_loop;
 use core::intrinsics::likely;
+use core::mem::{MaybeUninit, replace};
 use core::ops::{Deref, DerefMut};
 
+use crate::arch::intr::{disable_interrups_save, IntrStatus, restore_interrupts};
+
 use crate::init::ConstInit;
+
+extern "Rust" {
+    fn __disable_sched_save() -> u64;
+    fn __restore_sched(v: u64);
+}
 
 pub unsafe trait RawLock {
     fn lock(&self);
@@ -20,6 +28,46 @@ pub unsafe trait RawTryLock: RawLock {
             spin_loop();
         }
         false
+    }
+}
+
+pub trait LockPolicy {
+    type Metadata;
+    fn before_lock() -> Self::Metadata;
+    fn after_unlock(meta: Self::Metadata);
+}
+
+pub struct NoOpLockPolicy(());
+impl LockPolicy for NoOpLockPolicy {
+    type Metadata = ();
+    fn before_lock() -> Self::Metadata {
+        // Nothing
+    }
+    fn after_unlock(_meta: Self::Metadata) {
+        // Nothing
+    }
+}
+
+// TODO: Disable sched only
+pub struct NoSchedLockPolicy(());
+impl LockPolicy for NoSchedLockPolicy {
+    type Metadata = u64;
+    fn before_lock() -> Self::Metadata {
+        unsafe { __disable_sched_save() }
+    }
+    fn after_unlock(meta: Self::Metadata) {
+        unsafe { __restore_sched(meta) }
+    }
+}
+
+pub struct NoIrqLockPolicy(());
+impl LockPolicy for NoIrqLockPolicy {
+    type Metadata = IntrStatus;
+    fn before_lock() -> Self::Metadata {
+        disable_interrups_save()
+    }
+    fn after_unlock(meta: Self::Metadata) {
+        restore_interrupts(meta)
     }
 }
 
@@ -54,25 +102,72 @@ impl<L: RawLock, T> Lock<L, T> {
 }
 
 impl<L: RawLock, T: ?Sized> Lock<L, T> {
-    pub fn lock(&self) -> LockGuard<'_, L, T> {
+    pub fn lock_policy<P: LockPolicy>(&self) -> LockGuard<'_, P, L, T> {
+        let meta = P::before_lock();
         self.lock.lock();
-        LockGuard { lock: self }
+        LockGuard { lock: self, meta: MaybeUninit::new(meta) }
     }
 
-    pub fn try_lock(&self) -> Option<LockGuard<'_, L, T>>
+    pub fn lock(&self) -> LockGuard<'_, NoSchedLockPolicy, L, T> {
+        self.lock_policy()
+    }
+
+    pub fn lock_noirq(&self) -> LockGuard<'_, NoSchedLockPolicy, L, T> {
+        self.lock_policy()
+    }
+
+    pub fn lock_nodisable(&self) -> LockGuard<'_, NoOpLockPolicy, L, T> {
+        self.lock_policy()
+    }
+
+    pub fn try_lock_policy<P: LockPolicy>(&self) -> Option<LockGuard<'_, P, L, T>>
     where
         L: RawTryLock,
     {
-        self.lock.try_lock().then(|| LockGuard { lock: self })
+        let meta = P::before_lock();
+        if self.lock.try_lock() {
+            Some(LockGuard { lock: self, meta: MaybeUninit::new(meta) })
+        } else {
+            P::after_unlock(meta);
+            None
+        }
     }
 
-    pub fn try_lock_tries(&self, tries: usize) -> Option<LockGuard<'_, L, T>>
+    pub fn try_lock(&self) -> Option<LockGuard<'_, NoSchedLockPolicy, L, T>>
     where
         L: RawTryLock,
     {
-        self.lock
-            .try_lock_tries(tries)
-            .then(|| LockGuard { lock: self })
+        self.try_lock_policy()
+    }
+
+    pub fn try_lock_nodisable(&self) -> Option<LockGuard<'_, NoOpLockPolicy, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.try_lock_policy()
+    }
+
+    pub fn try_lock_tries_policy<P: LockPolicy>(
+        &self,
+        tries: usize,
+    ) -> Option<LockGuard<'_, P, L, T>>
+    where
+        L: RawTryLock,
+    {
+        let meta = P::before_lock();
+        if self.lock.try_lock_tries(tries) {
+            Some(LockGuard { lock: self, meta: MaybeUninit::new(meta) })
+        } else {
+            P::after_unlock(meta);
+            None
+        }
+    }
+
+    pub fn try_lock_tries(&self, tries: usize) -> Option<LockGuard<'_, NoSchedLockPolicy, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.try_lock_tries_policy(tries)
     }
 
     pub fn get_mut(&mut self) -> &mut T {
@@ -91,19 +186,26 @@ impl<L: RawLock + ConstInit, T: ConstInit> ConstInit for Lock<L, T> {
     };
 }
 
-pub struct LockGuard<'a, L: RawLock, T: ?Sized> {
+pub struct LockGuard<'a, P: LockPolicy, L: RawLock, T: ?Sized> {
     lock: &'a Lock<L, T>,
+    meta: MaybeUninit<P::Metadata>,
 }
-impl<L: RawLock, T: ?Sized> !Send for LockGuard<'_, L, T> {}
-unsafe impl<L: RawLock + Sync, T: ?Sized + Sync> Sync for LockGuard<'_, L, T> {}
+impl<P: LockPolicy, L: RawLock, T: ?Sized> !Send for LockGuard<'_, P, L, T> {}
+unsafe impl<P: LockPolicy, L: RawLock + Sync, T: ?Sized + Sync> Sync for LockGuard<'_, P, L, T> where
+    P::Metadata: Sync
+{
+}
 
-impl<L: RawLock, T: ?Sized> Drop for LockGuard<'_, L, T> {
+impl<P: LockPolicy, L: RawLock, T: ?Sized> Drop for LockGuard<'_, P, L, T> {
     fn drop(&mut self) {
-        unsafe { self.lock.lock.unlock() }
+        unsafe {
+            self.lock.lock.unlock();
+            P::after_unlock(replace(&mut self.meta, MaybeUninit::uninit()).assume_init());
+        }
     }
 }
 
-impl<L: RawLock, T: ?Sized> LockGuard<'_, L, T> {
+impl<P: LockPolicy, L: RawLock, T: ?Sized> LockGuard<'_, P, L, T> {
     pub fn get_ref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
@@ -113,13 +215,13 @@ impl<L: RawLock, T: ?Sized> LockGuard<'_, L, T> {
     }
 }
 
-impl<L: RawLock, T: ?Sized> Deref for LockGuard<'_, L, T> {
+impl<P: LockPolicy, L: RawLock, T: ?Sized> Deref for LockGuard<'_, P, L, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get_ref()
     }
 }
-impl<L: RawLock, T: ?Sized> DerefMut for LockGuard<'_, L, T> {
+impl<P: LockPolicy, L: RawLock, T: ?Sized> DerefMut for LockGuard<'_, P, L, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_mut()
     }
