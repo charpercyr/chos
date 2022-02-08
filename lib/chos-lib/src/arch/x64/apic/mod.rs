@@ -6,9 +6,9 @@ pub use command::*;
 pub use interrupt::*;
 pub use reg::*;
 
-use crate::Volatile;
-
 use super::mm::VAddr;
+use crate::cpumask::Cpumask;
+use crate::Volatile;
 
 pub struct Apic<'a> {
     regs: &'a mut reg::ApicRegisters,
@@ -69,8 +69,10 @@ impl Apic<'_> {
                 .with_enabled(ApicEnabled::Enabled)
                 .with_vector(vector),
         );
-
-        self.regs.logical_destination.write(1 << (24 + self.id()));
+        let mask = Cpumask::cpu(self.id());
+        self.regs
+            .logical_destination
+            .write(DestinationRegister::new().with_destination(mask.raw() as u8));
     }
 
     pub unsafe fn eoi(&mut self) {

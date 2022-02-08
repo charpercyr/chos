@@ -21,7 +21,7 @@ pub trait LogHandler {
 
 impl<L: RawLock, W: Write> LogHandler for Lock<L, W> {
     fn log(&self, args: Arguments<'_>, _: LogLevel) {
-        let mut w = self.lock();
+        let mut w = self.lock_noirq();
         drop(w.write_fmt(args))
     }
     unsafe fn log_unsafe(&self, args: Arguments<'_>, _: LogLevel) {
@@ -291,4 +291,12 @@ pub macro domain ($($name:ident = $value:expr),* $(,)?) {
             }
         }
     )*
+}
+
+pub macro todo_warn($($args:tt)*) {
+    chos_lib::log::warn!(concat!("TODO ", file!(), ":", line!(), " {}"), $($args)*)
+}
+
+pub macro unsafe_todo_warn($($args:tt)*) {
+    chos_lib::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), $($args)*)
 }

@@ -6,6 +6,7 @@
 #![feature(const_fn_fn_ptr_basics)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
+#![feature(core_intrinsics)]
 #![feature(default_alloc_error_handler)]
 #![feature(decl_macro)]
 #![feature(int_abs_diff)]
@@ -25,6 +26,7 @@ extern crate alloc;
 
 mod arch;
 mod config;
+mod cpumask;
 mod dummy;
 mod early;
 mod intr;
@@ -34,5 +36,5 @@ mod mm;
 mod panic;
 mod sched;
 mod symbols;
-mod util;
 mod timer;
+mod util;

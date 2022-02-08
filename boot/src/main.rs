@@ -13,8 +13,8 @@
 mod arch;
 
 #[no_mangle]
-fn __disable_sched_save() -> u64 {
+fn __lock_disable_sched_save() -> u64 {
     0
 }
 #[no_mangle]
-fn __restore_sched(_: u64) {}
+fn __lock_restore_sched(_: u64) {}

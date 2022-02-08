@@ -8,9 +8,10 @@ use crate::arch::intr::{disable_interrups_save, IntrStatus, restore_interrupts};
 
 use crate::init::ConstInit;
 
+// I don't like this but it might be the easiest way to add nosched policy short of moving the lock code to the boot & kernel
 extern "Rust" {
-    fn __disable_sched_save() -> u64;
-    fn __restore_sched(v: u64);
+    fn __lock_disable_sched_save() -> u64;
+    fn __lock_restore_sched(v: u64);
 }
 
 pub unsafe trait RawLock {
@@ -53,10 +54,10 @@ pub struct NoSchedLockPolicy(());
 impl LockPolicy for NoSchedLockPolicy {
     type Metadata = u64;
     fn before_lock() -> Self::Metadata {
-        unsafe { __disable_sched_save() }
+        unsafe { __lock_disable_sched_save() }
     }
     fn after_unlock(meta: Self::Metadata) {
-        unsafe { __restore_sched(meta) }
+        unsafe { __lock_restore_sched(meta) }
     }
 }
 
@@ -112,7 +113,7 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
         self.lock_policy()
     }
 
-    pub fn lock_noirq(&self) -> LockGuard<'_, NoSchedLockPolicy, L, T> {
+    pub fn lock_noirq(&self) -> LockGuard<'_, NoIrqLockPolicy, L, T> {
         self.lock_policy()
     }
 
@@ -134,6 +135,13 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     }
 
     pub fn try_lock(&self) -> Option<LockGuard<'_, NoSchedLockPolicy, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.try_lock_policy()
+    }
+
+    pub fn try_lock_noirq(&self) -> Option<LockGuard<'_, NoIrqLockPolicy, L, T>>
     where
         L: RawTryLock,
     {
@@ -164,6 +172,20 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     }
 
     pub fn try_lock_tries(&self, tries: usize) -> Option<LockGuard<'_, NoSchedLockPolicy, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.try_lock_tries_policy(tries)
+    }
+
+    pub fn try_lock_tries_noirq(&self, tries: usize) -> Option<LockGuard<'_, NoIrqLockPolicy, L, T>>
+    where
+        L: RawTryLock,
+    {
+        self.try_lock_tries_policy(tries)
+    }
+
+    pub fn try_lock_tries_nodisable(&self, tries: usize) -> Option<LockGuard<'_, NoOpLockPolicy, L, T>>
     where
         L: RawTryLock,
     {

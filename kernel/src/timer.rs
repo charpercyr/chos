@@ -1,6 +1,6 @@
 use alloc::collections::binary_heap::PeekMut;
 use alloc::collections::BinaryHeap;
-use chos_lib::log::warn;
+use chos_lib::log::todo_warn;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
@@ -103,7 +103,7 @@ pub fn schedule_timer(schedule: Schedule, callback: fn(usize), data: usize) {
 }
 
 pub fn init_timer(args: &KernelArgs) {
-    warn!("TODO: activate task in scheduler instead");
+    todo_warn!("activate task in scheduler instead");
     *TIMERS.lock() = MaybeUninit::new(BinaryHeap::with_capacity(16));
     arch_init_timer(args);
 }

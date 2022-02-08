@@ -8,7 +8,7 @@ use chos_lib::arch::ioapic::{self, IOApic};
 use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::regs::Cr2;
 use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, PageFaultError, Tss};
-use chos_lib::log::debug;
+use chos_lib::log::{debug, println};
 use chos_lib::sync::{SpinLazy, SpinOnceCell, Spinlock};
 
 use crate::kmain::KernelArgs;
@@ -180,6 +180,14 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
     idt[(IOAPIC_IDT_BASE + 21) as usize].set_handler(ioapic_intr_21);
     idt[(IOAPIC_IDT_BASE + 22) as usize].set_handler(ioapic_intr_22);
     idt[(IOAPIC_IDT_BASE + 23) as usize].set_handler(ioapic_intr_23);
+
+    idt[0x80].set_handler({
+        extern "x86-interrupt" fn callback(_: InterruptStackFrame) {
+            println!("Hello");
+            unsafe { LAPIC.as_mut_unchecked().eoi() };
+        }
+        callback
+    });
 
     idt
 });

@@ -109,6 +109,10 @@ pub unsafe trait PerCpu {
             value.cast()
         }
     }
+
+    fn read(&self) -> Self::Target where Self::Target: Copy {
+        self.with(|v| *v)
+    }
 }
 
 #[derive(Debug)]

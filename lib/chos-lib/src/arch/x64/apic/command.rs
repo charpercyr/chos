@@ -6,11 +6,12 @@ use super::reg::{
     DestinationRegister, DestinationShorthand, Level, TriggerMode,
 };
 use crate::arch::mm::FrameSize4K;
+use crate::cpumask::Cpumask;
 use crate::mm::VFrame;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Destination {
-    Logical { id: u8 },
+    Logical { cpus: Cpumask },
     Physical { id: u8 },
     Self_,
     All,
@@ -18,8 +19,8 @@ pub enum Destination {
 }
 
 impl Destination {
-    pub const fn logical(id: u8) -> Self {
-        Self::Logical { id }
+    pub const fn logical(cpus: Cpumask) -> Self {
+        Self::Logical { cpus }
     }
     pub const fn physical(id: u8) -> Self {
         Self::Physical { id }
@@ -91,9 +92,9 @@ impl InterruptCommand<'_> {
                 dst_reg.set_destination(id);
                 cmd_reg.set_destination_mode(DestinationMode::Physical);
             }
-            Destination::Logical { id } => {
+            Destination::Logical { cpus } => {
                 cmd_reg.set_destination_shorthand(DestinationShorthand::Destination);
-                dst_reg.set_destination(id);
+                dst_reg.set_destination(cpus.raw() as u8);
                 cmd_reg.set_destination_mode(DestinationMode::Logical);
             }
             Destination::Self_ => cmd_reg.set_destination_shorthand(DestinationShorthand::Self_),

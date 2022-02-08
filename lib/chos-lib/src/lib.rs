@@ -28,6 +28,7 @@ pub mod access;
 pub mod arch;
 pub mod boot;
 mod config;
+pub mod cpumask;
 pub mod elf;
 pub mod fmt;
 pub mod init;

@@ -256,7 +256,7 @@ pub struct ApicRegisters {
     pub processor_priority: Register<u32, ReadOnly>,
     pub eoi: Register<u32, WriteOnly>,
     pub remote_read: Register<u32, ReadOnly>,
-    pub logical_destination: Register<u32, ReadWrite>,
+    pub logical_destination: Register<DestinationRegister, ReadWrite>,
     pub destination_format: Register<u32, ReadWrite>,
     pub spurious_interrupt_vector: Register<SpuriousInterrupt, ReadWrite>,
     pub in_service: [Register<u32, ReadOnly>; 8],

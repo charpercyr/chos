@@ -12,6 +12,7 @@ use chos_lib::sync::Spinlock;
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
+use crate::cpumask::init_cpumask;
 use crate::intr::{init_interrupts, init_interrupts_cpu};
 use crate::mm::this_cpu_info;
 use crate::sched::enter_schedule;
@@ -59,6 +60,7 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
 
     if id == 0 {
         setup_logger();
+        init_cpumask(args.core_count);
 
         debug!();
         debug!("##############");
