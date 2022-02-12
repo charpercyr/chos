@@ -1,14 +1,14 @@
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
-use core::ptr::NonNull;
+use core::marker::PhantomData;
 
-pub use list::{AtomicLink, ListLinkOps as HashTableLinkOps};
+use intrusive_collections::{
+    linked_list, Adapter, ExclusivePointerOps, KeyAdapter, LinkOps, PointerOps,
+};
+pub use linked_list::{AtomicLink, AtomicLinkOps, LinkedListOps as HashTableOps};
 pub use siphasher::sip::SipHasher as DefaultHasher;
 
-use super::list::unlink;
-use super::{list, Adapter, ExclusivePointerOps, KeyAdapter, PointerOps};
 use crate::init::ConstInit;
-use crate::intrusive::LinkOps;
 
 pub struct DefaultState;
 
@@ -28,741 +28,451 @@ impl ConstInit for DefaultState {
     const INIT: Self = Self;
 }
 
-pub struct HashTable<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> {
-    buckets: [Option<NonNull<A::Link>>; N],
+pub trait Buckets<T>: AsMut<[T]> + Sized {
+    fn reserve(&mut self, min_capacity_order: u8) -> Option<Self>;
+    fn shrink_to(&mut self, min_capacity_order: u8) -> Option<Self>;
+    fn capacity_order(&self) -> u8;
+}
+
+pub struct HashTable<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
+    buckets: [Option<<A::LinkOps as LinkOps>::LinkPtr>; BUCKETS],
     adapter: A,
     state: S,
+    data: PhantomData<<A::PointerOps as PointerOps>::Pointer>,
 }
-pub type DefaultHashTable<A, const N: usize> = HashTable<A, DefaultState, N>;
-unsafe impl<A: Adapter<Link: HashTableLinkOps> + Send, S: Send, const N: usize> Send
-    for HashTable<A, S, N>
-where
-    A::Pointer: Send,
+impl<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
+    HashTable<A, S, BUCKETS>
 {
-}
-unsafe impl<A: Adapter<Link: HashTableLinkOps> + Sync, S: Sync, const N: usize> Sync
-    for HashTable<A, S, N>
-where
-    A::Pointer: Sync,
-{
-}
-
-impl<A: Adapter<Link: HashTableLinkOps>, const N: usize> HashTable<A, DefaultState, N> {
-    pub const fn new(adapter: A) -> Self {
-        Self::with_hasher(adapter, ConstInit::INIT)
-    }
-}
-
-impl<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> HashTable<A, S, N> {
-    pub const fn with_hasher(adapter: A, state: S) -> Self {
+    pub const fn with_state(adapter: A, state: S) -> Self {
         Self {
-            buckets: [None; N],
+            buckets: [None; BUCKETS],
             adapter,
             state,
+            data: PhantomData,
         }
     }
 
-    pub fn try_insert<'a>(&mut self, ptr: A::Pointer) -> Result<(), A::Pointer>
+    pub const fn new(adapter: A) -> Self
     where
-        A: KeyAdapter,
-        A::Key<'a>: Hash,
-        A::Value: 'a,
-        S: BuildHasher,
+        S: ConstInit,
     {
-        let (value, meta) = A::Pointer::into_raw(ptr);
-        unsafe {
-            let bucket = self.bucket_for(&*value);
-            let link = self.adapter.get_link(value);
-            let link = NonNull::new_unchecked(link as *mut A::Link);
-            if !link.as_ref().acquire() {
-                return Err(A::Pointer::from_raw(value, meta));
-            }
-            link.as_ref().set_meta(meta);
-            if let Some(head) = self.buckets[bucket] {
-                list::insert_before(head, link);
-            }
-            self.buckets[bucket] = Some(link);
-        }
-        Ok(())
+        Self::with_state(adapter, S::INIT)
     }
 
-    pub fn insert<'a>(&mut self, ptr: A::Pointer)
-    where
-        A: KeyAdapter,
-        A::Key<'a>: Hash,
-        A::Value: 'a,
-        S: BuildHasher,
-    {
-        if self.try_insert(ptr).is_err() {
-            panic!("Already linked");
+    pub fn cursor(&self) -> Cursor<'_, A, S, BUCKETS> {
+        Cursor {
+            cursor: self.cursor_raw(),
+            table: self,
         }
     }
 
-    pub fn remove<'a>(&mut self, k: &impl Borrow<A::Key<'a>>) -> Option<A::Pointer>
-    where
-        A: KeyAdapter,
-        A::Value: 'a,
-        A::Key<'a>: Hash + Eq,
-        S: BuildHasher,
-    {
-        self.raw_get(k)
-            .map(move |cursor| unsafe { cursor.unlink(&mut self.buckets, &self.adapter) })
-    }
-
-    pub fn contains<'a>(&self, k: &impl Borrow<A::Key<'a>>) -> bool
-    where
-        A: KeyAdapter,
-        A::Value: 'a,
-        A::Key<'a>: Hash + Eq,
-        S: BuildHasher,
-    {
-        self.raw_get(k).is_some()
-    }
-
-    pub fn get<'a>(&self, k: &impl Borrow<A::Key<'a>>) -> Option<&A::Value>
-    where
-        A: KeyAdapter,
-        A::Value: 'a,
-        A::Key<'a>: Hash + Eq,
-        S: BuildHasher,
-    {
-        self.raw_get(k)
-            .map(|cursor| unsafe { cursor.get_ref(&self.adapter) })
-    }
-
-    pub fn get_mut<'a>(&mut self, k: &impl Borrow<A::Key<'a>>) -> Option<&mut A::Value>
-    where
-        A: KeyAdapter,
-        A::Value: 'a,
-        A::Key<'a>: Hash + Eq,
-        S: BuildHasher,
-        A::Pointer: ExclusivePointerOps,
-    {
-        self.raw_get(k)
-            .map(|cursor| unsafe { cursor.get_mut(&self.adapter) })
-    }
-
-    pub fn get_cursor<'k>(&self, k: &impl Borrow<A::Key<'k>>) -> Option<Cursor<'_, A, S, N>>
-    where
-        A: KeyAdapter,
-        A::Value: 'k,
-        A::Key<'k>: Hash + Eq,
-        S: BuildHasher,
-    {
-        Some(Cursor {
-            cursor: self.raw_get(k)?,
+    pub fn cursor_mut(&mut self) -> CursorMut<'_, A, S, BUCKETS> {
+        CursorMut {
+            cursor: self.cursor_raw(),
             table: self,
-        })
+        }
     }
 
-    pub fn get_cursor_mut<'k>(
-        &mut self,
-        k: &impl Borrow<A::Key<'k>>,
-    ) -> Option<CursorMut<'_, A, S, N>>
-    where
-        A: KeyAdapter,
-        A::Value: 'k,
-        A::Key<'k>: Hash + Eq,
-        S: BuildHasher,
-    {
-        Some(CursorMut {
-            cursor: self.raw_get(k)?,
+    pub fn front(&self) -> Cursor<'_, A, S, BUCKETS> {
+        Cursor {
+            cursor: self.front_raw(),
             table: self,
-        })
+        }
     }
 
-    pub fn front(&self) -> Option<Cursor<'_, A, S, N>> {
-        Some(Cursor {
-            cursor: self.raw_front()?,
+    pub fn front_mut(&mut self) -> CursorMut<'_, A, S, BUCKETS> {
+        CursorMut {
+            cursor: self.front_raw(),
             table: self,
-        })
+        }
     }
 
-    pub fn front_mut(&mut self) -> Option<CursorMut<'_, A, S, N>> {
-        Some(CursorMut {
-            cursor: self.raw_front()?,
-            table: self,
-        })
-    }
-
-    pub fn iter(&self) -> Iter<'_, A, S, N> {
+    pub fn iter(&self) -> Iter<'_, A, S, BUCKETS> {
         Iter {
-            cursor: self.raw_front(),
+            cursor: self.front_raw(),
             table: self,
         }
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, A, S, N>
-    where
-        A::Pointer: ExclusivePointerOps,
-    {
+    pub unsafe fn iter_mut(&mut self) -> IterMut<'_, A, S, BUCKETS> {
         IterMut {
-            cursor: self.raw_front(),
+            cursor: self.front_raw(),
             table: self,
         }
     }
 
-    pub fn into_iter(self) -> IntoIter<A, S, N> {
-        IntoIter {
-            cur: self.raw_front(),
-            table: self,
+    fn cursor_raw(&self) -> RawCursor<A> {
+        RawCursor {
+            bucket: 0,
+            cur: None,
         }
     }
 
-    pub fn fast_clear(&mut self) {
-        self.buckets = [None; N];
-    }
-
-    pub fn clear(&mut self) {
-        let mut cur = self.raw_front();
-        while let Some(cursor) = cur {
-            unsafe {
-                let next = cursor.next(&self.buckets);
-                drop(cursor.unlink(&mut self.buckets, &self.adapter));
-                cur = next;
-            }
-        }
-    }
-
-    fn bucket_for<'a>(&self, value: &'a A::Value) -> usize
-    where
-        A: KeyAdapter,
-        A::Key<'a>: Hash,
-        S: BuildHasher,
-    {
-        let key = self.adapter.get_key(value);
-        self.bucket_for_key(&key)
-    }
-
-    fn bucket_for_key<'a>(&self, key: &A::Key<'a>) -> usize
-    where
-        A: KeyAdapter,
-        A::Key<'a>: Hash,
-        S: BuildHasher,
-    {
-        let key = self.state.hash_one(&key);
-        (key % N as u64) as usize
-    }
-
-    fn raw_front(&self) -> Option<RawCursor<A>> {
-        for i in 0..N {
-            if let Some(head) = self.buckets[i] {
-                return Some(RawCursor {
-                    bucket: i,
-                    cur: head,
-                });
-            }
-        }
-        None
-    }
-
-    fn raw_get<'a>(&self, k: &impl Borrow<A::Key<'a>>) -> Option<RawCursor<A>>
-    where
-        A: KeyAdapter,
-        A::Value: 'a,
-        A::Key<'a>: Hash + Eq,
-        S: BuildHasher,
-    {
-        let k = k.borrow();
-        let bucket = self.bucket_for_key(k);
-        let mut cur = self.buckets[bucket];
-        while let Some(link_ptr) = cur {
-            unsafe {
-                let link = link_ptr.as_ref();
-                let value = self.adapter.get_value(link);
-                let key = self.adapter.get_key(&*value);
-                if key == *k {
-                    return Some(RawCursor {
-                        bucket,
-                        cur: link_ptr,
-                    });
-                }
-                cur = link.get_next();
-            }
-        }
-        None
-    }
-}
-impl<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Drop for HashTable<A, S, N> {
-    fn drop(&mut self) {
-        self.clear()
+    fn front_raw(&self) -> RawCursor<A> {
+        self.buckets
+            .iter()
+            .enumerate()
+            .find_map(|(bucket, cur)| {
+                cur.map(|cur| RawCursor {
+                    bucket,
+                    cur: Some(cur),
+                })
+            })
+            .unwrap_or_else(|| self.cursor_raw())
     }
 }
 
-impl<A: Adapter<Link: HashTableLinkOps> + ConstInit, S: ConstInit, const N: usize> ConstInit
-    for HashTable<A, S, N>
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkAlreadyAcquiredError;
+
+impl<'a, A: KeyAdapter<'a, LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
+    HashTable<A, S, BUCKETS>
+where
+    <A::PointerOps as PointerOps>::Value: 'a,
 {
-    const INIT: Self = Self::with_hasher(ConstInit::INIT, ConstInit::INIT);
+    pub fn try_insert(
+        &mut self,
+        ptr: <A::PointerOps as PointerOps>::Pointer,
+    ) -> Result<(), LinkAlreadyAcquiredError>
+    where
+        A::Key: Hash,
+    {
+        unsafe {
+            let value = self.adapter.pointer_ops().into_raw(ptr);
+            let bucket = self.bucket_for(&self.adapter.get_key(&*value));
+            let link = self.adapter.get_link(value);
+            if self.adapter.link_ops_mut().acquire_link(link) {
+                insert_in_bucket(&mut self.adapter, &mut self.buckets[bucket], link);
+                Ok(())
+            } else {
+                Err(LinkAlreadyAcquiredError)
+            }
+        }
+    }
+
+    pub fn insert(&mut self, ptr: <A::PointerOps as PointerOps>::Pointer)
+    where
+        A::Key: Hash,
+    {
+        self.try_insert(ptr).expect("Already linked")
+    }
+
+    pub fn find<Q>(&self, key: &Q) -> Cursor<'_, A, S, BUCKETS>
+    where
+        Q: Borrow<A::Key>,
+        A::Key: Hash + Eq,
+    {
+        Cursor {
+            cursor: self.find_raw(key.borrow()),
+            table: self,
+        }
+    }
+
+    pub fn find_mut<Q>(&mut self, key: &Q) -> CursorMut<'_, A, S, BUCKETS>
+    where
+        Q: Borrow<A::Key>,
+        A::Key: Hash + Eq,
+    {
+        CursorMut {
+            cursor: self.find_raw(key.borrow()),
+            table: self,
+        }
+    }
+
+    fn find_raw(&self, key: &A::Key) -> RawCursor<A>
+    where
+        A::Key: Hash + Eq,
+    {
+        let bucket = self.bucket_for(key);
+        let mut cur_opt = self.buckets[bucket];
+        while let Some(cur) = cur_opt {
+            let value = unsafe { &*self.adapter.get_value(cur) };
+            if &self.adapter.get_key(value) == key {
+                return RawCursor {
+                    bucket: bucket,
+                    cur: Some(cur),
+                };
+            }
+            cur_opt = unsafe { self.adapter.link_ops().next(cur) };
+        }
+        self.cursor_raw()
+    }
+
+    fn bucket_for(&self, key: &A::Key) -> usize
+    where
+        A::Key: Hash,
+    {
+        self.state.hash_one(key) as usize % BUCKETS
+    }
 }
 
-struct RawCursor<A: Adapter<Link: HashTableLinkOps>> {
-    bucket: usize,
-    cur: NonNull<A::Link>,
+unsafe fn insert_in_bucket<A: Adapter<LinkOps: HashTableOps>>(
+    adapter: &mut A,
+    bucket: &mut Option<<A::LinkOps as LinkOps>::LinkPtr>,
+    node: <A::LinkOps as LinkOps>::LinkPtr,
+) {
+    let ops = adapter.link_ops_mut();
+    if let Some(head) = bucket {
+        ops.set_next(node, Some(*head));
+        ops.set_prev(*head, Some(node));
+        *head = node;
+    } else {
+        *bucket = Some(node);
+    }
 }
-impl<A: Adapter<Link: HashTableLinkOps>> Clone for RawCursor<A> {
+
+struct RawCursor<A: Adapter<LinkOps: HashTableOps>> {
+    cur: Option<<A::LinkOps as LinkOps>::LinkPtr>,
+    bucket: usize,
+}
+impl<A: Adapter<LinkOps: HashTableOps>> Clone for RawCursor<A> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<A: Adapter<Link: HashTableLinkOps>> Copy for RawCursor<A> {}
+impl<A: Adapter<LinkOps: HashTableOps>> Copy for RawCursor<A> {}
 
-impl<A: Adapter<Link: HashTableLinkOps>> RawCursor<A> {
-    unsafe fn next<const N: usize>(self, buckets: &[Option<NonNull<A::Link>>; N]) -> Option<Self> {
-        if let Some(next) = self.cur.as_ref().get_next() {
-            Some(Self {
-                bucket: self.bucket,
-                cur: next,
-            })
+impl<A: Adapter<LinkOps: HashTableOps>> RawCursor<A> {
+    fn move_next(&mut self, adapter: &A, buckets: &[Option<<A::LinkOps as LinkOps>::LinkPtr>]) {
+        if let Some(cur) = self.cur {
+            self.cur = unsafe { adapter.link_ops().next(cur) }
         } else {
-            for i in (self.bucket + 1)..N {
-                if let Some(next) = buckets[i] {
-                    return Some(Self {
-                        bucket: i,
-                        cur: next,
-                    });
+            for i in (self.bucket + 1)..buckets.len() {
+                if let Some(head) = buckets[i] {
+                    self.cur = Some(head);
+                    self.bucket = i;
+                    return;
                 }
             }
-            None
         }
     }
-    unsafe fn move_next<const N: usize>(
-        &mut self,
-        buckets: &[Option<NonNull<A::Link>>; N],
-    ) -> bool {
-        self.next(buckets).map(|next| *self = next).is_some()
-    }
 
-    unsafe fn prev<const N: usize>(self, buckets: &[Option<NonNull<A::Link>>; N]) -> Option<Self> {
-        if let Some(prev) = self.cur.as_ref().get_prev() {
-            Some(Self {
-                bucket: self.bucket,
-                cur: prev,
-            })
+    fn move_prev(&mut self, adapter: &A, buckets: &[Option<<A::LinkOps as LinkOps>::LinkPtr>]) {
+        if let Some(cur) = self.cur {
+            self.cur = unsafe { adapter.link_ops().prev(cur) }
         } else {
             for i in (0..self.bucket).rev() {
-                if let Some(prev) = buckets[i] {
-                    return Some(Self {
-                        bucket: i,
-                        cur: prev,
-                    });
+                if let Some(head) = buckets[i] {
+                    self.cur = Some(head);
+                    self.bucket = i;
+                    return;
                 }
             }
-            None
         }
     }
-    unsafe fn move_prev<const N: usize>(
-        &mut self,
-        buckets: &[Option<NonNull<A::Link>>; N],
-    ) -> bool {
-        self.prev(buckets).map(|prev| *self = prev).is_some()
+
+    fn is_valid(&self) -> bool {
+        self.cur.is_some()
     }
 
-    fn get_link(self) -> NonNull<A::Link> {
-        self.cur
+    unsafe fn get<'a>(self, adapter: &A) -> Option<&'a <A::PointerOps as PointerOps>::Value> {
+        self.cur.map(|link| unsafe { &*adapter.get_value(link) })
     }
 
-    unsafe fn get_ref<'a>(self, adapter: &A) -> &'a A::Value {
-        &*adapter.get_value(self.cur.as_ptr())
-    }
-
-    unsafe fn get_mut<'a>(self, adapter: &A) -> &'a mut A::Value
-    where
-        A::Pointer: ExclusivePointerOps,
-    {
-        &mut *(adapter.get_value(self.cur.as_ptr()) as *mut A::Value)
-    }
-
-    fn bucket(self) -> usize {
-        self.bucket
-    }
-
-    unsafe fn unlink<const N: usize>(
+    unsafe fn get_mut<'a>(
         self,
-        buckets: &mut [Option<NonNull<A::Link>>; N],
         adapter: &A,
-    ) -> A::Pointer {
-        if buckets[self.bucket] == Some(self.cur) {
-            buckets[self.bucket] = self.cur.as_ref().get_next();
-        }
-        let meta = unlink(self.cur);
-        let value = adapter.get_value(self.cur.as_ptr());
-        <A::Pointer as PointerOps>::from_raw(value, meta)
+    ) -> Option<&'a mut <A::PointerOps as PointerOps>::Value> {
+        self.cur
+            .map(|link| &mut *(adapter.get_value(link) as *mut _))
+    }
+
+    unsafe fn unlink(
+        self,
+        adapter: &mut A,
+        buckets: &mut [Option<<A::LinkOps as LinkOps>::LinkPtr>],
+    ) -> Option<<A::LinkOps as LinkOps>::LinkPtr> {
+        let ops = adapter.link_ops_mut();
+        self.cur.map(|cur| {
+            if let Some(next) = ops.next(cur) {
+                ops.set_prev(next, ops.prev(cur));
+            }
+            if let Some(prev) = ops.prev(cur) {
+                ops.set_next(prev, ops.next(cur));
+            }
+            if buckets[self.bucket] == Some(cur) {
+                buckets[self.bucket] = ops.next(cur);
+            }
+            ops.set_next(cur, None);
+            ops.set_prev(cur, None);
+            ops.release_link(cur);
+            cur
+        })
     }
 }
 
-pub struct Cursor<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> {
+pub struct Cursor<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
     cursor: RawCursor<A>,
-    table: &'a HashTable<A, S, N>,
+    table: &'a HashTable<A, S, BUCKETS>,
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Clone for Cursor<'a, A, S, N> {
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> Clone
+    for Cursor<'a, A, S, BUCKETS>
+{
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Copy for Cursor<'a, A, S, N> {}
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Cursor<'a, A, S, N> {
-    pub fn next(self) -> Option<Self> {
-        Some(Self {
-            cursor: unsafe { self.cursor.next(&self.table.buckets)? },
-            table: self.table,
-        })
-    }
-    pub fn move_next(&mut self) -> bool {
-        unsafe { self.cursor.move_next(&self.table.buckets) }
-    }
-    pub fn prev(self) -> Option<Self> {
-        Some(Self {
-            cursor: unsafe { self.cursor.prev(&self.table.buckets)? },
-            table: self.table,
-        })
-    }
-    pub fn move_prev(&mut self) -> bool {
-        unsafe { self.cursor.move_prev(&self.table.buckets) }
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> Copy
+    for Cursor<'a, A, S, BUCKETS>
+{
+}
+
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
+    Cursor<'a, A, S, BUCKETS>
+{
+    pub fn move_next(&mut self) {
+        self.cursor
+            .move_next(&self.table.adapter, &self.table.buckets)
     }
 
-    pub fn get(&self) -> &A::Value {
-        unsafe { self.cursor.get_ref(&self.table.adapter) }
+    pub fn move_prev(&mut self) {
+        self.cursor
+            .move_prev(&self.table.adapter, &self.table.buckets)
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.cursor.is_valid()
+    }
+
+    pub fn get(&self) -> Option<&<A::PointerOps as PointerOps>::Value> {
+        unsafe { self.cursor.get(&self.table.adapter) }
     }
 }
 
-pub struct CursorMut<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> {
+pub struct CursorMut<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
     cursor: RawCursor<A>,
-    table: &'a mut HashTable<A, S, N>,
+    table: &'a mut HashTable<A, S, BUCKETS>,
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> CursorMut<'a, A, S, N> {
-    pub fn next(self) -> Option<Self> {
-        Some(Self {
-            cursor: unsafe { self.cursor.next(&self.table.buckets)? },
-            table: self.table,
-        })
-    }
-    pub fn move_next(&mut self) -> bool {
-        unsafe { self.cursor.move_next(&self.table.buckets) }
-    }
-    pub fn prev(self) -> Option<Self> {
-        Some(Self {
-            cursor: unsafe { self.cursor.prev(&self.table.buckets)? },
-            table: self.table,
-        })
-    }
-    pub fn move_prev(&mut self) -> bool {
-        unsafe { self.cursor.move_prev(&self.table.buckets) }
+
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
+    CursorMut<'a, A, S, BUCKETS>
+{
+    pub fn move_next(&mut self) {
+        self.cursor
+            .move_next(&self.table.adapter, &self.table.buckets)
     }
 
-    pub fn get(&self) -> &A::Value {
-        unsafe { self.cursor.get_ref(&self.table.adapter) }
+    pub fn move_prev(&mut self) {
+        self.cursor
+            .move_prev(&self.table.adapter, &self.table.buckets)
     }
 
-    pub fn get_mut(&mut self) -> &mut A::Value
+    pub fn is_valid(&self) -> bool {
+        self.cursor.is_valid()
+    }
+
+    pub fn get(&self) -> Option<&<A::PointerOps as PointerOps>::Value> {
+        unsafe { self.cursor.get(&self.table.adapter) }
+    }
+
+    pub unsafe fn get_mut(&mut self) -> Option<&mut <A::PointerOps as PointerOps>::Value>
     where
-        A::Pointer: ExclusivePointerOps,
+        A::PointerOps: ExclusivePointerOps,
     {
-        unsafe { self.cursor.get_mut(&mut self.table.adapter) }
+        self.cursor.get_mut(&self.table.adapter)
     }
 
-    pub fn unlink(self) -> A::Pointer {
+    pub fn unlink(self) -> Option<<A::PointerOps as PointerOps>::Pointer> {
         unsafe {
             self.cursor
-                .unlink(&mut self.table.buckets, &self.table.adapter)
+                .unlink(&mut self.table.adapter, &mut self.table.buckets)
+                .map(move |link| {
+                    self.table
+                        .adapter
+                        .pointer_ops()
+                        .from_raw(self.table.adapter.get_value(link))
+                })
         }
     }
 }
 
-pub struct Iter<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> {
-    cursor: Option<RawCursor<A>>,
-    table: &'a HashTable<A, S, N>,
+pub struct Iter<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
+    cursor: RawCursor<A>,
+    table: &'a HashTable<A, S, BUCKETS>,
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Clone for Iter<'a, A, S, N> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Copy for Iter<'a, A, S, N> {}
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Iterator for Iter<'a, A, S, N> {
-    type Item = &'a A::Value;
+
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> Iterator
+    for Iter<'a, A, S, BUCKETS>
+{
+    type Item = &'a <A::PointerOps as PointerOps>::Value;
     fn next(&mut self) -> Option<Self::Item> {
-        self.cursor.map(|cursor| unsafe {
-            let value = cursor.get_ref(&self.table.adapter);
-            self.cursor = cursor.next(&self.table.buckets);
+        unsafe { self.cursor.get(&self.table.adapter) }.map(move |value| {
+            self.cursor
+                .move_next(&self.table.adapter, &self.table.buckets);
             value
         })
     }
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> IntoIterator
-    for &'a HashTable<A, S, N>
+
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> IntoIterator
+    for &'a HashTable<A, S, BUCKETS>
 {
-    type Item = &'a A::Value;
-    type IntoIter = Iter<'a, A, S, N>;
+    type IntoIter = Iter<'a, A, S, BUCKETS>;
+    type Item = &'a <A::PointerOps as PointerOps>::Value;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
-impl<'a, A: Adapter<Link: HashTableLinkOps>, S, const N: usize> IntoIterator
-    for &'a mut HashTable<A, S, N>
-where
-    A::Pointer: ExclusivePointerOps,
-{
-    type Item = &'a mut A::Value;
-    type IntoIter = IterMut<'a, A, S, N>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter_mut()
-    }
+
+pub struct IterMut<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
+    cursor: RawCursor<A>,
+    table: &'a mut HashTable<A, S, BUCKETS>,
 }
 
-pub struct IterMut<
-    'a,
-    A: Adapter<Link: HashTableLinkOps, Pointer: ExclusivePointerOps>,
-    S,
-    const N: usize,
-> {
-    cursor: Option<RawCursor<A>>,
-    table: &'a mut HashTable<A, S, N>,
-}
-impl<'a, A: Adapter<Link: HashTableLinkOps, Pointer: ExclusivePointerOps>, S, const N: usize>
-    Iterator for IterMut<'a, A, S, N>
+impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> Iterator
+    for IterMut<'a, A, S, BUCKETS>
 {
-    type Item = &'a mut A::Value;
+    type Item = &'a mut <A::PointerOps as PointerOps>::Value;
     fn next(&mut self) -> Option<Self::Item> {
-        self.cursor.map(|cursor| unsafe {
-            let value = cursor.get_mut(&self.table.adapter);
-            self.cursor = cursor.next(&self.table.buckets);
+        unsafe { self.cursor.get_mut(&self.table.adapter) }.map(move |value| {
+            self.cursor
+                .move_next(&self.table.adapter, &self.table.buckets);
             value
         })
-    }
-}
-
-pub struct IntoIter<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> {
-    table: HashTable<A, S, N>,
-    cur: Option<RawCursor<A>>,
-}
-impl<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> Iterator for IntoIter<A, S, N> {
-    type Item = A::Pointer;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.cur.map(|cur| unsafe {
-            let next = cur.next(&self.table.buckets);
-            let ptr = cur.unlink(&mut self.table.buckets, &self.table.adapter);
-            self.cur = next;
-            ptr
-        })
-    }
-}
-impl<A: Adapter<Link: HashTableLinkOps>, S, const N: usize> IntoIterator for HashTable<A, S, N> {
-    type Item = A::Pointer;
-    type IntoIter = IntoIter<A, S, N>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.into_iter()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloc::sync::Arc;
-    use std::collections::HashSet;
     use std::prelude::v1::*;
 
-    use super::*;
+    use alloc::sync::Arc;
+    use intrusive_collections::intrusive_adapter;
 
+    use super::*;
     struct A {
-        link: AtomicLink<()>,
+        link: AtomicLink,
         key: u32,
         value: u32,
     }
+
     impl A {
-        pub const fn new(value: u32) -> Self {
+        fn new(value: u32) -> Self {
             Self {
                 link: AtomicLink::new(),
                 key: value,
                 value,
             }
         }
-    }
-    crate::intrusive_adapter!(struct AAdapter<'a> = &'a A : A { link: AtomicLink<()> });
-    crate::intrusive_adapter!(struct AAdapterMut<'a> = &'a mut A : A { link: AtomicLink<()> });
-    crate::intrusive_adapter!(struct AAdapterArc = Arc<A> : A { link: AtomicLink<()> });
 
-    impl KeyAdapter for AAdapter<'_> {
-        type Key<'a> = u32;
-        fn get_key<'a>(&self, value: &'a Self::Value) -> Self::Key<'a> {
-            value.key
-        }
-    }
-    impl KeyAdapter for AAdapterMut<'_> {
-        type Key<'a> = u32;
-        fn get_key<'a>(&self, value: &'a Self::Value) -> Self::Key<'a> {
-            value.key
-        }
-    }
-    impl KeyAdapter for AAdapterArc {
-        type Key<'a> = u32;
-        fn get_key<'a>(&self, value: &'a Self::Value) -> Self::Key<'a> {
-            value.key
+        fn boxed(value: u32) -> Box<Self> {
+            Box::new(Self::new(value))
         }
     }
 
-    fn with_hash_table<R>(f: impl FnOnce(&mut DefaultHashTable<AAdapterMut, 4>) -> R) -> R {
-        let mut a0 = A::new(0);
-        let mut a1 = A::new(1);
-        let mut a2 = A::new(2);
-        let mut table = HashTable::new(AAdapterMut::new());
-        table.insert(&mut a0);
-        table.insert(&mut a1);
-        table.insert(&mut a2);
-        f(&mut table)
-    }
+    intrusive_adapter!(AdBox = Box<A> : A { link: AtomicLink });
+    intrusive_adapter!(AdArc = Arc<A> : A { link: AtomicLink });
+
+    type HT<A> = HashTable<A, DefaultState, 2>;
 
     #[test]
     fn insert() {
-        with_hash_table(|table| {
-            assert_eq!(table.get(&0u32).map(|v| v.value), Some(0));
-            assert_eq!(table.get(&1u32).map(|v| v.value), Some(1));
-            assert_eq!(table.get(&2u32).map(|v| v.value), Some(2));
-            assert_eq!(table.get(&3u32).map(|v| v.value), None);
-        })
-    }
-
-    #[test]
-    fn remove() {
-        with_hash_table(|table| {
-            assert_eq!(table.remove(&0u32).map(|v| v.value), Some(0));
-            assert_eq!(table.remove(&1u32).map(|v| v.value), Some(1));
-            assert_eq!(table.remove(&2u32).map(|v| v.value), Some(2));
-            assert_eq!(table.remove(&0u32).map(|v| v.value), None);
-            assert_eq!(table.remove(&1u32).map(|v| v.value), None);
-            assert_eq!(table.remove(&2u32).map(|v| v.value), None);
-        })
-    }
-
-    #[test]
-    fn cursor() {
-        with_hash_table(|table| {
-            let mut cur = table.front();
-            let mut set = HashSet::new();
-            while let Some(cursor) = cur {
-                set.insert(cursor.get().value);
-                cur = cursor.next();
-            }
-            assert!(set.contains(&0));
-            assert!(set.contains(&1));
-            assert!(set.contains(&2));
-            assert_eq!(set.len(), 3);
-        })
-    }
-
-    #[test]
-    fn cursor_mut() {
-        with_hash_table(|table| {
-            let mut cur = table.front_mut();
-            while let Some(mut cursor) = cur {
-                cursor.get_mut().value += 1;
-                cur = cursor.next();
-            }
-            let set: HashSet<_> = table.iter().map(|a| a.value).collect();
-            assert!(set.contains(&1));
-            assert!(set.contains(&2));
-            assert!(set.contains(&3));
-            assert_eq!(set.len(), 3);
-        })
-    }
-
-    #[test]
-    fn iter() {
-        with_hash_table(|table| {
-            use std::collections::HashSet;
-            let set: HashSet<_> = table.iter().map(|a| a.value).collect();
-            assert!(set.contains(&0));
-            assert!(set.contains(&1));
-            assert!(set.contains(&2));
-            assert_eq!(set.len(), 3);
-        })
-    }
-
-    #[test]
-    fn iter_mut() {
-        with_hash_table(|table| {
-            for a in table.iter_mut() {
-                a.value += 1;
-            }
-            let set: HashSet<_> = table.iter().map(|a| a.value).collect();
-            assert!(set.contains(&1));
-            assert!(set.contains(&2));
-            assert!(set.contains(&3));
-            assert_eq!(set.len(), 3);
-        })
-    }
-
-    #[test]
-    fn unlink() {
-        with_hash_table(|table| {
-            table.get_cursor_mut(&0).unwrap().unlink();
-            let set: HashSet<_> = table.iter().map(|a| a.value).collect();
-            assert!(!set.contains(&0));
-            assert!(set.contains(&1));
-            assert!(set.contains(&2));
-            assert_eq!(set.len(), 2);
-        })
-    }
-
-    #[test]
-    fn insert_dup() {
-        let a = A::new(0);
-        let mut table: HashTable<_, _, 1> = HashTable::new(AAdapter::new());
-        assert!(table.try_insert(&a).is_ok());
-        assert!(table.try_insert(&a).is_err());
-    }
-
-    #[test]
-    fn drop() {
-        let mut table: HashTable<_, _, 2> = HashTable::new(AAdapterArc::new());
-        let a0 = Arc::new(A::new(0));
-        let a1 = Arc::new(A::new(1));
-        let a2 = Arc::new(A::new(2));
-        table.insert(a0.clone());
-        table.insert(a1.clone());
-        table.insert(a2.clone());
-        assert_eq!(Arc::strong_count(&a0), 2);
-        assert_eq!(Arc::strong_count(&a1), 2);
-        assert_eq!(Arc::strong_count(&a2), 2);
-        core::mem::drop(table);
-        assert_eq!(Arc::strong_count(&a0), 1);
-        assert_eq!(Arc::strong_count(&a1), 1);
-        assert_eq!(Arc::strong_count(&a2), 1);
-    }
-
-    #[test]
-    fn clear() {
-        let mut table: HashTable<_, _, 2> = HashTable::new(AAdapterArc::new());
-        let a0 = Arc::new(A::new(0));
-        let a1 = Arc::new(A::new(1));
-        let a2 = Arc::new(A::new(2));
-        table.insert(a0.clone());
-        table.insert(a1.clone());
-        table.insert(a2.clone());
-        assert_eq!(Arc::strong_count(&a0), 2);
-        assert_eq!(Arc::strong_count(&a1), 2);
-        assert_eq!(Arc::strong_count(&a2), 2);
-        table.clear();
-        assert_eq!(Arc::strong_count(&a0), 1);
-        assert_eq!(Arc::strong_count(&a1), 1);
-        assert_eq!(Arc::strong_count(&a2), 1);
-        assert!(table.front().is_none());
-    }
-
-    #[test]
-    fn fast_clear() {
-        let mut table: HashTable<_, _, 2> = HashTable::new(AAdapterArc::new());
-        let a0 = Arc::new(A::new(0));
-        let a1 = Arc::new(A::new(1));
-        let a2 = Arc::new(A::new(2));
-        table.insert(a0.clone());
-        table.insert(a1.clone());
-        table.insert(a2.clone());
-        assert_eq!(Arc::strong_count(&a0), 2);
-        assert_eq!(Arc::strong_count(&a1), 2);
-        assert_eq!(Arc::strong_count(&a2), 2);
-        table.fast_clear();
-        assert_eq!(Arc::strong_count(&a0), 2);
-        assert_eq!(Arc::strong_count(&a1), 2);
-        assert_eq!(Arc::strong_count(&a2), 2);
-        assert!(table.front().is_none());
+        let mut table = HT::new(AdBox::new());
+        let a0 = A::boxed(0);
+        let a1 = A::boxed(1);
+        let a2 = A::boxed(2);
+        table.insert(a0);
+        table.insert(a1);
+        table.insert(a2);
     }
 }

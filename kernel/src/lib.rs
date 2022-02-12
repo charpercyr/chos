@@ -29,6 +29,7 @@ mod config;
 mod cpumask;
 mod dummy;
 mod early;
+mod fs;
 mod intr;
 mod kmain;
 mod log;

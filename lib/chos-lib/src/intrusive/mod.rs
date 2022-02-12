@@ -1,3 +1,5 @@
+pub mod hash_table;
+
 use core::marker::PhantomData;
 
 use crate::init::ConstInit;

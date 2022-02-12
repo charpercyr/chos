@@ -6,6 +6,8 @@ use raw_alloc::AllocFlags;
 use crate::arch::early::map_stack;
 use crate::mm::phys::raw_alloc;
 
+const USE_STACK_GUARD_PAGE: bool = true;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Stacks {
     pub base: VAddr,
@@ -25,7 +27,10 @@ unsafe fn allocate_kernel_stack(order: u8) -> VAddr {
     let pages = raw_alloc::alloc_pages(order, AllocFlags::empty()).expect("Should not fail");
     let vaddr = STACKS_BASE;
     map_stack(vaddr, pages, 1 << order);
-    STACKS_BASE = STACKS_BASE.add((1 << order) + 1);
+    STACKS_BASE = STACKS_BASE.add(1 << order);
+    if USE_STACK_GUARD_PAGE {
+        STACKS_BASE = STACKS_BASE.add(1);
+    }
     vaddr.addr()
 }
 

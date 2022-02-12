@@ -26,6 +26,7 @@
 
 pub mod access;
 pub mod arch;
+pub mod array;
 pub mod boot;
 mod config;
 pub mod cpumask;
