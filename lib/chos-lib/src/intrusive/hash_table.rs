@@ -144,7 +144,10 @@ impl<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
     }
 
     #[cfg(test)]
-    fn debug_buckets(&self) where <A::LinkOps as LinkOps>::LinkPtr: fmt::Debug {
+    fn debug_buckets(&self)
+    where
+        <A::LinkOps as LinkOps>::LinkPtr: fmt::Debug,
+    {
         std::println!("BUCKETS");
         for (i, b) in self.buckets.iter().enumerate() {
             std::println!("  [{i:02}] {b:?}")
@@ -528,12 +531,12 @@ mod tests {
         table.insert(a0);
         table.insert(a1);
         table.insert(a2);
-        
+
         table.debug_buckets();
 
         assert_eq!(table.find_mut(&1).unlink().map(|a| a.value), Some(1));
         assert_eq!(table.find_mut(&1).unlink().map(|a| a.value), None);
-        
+
         table.debug_buckets();
 
         let mut values: Vec<_> = table.iter().map(|a| a.value).collect();
