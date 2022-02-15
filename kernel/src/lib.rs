@@ -9,7 +9,6 @@
 #![feature(core_intrinsics)]
 #![feature(default_alloc_error_handler)]
 #![feature(decl_macro)]
-#![feature(int_abs_diff)]
 #![feature(is_some_with)]
 #![feature(lang_items)]
 #![feature(maybe_uninit_slice)]

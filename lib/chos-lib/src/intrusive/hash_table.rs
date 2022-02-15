@@ -1,4 +1,5 @@
 use core::borrow::Borrow;
+use core::fmt;
 use core::hash::{BuildHasher, Hash};
 use core::marker::PhantomData;
 
@@ -26,12 +27,6 @@ impl BuildHasher for DefaultState {
 }
 impl ConstInit for DefaultState {
     const INIT: Self = Self;
-}
-
-pub trait Buckets<T>: AsMut<[T]> + Sized {
-    fn reserve(&mut self, min_capacity_order: u8) -> Option<Self>;
-    fn shrink_to(&mut self, min_capacity_order: u8) -> Option<Self>;
-    fn capacity_order(&self) -> u8;
 }
 
 pub struct HashTable<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> {
@@ -101,6 +96,33 @@ impl<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
         }
     }
 
+    pub fn fast_clear(&mut self) {
+        for b in &mut self.buckets {
+            *b = None;
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for b in &mut self.buckets {
+            let mut cur = *b;
+            while let Some(node) = cur {
+                unsafe {
+                    let link_ops = self.adapter.link_ops_mut();
+                    cur = link_ops.next(node);
+                    link_ops.set_prev(node, None);
+                    link_ops.set_next(node, None);
+                    link_ops.release_link(node);
+                    drop(
+                        self.adapter
+                            .pointer_ops()
+                            .from_raw(self.adapter.get_value(node)),
+                    );
+                }
+            }
+            *b = None;
+        }
+    }
+
     fn cursor_raw(&self) -> RawCursor<A> {
         RawCursor {
             bucket: 0,
@@ -119,6 +141,14 @@ impl<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize>
                 })
             })
             .unwrap_or_else(|| self.cursor_raw())
+    }
+
+    #[cfg(test)]
+    fn debug_buckets(&self) where <A::LinkOps as LinkOps>::LinkPtr: fmt::Debug {
+        std::println!("BUCKETS");
+        for (i, b) in self.buckets.iter().enumerate() {
+            std::println!("  [{i:02}] {b:?}")
+        }
     }
 }
 
@@ -214,10 +244,21 @@ unsafe fn insert_in_bucket<A: Adapter<LinkOps: HashTableOps>>(
     let ops = adapter.link_ops_mut();
     if let Some(head) = bucket {
         ops.set_next(node, Some(*head));
+        ops.set_prev(node, None);
         ops.set_prev(*head, Some(node));
         *head = node;
     } else {
         *bucket = Some(node);
+        ops.set_next(node, None);
+        ops.set_prev(node, None);
+    }
+}
+
+impl<A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize> Drop
+    for HashTable<A, S, BUCKETS>
+{
+    fn drop(&mut self) {
+        self.clear()
     }
 }
 
@@ -235,30 +276,19 @@ impl<A: Adapter<LinkOps: HashTableOps>> Copy for RawCursor<A> {}
 impl<A: Adapter<LinkOps: HashTableOps>> RawCursor<A> {
     fn move_next(&mut self, adapter: &A, buckets: &[Option<<A::LinkOps as LinkOps>::LinkPtr>]) {
         if let Some(cur) = self.cur {
-            self.cur = unsafe { adapter.link_ops().next(cur) }
-        } else {
-            for i in (self.bucket + 1)..buckets.len() {
-                if let Some(head) = buckets[i] {
-                    self.cur = Some(head);
-                    self.bucket = i;
-                    return;
-                }
+            if let Some(next) = unsafe { adapter.link_ops().next(cur) } {
+                self.cur = Some(next);
+                return;
             }
         }
-    }
-
-    fn move_prev(&mut self, adapter: &A, buckets: &[Option<<A::LinkOps as LinkOps>::LinkPtr>]) {
-        if let Some(cur) = self.cur {
-            self.cur = unsafe { adapter.link_ops().prev(cur) }
-        } else {
-            for i in (0..self.bucket).rev() {
-                if let Some(head) = buckets[i] {
-                    self.cur = Some(head);
-                    self.bucket = i;
-                    return;
-                }
+        for i in (self.bucket + 1)..buckets.len() {
+            if let Some(head) = buckets[i] {
+                self.cur = Some(head);
+                self.bucket = i;
+                return;
             }
         }
+        self.cur = None;
     }
 
     fn is_valid(&self) -> bool {
@@ -325,11 +355,6 @@ impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize
             .move_next(&self.table.adapter, &self.table.buckets)
     }
 
-    pub fn move_prev(&mut self) {
-        self.cursor
-            .move_prev(&self.table.adapter, &self.table.buckets)
-    }
-
     pub fn is_valid(&self) -> bool {
         self.cursor.is_valid()
     }
@@ -350,11 +375,6 @@ impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize
     pub fn move_next(&mut self) {
         self.cursor
             .move_next(&self.table.adapter, &self.table.buckets)
-    }
-
-    pub fn move_prev(&mut self) {
-        self.cursor
-            .move_prev(&self.table.adapter, &self.table.buckets)
     }
 
     pub fn is_valid(&self) -> bool {
@@ -434,9 +454,9 @@ impl<'a, A: Adapter<LinkOps: HashTableOps>, S: BuildHasher, const BUCKETS: usize
 
 #[cfg(test)]
 mod tests {
+    use alloc::sync::Arc;
     use std::prelude::v1::*;
 
-    use alloc::sync::Arc;
     use intrusive_collections::intrusive_adapter;
 
     use super::*;
@@ -458,12 +478,30 @@ mod tests {
         fn boxed(value: u32) -> Box<Self> {
             Box::new(Self::new(value))
         }
+
+        fn arc(value: u32) -> Arc<Self> {
+            Arc::new(Self::new(value))
+        }
     }
 
     intrusive_adapter!(AdBox = Box<A> : A { link: AtomicLink });
     intrusive_adapter!(AdArc = Arc<A> : A { link: AtomicLink });
 
-    type HT<A> = HashTable<A, DefaultState, 2>;
+    impl<'a> KeyAdapter<'a> for AdBox {
+        type Key = u32;
+        fn get_key(&self, a: &'a A) -> u32 {
+            a.key
+        }
+    }
+
+    impl<'a> KeyAdapter<'a> for AdArc {
+        type Key = u32;
+        fn get_key(&self, a: &'a A) -> u32 {
+            a.key
+        }
+    }
+
+    type HT<A> = HashTable<A, DefaultState, 16>;
 
     #[test]
     fn insert() {
@@ -474,5 +512,120 @@ mod tests {
         table.insert(a0);
         table.insert(a1);
         table.insert(a2);
+
+        let mut values: Vec<_> = table.iter().map(|a| a.value).collect();
+        values.sort_unstable();
+
+        assert_eq!(values, [0, 1, 2]);
+    }
+
+    #[test]
+    fn unlink() {
+        let mut table = HT::new(AdBox::new());
+        let a0 = A::boxed(0);
+        let a1 = A::boxed(1);
+        let a2 = A::boxed(2);
+        table.insert(a0);
+        table.insert(a1);
+        table.insert(a2);
+        
+        table.debug_buckets();
+
+        assert_eq!(table.find_mut(&1).unlink().map(|a| a.value), Some(1));
+        assert_eq!(table.find_mut(&1).unlink().map(|a| a.value), None);
+        
+        table.debug_buckets();
+
+        let mut values: Vec<_> = table.iter().map(|a| a.value).collect();
+        values.sort_unstable();
+
+        assert_eq!(values, [0, 2]);
+    }
+
+    #[test]
+    fn iter_mut() {
+        let mut table = HT::new(AdBox::new());
+        let a0 = A::boxed(0);
+        let a1 = A::boxed(1);
+        let a2 = A::boxed(2);
+        table.insert(a0);
+        table.insert(a1);
+        table.insert(a2);
+
+        for i in unsafe { table.iter_mut() } {
+            i.value += 1;
+        }
+
+        let mut values: Vec<_> = table.iter().map(|a| a.value).collect();
+        values.sort_unstable();
+
+        assert_eq!(values, [1, 2, 3]);
+    }
+
+    #[test]
+    fn fast_clear() {
+        let mut table = HT::new(AdArc::new());
+        let a0 = A::arc(0);
+        let a1 = A::arc(1);
+        let a2 = A::arc(2);
+        table.insert(a0.clone());
+        table.insert(a1.clone());
+        table.insert(a2.clone());
+
+        assert_eq!(Arc::strong_count(&a0), 2);
+        assert_eq!(Arc::strong_count(&a1), 2);
+        assert_eq!(Arc::strong_count(&a2), 2);
+
+        table.fast_clear();
+
+        assert_eq!(Arc::strong_count(&a0), 2);
+        assert_eq!(Arc::strong_count(&a1), 2);
+        assert_eq!(Arc::strong_count(&a2), 2);
+
+        assert!(table.iter().next().is_none());
+    }
+
+    #[test]
+    fn clear() {
+        let mut table = HT::new(AdArc::new());
+        let a0 = A::arc(0);
+        let a1 = A::arc(1);
+        let a2 = A::arc(2);
+        table.insert(a0.clone());
+        table.insert(a1.clone());
+        table.insert(a2.clone());
+
+        assert_eq!(Arc::strong_count(&a0), 2);
+        assert_eq!(Arc::strong_count(&a1), 2);
+        assert_eq!(Arc::strong_count(&a2), 2);
+
+        table.clear();
+
+        assert_eq!(Arc::strong_count(&a0), 1);
+        assert_eq!(Arc::strong_count(&a1), 1);
+        assert_eq!(Arc::strong_count(&a2), 1);
+
+        assert!(table.iter().next().is_none());
+    }
+
+    #[test]
+    fn drop() {
+        let mut table = HT::new(AdArc::new());
+        let a0 = A::arc(0);
+        let a1 = A::arc(1);
+        let a2 = A::arc(2);
+        table.insert(a0.clone());
+        table.insert(a1.clone());
+        table.insert(a2.clone());
+
+        assert_eq!(Arc::strong_count(&a0), 2);
+        assert_eq!(Arc::strong_count(&a1), 2);
+        assert_eq!(Arc::strong_count(&a2), 2);
+
+        core::mem::drop(table);
+
+        assert_eq!(Arc::strong_count(&a0), 1);
+        assert_eq!(Arc::strong_count(&a1), 1);
+        assert_eq!(Arc::strong_count(&a2), 1);
     }
 }

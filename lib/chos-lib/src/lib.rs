@@ -3,6 +3,7 @@
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
+#![feature(associated_type_defaults)]
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
 #![feature(core_intrinsics)]
