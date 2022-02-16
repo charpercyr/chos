@@ -6,6 +6,8 @@ use raw_alloc::AllocFlags;
 use crate::arch::early::map_stack;
 use crate::mm::phys::raw_alloc;
 
+use super::this_cpu_info;
+
 const USE_STACK_GUARD_PAGE: bool = true;
 
 #[derive(Clone, Copy, Debug)]
@@ -18,6 +20,10 @@ pub struct Stacks {
 impl Stacks {
     pub fn get_for(&self, id: usize) -> (VAddr, u64) {
         (self.base + (id as u64) * self.stride, self.size)
+    }
+
+    pub fn get_for_this_cpu(&self) -> (VAddr, u64) {
+        self.get_for(this_cpu_info().id)
     }
 }
 

@@ -1,19 +1,14 @@
 
 pub trait Sem {
-    fn new_with_count(count: usize) -> Self;
+    fn with_count(count: usize) -> Self;
 
-    fn wait(&self);
-    fn signal(&self);
+    fn wait_count(&self, count: usize);
+    fn signal_count(&self, count: usize);
 
-    fn wait_count(&self, count: usize) {
-        for _ in 0..count {
-            self.wait();
-        }
+    fn wait(&self) {
+        self.wait_count(1)
     }
-
-    fn signal_count(&self, count: usize) {
-        for _ in 0..count {
-            self.signal();
-        }
+    fn signal(&self) {
+        self.signal_count(1)
     }
 }

@@ -33,6 +33,10 @@ impl<T: ?Sized> ConstInit for PhantomData<T> {
     const INIT: Self = Self;
 }
 
+impl<T> ConstInit for Option<T> {
+    const INIT: Self = None;
+}
+
 #[cfg(feature = "alloc")]
 impl ConstInit for alloc::alloc::Global {
     const INIT: Self = Self;

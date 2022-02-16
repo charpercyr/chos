@@ -16,29 +16,32 @@ impl SpinSem {
 }
 
 impl Sem for SpinSem {
-    fn new_with_count(count: usize) -> Self {
+    fn with_count(count: usize) -> Self {
         Self::new(count)
     }
-    fn wait(&self) {
+
+    fn wait_count(&self, count: usize) {
         loop {
-            let count = loop {
-                let count = self.count.load(Ordering::Relaxed);
-                if count > 0 {
-                    break count;
+            let sem_count = self.count.load(Ordering::Relaxed);
+            if sem_count >= count {
+                if self
+                    .count
+                    .compare_exchange(
+                        sem_count,
+                        sem_count - count,
+                        Ordering::Acquire,
+                        Ordering::Relaxed,
+                    )
+                    .is_ok()
+                {
+                    return;
                 }
-                spin_loop();
-            };
-            if self
-                .count
-                .compare_exchange_weak(count, count - 1, Ordering::Acquire, Ordering::Relaxed)
-                .is_ok()
-            {
-                break;
             }
+            spin_loop()
         }
     }
 
-    fn signal(&self) {
-        self.count.fetch_add(1, Ordering::Release);
+    fn signal_count(&self, count: usize) {
+        self.count.fetch_add(count, Ordering::Release);
     }
 }

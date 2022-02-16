@@ -39,7 +39,7 @@ struct EarlyData {
     kernel_args: KernelArgs,
 }
 
-unsafe fn copy_boot_data(info: &KernelBootInfo) -> KernelArgs {
+unsafe fn copy_boot_data(info: &KernelBootInfo, stacks: Stacks) -> KernelArgs {
     KernelArgs {
         kernel_elf: info.elf.as_ref().into(),
         initrd: info.initrd.map(|ird| ird.as_ref().into()),
@@ -47,6 +47,7 @@ unsafe fn copy_boot_data(info: &KernelBootInfo) -> KernelArgs {
         mem_info: info.mem_info,
         command_line: info.command_line.map(Into::into),
         arch: arch_copy_boot_data(&info.arch),
+        stacks,
     }
 }
 
@@ -84,7 +85,7 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
             let stacks = allocate_kernel_stacks(info.core_count);
             EARLY_DATA = MaybeUninit::new(EarlyData {
                 stacks,
-                kernel_args: copy_boot_data(info),
+                kernel_args: copy_boot_data(info, stacks),
             });
         }
     }

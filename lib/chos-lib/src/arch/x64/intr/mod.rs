@@ -1,39 +1,84 @@
-use core::arch::asm;
 use core::convert::TryFrom;
 
+use cfg_if::cfg_if;
 use modular_bitfield::BitfieldSpecifier;
 
-use super::regs::Flags;
+cfg_if! {
+    if #[cfg(not(test))] {
+        use core::arch::asm;
+        
+        use super::regs::Flags;
 
-pub struct IntrStatus(Flags);
+        pub struct IntrStatus(Flags);
 
-pub fn disable_interrups() {
-    unsafe {
-        asm! {
-            "cli",
-            options(nomem, nostack),
-        };
-    }
-}
-
-pub fn enable_interrupts() {
-    unsafe {
-        asm! {
-            "sti",
-            options(nomem, nostack),
+        pub fn disable_interrups() {
+            unsafe {
+                asm! {
+                    "cli",
+                    options(nomem, nostack),
+                };
+            }
         }
-    }
-}
 
-pub fn disable_interrups_save() -> IntrStatus {
-    let flags = IntrStatus(Flags::get());
-    disable_interrups();
-    flags
-}
+        pub fn enable_interrupts() {
+            unsafe {
+                asm! {
+                    "sti",
+                    options(nomem, nostack),
+                }
+            }
+        }
 
-pub fn restore_interrupts(status: IntrStatus) {
-    if status.0.intr_enable() {
-        enable_interrupts();
+        pub fn disable_interrups_save() -> IntrStatus {
+            let flags = IntrStatus(Flags::get());
+            disable_interrups();
+            flags
+        }
+
+        pub fn restore_interrupts(status: IntrStatus) {
+            if status.0.intr_enable() {
+                enable_interrupts();
+            }
+        }
+
+        pub fn breakpoint() {
+            unsafe {
+                asm!("int3");
+            }
+        }
+
+        pub fn hlt() {
+            unsafe {
+                asm!("hlt");
+            }
+        }
+
+        pub macro int($n:expr) {
+            unsafe {
+                core::arch::asm!(
+                    "int {}",
+                    const $n,
+                );
+            }
+        }
+    } else {
+        pub struct IntrStatus(());
+
+        pub fn disable_interrups() {
+            // Nothing
+        }
+
+        pub fn enable_interrupts() {
+            // Nothing
+        }
+
+        pub fn disable_interrups_save() -> IntrStatus {
+            IntrStatus(())
+        }
+
+        pub fn restore_interrupts(_: IntrStatus) {
+            // Nothing
+        }
     }
 }
 
@@ -42,21 +87,6 @@ pub fn without_interrupts<R, F: FnOnce() -> R>(f: F) -> R {
     let res = f();
     restore_interrupts(flags);
     res
-}
-
-pub fn breakpoint() {
-    unsafe {
-        asm! { "int3" }
-    }
-}
-
-pub macro int($n:expr) {
-    unsafe {
-        core::arch::asm!(
-            "int {}",
-            const $n,
-        );
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, BitfieldSpecifier)]

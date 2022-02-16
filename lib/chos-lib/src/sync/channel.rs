@@ -39,7 +39,7 @@ pub mod oneshot {
     pub fn channel<S: Sem, T>() -> (Sender<T, S>, Receiver<T, S>) {
         let data = Arc::new(ChannelData {
             data: UnsafeCell::new(MaybeUninit::uninit()),
-            sem: S::new_with_count(0),
+            sem: S::with_count(0),
         });
         (Sender { data: data.clone() }, Receiver { data })
     }

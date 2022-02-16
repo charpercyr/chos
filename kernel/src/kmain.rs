@@ -1,19 +1,24 @@
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use chos_lib::intrusive::hash_table;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
+use chos_lib::log::{debug, println, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
+use intrusive_collections::{intrusive_adapter, KeyAdapter};
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::cpumask::init_cpumask;
 use crate::intr::{init_interrupts, init_interrupts_cpu};
+use crate::mm::stack::Stacks;
 use crate::mm::this_cpu_info;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols;
@@ -28,6 +33,7 @@ pub struct KernelArgs {
     pub core_count: usize,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelArgs,
+    pub stacks: Stacks,
 }
 
 struct Logger {
@@ -56,47 +62,50 @@ fn setup_logger() {
 }
 
 pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
-    barrier!(args.core_count);
+    {
+        barrier!(args.core_count);
 
-    if id == 0 {
-        setup_logger();
-        init_cpumask(args.core_count);
+        if id == 0 {
+            setup_logger();
+            init_cpumask(args.core_count);
 
-        debug!();
-        debug!("##############");
-        debug!("### KERNEL ###");
-        debug!("##############");
-        debug!();
-    }
-
-    // ANYTHING THAT NEEDS TO ACCESS LOWER HALF MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-
-    if id == 0 {
-        unsafe {
-            unmap_early_lower_memory(args.mem_info.total_size);
-            init_non_early_memory(args);
+            debug!();
+            debug!("##############");
+            debug!("### KERNEL ###");
+            debug!("##############");
+            debug!();
         }
 
-        add_elf_symbols(
-            virt::STATIC_BASE,
-            &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
-        );
+        // ANYTHING THAT NEEDS TO ACCESS LOWER HALF MEMORY NEEDS TO BE DONE BEFORE THIS POINT
 
-        unsafe { init_interrupts(args) };
+        if id == 0 {
+            unsafe {
+                unmap_early_lower_memory(args.mem_info.total_size);
+                init_non_early_memory(args);
+            }
+
+            add_elf_symbols(
+                virt::STATIC_BASE,
+                &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
+            );
+
+            unsafe { init_interrupts(args) };
+        }
+
+        barrier!(args.core_count);
+
+        unsafe { init_interrupts_cpu(args) };
+
+        // ANYTHING THAT NEEDS TO ACCESS LOWER MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+
+        unsafe { init_kernel_virt() };
+
+        if id == 0 {
+            init_timer(args);
+        }
+
+        barrier!(args.core_count);
     }
 
-    barrier!(args.core_count);
-
-    unsafe { init_interrupts_cpu(args) };
-
-    // ANYTHING THAT NEEDS TO ACCESS LOWER MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-
-    unsafe { init_kernel_virt() };
-
-    if id == 0 {
-        init_timer(args);
-    }
-
-    barrier!(args.core_count);
     enter_schedule()
 }

@@ -1,6 +1,5 @@
 use alloc::collections::binary_heap::PeekMut;
 use alloc::collections::BinaryHeap;
-use chos_lib::log::todo_warn;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
@@ -8,6 +7,7 @@ use core::time::Duration;
 use chos_config::timer::TICKS_HZ;
 use chos_lib::arch::cache::CacheAligned;
 use chos_lib::int::ceil_divu128;
+use chos_lib::log::todo_warn;
 use chos_lib::sync::Spinlock;
 
 use crate::arch::timer::arch_init_timer;

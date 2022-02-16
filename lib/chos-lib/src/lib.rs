@@ -28,6 +28,7 @@
 pub mod access;
 pub mod arch;
 pub mod array;
+pub mod async_;
 pub mod boot;
 mod config;
 pub mod cpumask;
@@ -45,7 +46,6 @@ pub mod str;
 pub mod stride;
 pub mod sync;
 pub mod tar;
-pub mod tuple;
 mod volatile;
 pub use chos_lib_macros::forward_fmt;
 pub use volatile::*;
@@ -57,3 +57,11 @@ extern crate alloc;
 extern crate std;
 
 pub use cfg_if;
+
+#[cfg(test)]
+#[no_mangle]
+extern "C" fn __lock_disable_sched_save() {}
+
+#[cfg(test)]
+#[no_mangle]
+extern "C" fn __lock_restore_sched() {}
