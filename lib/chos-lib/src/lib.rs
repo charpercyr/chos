@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(incomplete_features)]
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
+#![allow(dead_code)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(associated_type_defaults)]
@@ -60,8 +61,8 @@ pub use cfg_if;
 
 #[cfg(test)]
 #[no_mangle]
-extern "C" fn __lock_disable_sched_save() {}
+extern "C" fn __lock_disable_sched_save() -> usize { 0 }
 
 #[cfg(test)]
 #[no_mangle]
-extern "C" fn __lock_restore_sched() {}
+extern "C" fn __lock_restore_sched(_: usize) {}

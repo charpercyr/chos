@@ -2,7 +2,7 @@ use core::fmt::{Arguments, Write};
 
 use cfg_if::cfg_if;
 
-use crate::sync::{RawLock, Lock};
+use crate::sync::{Lock, RawLock};
 
 #[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
@@ -299,4 +299,28 @@ pub macro todo_warn($($args:tt)*) {
 
 pub macro unsafe_todo_warn($($args:tt)*) {
     chos_lib::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), $($args)*)
+}
+
+struct TmpLogHandler {
+    handler: &'static dyn LogHandler,
+}
+impl LogHandler for TmpLogHandler {
+    fn log(&self, args: Arguments, lvl: LogLevel) {
+        self.handler.log(args, lvl)
+    }
+    unsafe fn log_unsafe(&self, args: Arguments, lvl: LogLevel) {
+        self.handler.log_unsafe(args, lvl)
+    }
+}
+
+pub unsafe fn with_logger<'a, L: LogHandler + 'a, R>(l: &'a L, f: impl FnOnce() -> R) -> R {
+    use core::mem::transmute;
+    let handler = TmpLogHandler {
+        handler: transmute(l as *const L as *const (dyn LogHandler + 'a)),
+    };
+    let handler: &dyn LogHandler = &handler;
+    set_handler(transmute(handler));
+    let r = f();
+    clear_handler();
+    r
 }

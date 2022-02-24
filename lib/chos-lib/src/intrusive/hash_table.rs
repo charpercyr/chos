@@ -323,7 +323,7 @@ impl<A: Adapter<LinkOps: HashTableOps>> RawCursor<A> {
     }
 
     unsafe fn get<'a>(self, adapter: &A) -> Option<&'a <A::PointerOps as PointerOps>::Value> {
-        self.cur.map(|link| unsafe { &*adapter.get_value(link) })
+        self.cur.map(|link| &*adapter.get_value(link))
     }
 
     unsafe fn get_mut<'a>(

@@ -21,6 +21,8 @@ impl LogBuffer {
     pub fn write_fmt(&self, fmt: Arguments<'_>) {
         let size = size_of_fmt(fmt);
         let size_bytes = size.to_ne_bytes();
+        drop(size_bytes);
+        todo!()
     }
 }
 

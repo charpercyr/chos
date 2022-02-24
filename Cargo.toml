@@ -8,3 +8,13 @@ members = [
 exclude = [
     "build",
 ]
+
+[workspace.metadata.chos]
+projects = [
+    "boot",
+    # "kernel",
+]
+flags = [
+    "-Zbuild-std=core,alloc",
+    "-Zbuild-std-features=compiler-builtins-mem"
+]

@@ -1,3 +1,5 @@
+tui enable
+focus cmd
 set confirm off
 set pagination off
 set print pretty on

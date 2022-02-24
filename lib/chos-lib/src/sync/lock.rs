@@ -10,8 +10,8 @@ use crate::init::ConstInit;
 
 // I don't like this but it might be the easiest way to add nosched policy short of moving the lock code to the boot & kernel
 extern "Rust" {
-    fn __lock_disable_sched_save() -> u64;
-    fn __lock_restore_sched(v: u64);
+    fn __lock_disable_sched_save() -> usize;
+    fn __lock_restore_sched(v: usize);
 }
 
 pub unsafe trait RawLock {
@@ -52,7 +52,7 @@ impl LockPolicy for NoOpLockPolicy {
 // TODO: Disable sched only
 pub struct NoSchedLockPolicy(());
 impl LockPolicy for NoSchedLockPolicy {
-    type Metadata = u64;
+    type Metadata = usize;
     fn before_lock() -> Self::Metadata {
         unsafe { __lock_disable_sched_save() }
     }

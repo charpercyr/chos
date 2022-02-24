@@ -1,17 +1,13 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use chos_lib::intrusive::hash_table;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, println, LogHandler, TermColorLogHandler};
+use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
-use intrusive_collections::{intrusive_adapter, KeyAdapter};
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;

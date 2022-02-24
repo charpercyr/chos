@@ -51,14 +51,6 @@ pub struct TestOpts {
 }
 
 #[derive(StructOpt, Debug)]
-pub struct LintOpts {
-    #[structopt(flatten)]
-    pub build: BuildOpts,
-    #[structopt(long)]
-    pub clippy_args: Option<Vec<String>>,
-}
-
-#[derive(StructOpt, Debug)]
 pub enum Opts {
     /// Build project
     #[structopt(visible_alias = "b")]
@@ -72,8 +64,6 @@ pub enum Opts {
     /// Test project
     #[structopt(visible_alias = "t")]
     Test(TestOpts),
-    #[structopt(visible_alias = "l")]
-    Lint(LintOpts),
     /// Clean project
     #[structopt(visible_alias = "c")]
     Clean,

@@ -55,9 +55,11 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
     for p in iter.clone() {
         let data = kernel.get_buffer(p.offset() as usize, p.file_size() as usize);
         debug!(
-            "COPY {:08x} - {:08x} to {:08x} - {:08x}",
+            "COPY {:08x} - {:08x} ({:08x} - {:08x}) to {:08x} - {:08x}",
             data.as_ptr() as u64,
             data.as_ptr() as u64 + p.file_size(),
+            p.offset(),
+            p.offset() + p.file_size(),
             phys::KERNEL_DATA_BASE.as_u64() + p.vaddr(),
             phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()
         );

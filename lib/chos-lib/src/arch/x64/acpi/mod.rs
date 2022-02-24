@@ -55,6 +55,39 @@ impl fmt::Debug for SDTHeader {
     }
 }
 
+#[repr(C)]
+pub struct Rsdp {
+    sig: [u8; 8],
+    checksum: u8,
+    oemid: [u8; 6],
+    rev: u8,
+    addr: u32,
+}
+
+impl Rsdp {
+    pub unsafe fn rsdt<'a>(&self) -> Rsdt<'a> {
+        Rsdt::new(self.addr as usize)
+    }
+    pub unsafe fn rsdt_offset<'a>(&self, offset: VAddr) -> Rsdt<'a> {
+        Rsdt::new_offset(self.addr as usize, offset)
+    }
+}
+
+#[repr(C)]
+pub struct Xsdp {
+    rsdp: Rsdp,
+    len: u32,
+    addr: u64,
+    checksum_ext: u8,
+    res: [u8; 3],
+}
+
+impl Xsdp {
+    pub fn rsdp(&self) -> &Rsdp {
+        &self.rsdp
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Rsdt<'a> {
     offset: VAddr,
@@ -112,7 +145,7 @@ impl<'a> Rsdt<'a> {
     unsafe fn find_table<T>(&self, sig: &[u8; 4]) -> Option<&T> {
         self.tables()
             .find(|&sdt| &sdt.sig == sig)
-            .map(|hdr| unsafe { transmute(hdr) })
+            .map(|hdr| transmute(hdr))
     }
 }
 

@@ -6,7 +6,7 @@ pub const CLASS32: u8 = 1;
 pub const CLASS64: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Ident {
     pub magic: [u8; 4],
     pub class: u8,
@@ -18,7 +18,7 @@ pub struct Elf64Ident {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Hdr {
     pub ident: Elf64Ident,
     pub typ: u16,
@@ -37,7 +37,7 @@ pub struct Elf64Hdr {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Shdr {
     pub name: u32,
     pub typ: u32,
@@ -52,7 +52,7 @@ pub struct Elf64Shdr {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Sym {
     pub name: u32,
     pub info: u8,
@@ -63,7 +63,7 @@ pub struct Elf64Sym {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Phdr {
     pub typ: u32,
     pub flags: u32,
@@ -76,14 +76,14 @@ pub struct Elf64Phdr {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Dyn {
     pub tag: u64,
     pub val: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64Rela {
     pub off: u64,
     pub info: u64,
@@ -91,7 +91,7 @@ pub struct Elf64Rela {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct Elf64GnuHash {
     pub nbuckets: u32,
     pub symoffset: u32,

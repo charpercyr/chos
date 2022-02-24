@@ -65,10 +65,10 @@ pub unsafe fn apply_relocations(elf: &Elf) {
     if let Some(dyna) = elf.program().dynamic(elf) {
         let strtab = dyna.strtab(elf);
         if let Some(symtab) = dyna.symtab(elf) {
-            if let Some(rela) = dyna.relaplt(elf) {
+            if let Some(rela) = dyna.rela(elf) {
                 apply_rela(&symtab, &rela, strtab.as_ref());
             }
-            if let Some(rela) = dyna.rela(elf) {
+            if let Some(rela) = dyna.relaplt(elf) {
                 apply_rela(&symtab, &rela, strtab.as_ref());
             }
         }

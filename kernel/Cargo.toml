@@ -31,3 +31,18 @@ features = ["alloc", "nightly"]
 [dependencies.intrusive-collections]
 git = "https://github.com/charpercyr/intrusive-rs"
 features = ["nightly"]
+
+[package.metadata.chos]
+type = "boot"
+target = "../arch/${ARCH}-chos.json"
+deploy = "/chos/chos.elf"
+linker-script = "./arch/${ARCH}/linker.ld"
+copy = [
+    ["./arch/${ARCH}/cmdline.txt", "/chos/cmdline.txt"],
+]
+
+[package.metadata.chos.debug]
+flags = ["--features=chos-lib/log-debug"]
+
+[package.metadata.chos.release]
+flags = ["--features=chos-lib/log-info"]

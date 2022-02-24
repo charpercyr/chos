@@ -80,7 +80,7 @@ pub unsafe trait PerCpu {
     }
 
     unsafe fn with_static<R, F: FnOnce(&'static mut Self::Target) -> R>(&self, f: F) -> R {
-        without_interrupts(move || unsafe { self.with_static_nosave_interrupts(f) })
+        without_interrupts(move || self.with_static_nosave_interrupts(f))
     }
 
     fn with<R, F: FnOnce(&mut Self::Target) -> R>(&self, f: F) -> R {

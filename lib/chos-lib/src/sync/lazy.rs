@@ -169,7 +169,7 @@ impl<T, L: RawLazy> OnceCell<T, L> {
     pub unsafe fn as_mut(&mut self) -> Option<&mut T> {
         self.lazy
             .is_init()
-            .then(move || unsafe { self.as_mut_unchecked() })
+            .then(move || self.as_mut_unchecked())
     }
 
     pub unsafe fn as_mut_unchecked(&mut self) -> &mut T {

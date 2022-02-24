@@ -1,8 +1,0 @@
-
-[build]
-rustflags = ['-Adead_code', '-Zmacro-backtrace']
-
-[target.'cfg(all(target_os = "none", not(test)))']
-runner = "python /home/chrou/chos/script/runner.py"
-
-[target.'cfg(all(target_os = "none", test))']
