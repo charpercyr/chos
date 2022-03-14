@@ -1,0 +1,1 @@
+fs0:\chos-boot.efi

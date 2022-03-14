@@ -6,7 +6,7 @@ use chos_lib::arch::apic::{self, Apic};
 use chos_lib::arch::intr::{enable_interrupts, IoPl};
 use chos_lib::arch::ioapic::{self, IOApic};
 use chos_lib::arch::mm::VAddr;
-use chos_lib::arch::regs::Cr2;
+use chos_lib::arch::regs::CR2;
 use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, PageFaultError, Tss};
 use chos_lib::log::{debug, println};
 use chos_lib::sync::{SpinLazy, SpinOnceCell, Spinlock};
@@ -125,7 +125,7 @@ extern "x86-interrupt" fn intr_page_fault(frame: InterruptStackFrame, error: Pag
         "PAGE FAULT: {:#x?} [{:?}]\nTried to access {:#x}\nRSP = {:#x}",
         frame,
         error,
-        Cr2::read(),
+        CR2.read(),
         rsp()
     );
 }

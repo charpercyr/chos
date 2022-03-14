@@ -12,7 +12,7 @@ exclude = [
 [workspace.metadata.chos]
 projects = [
     "boot",
-    # "kernel",
+    "kernel",
 ]
 flags = [
     "-Zbuild-std=core,alloc",

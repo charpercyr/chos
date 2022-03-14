@@ -31,9 +31,7 @@ impl Madt {
     }
 
     pub fn apic_count(&self) -> usize {
-        self.entries()
-            .filter(|e| matches!(e, Entry::LApic(_)))
-            .count()
+        self.entries().filter_map(Entry::lapic).count()
     }
 
     pub fn lapics(&self) -> impl Iterator<Item = &LAPICEntry> {
@@ -166,6 +164,15 @@ pub enum Entry<'a> {
     Nmi(&'a NmiEntry),
     LApicAddressOverride(&'a LAPICAddressOverrideEntry),
     Unknown(&'a EntryHeader),
+}
+
+impl<'a> Entry<'a> {
+    pub fn lapic(self) -> Option<&'a LAPICEntry> {
+        match self {
+            Self::LApic(lapic) => Some(lapic),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]

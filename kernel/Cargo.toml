@@ -33,12 +33,14 @@ git = "https://github.com/charpercyr/intrusive-rs"
 features = ["nightly"]
 
 [package.metadata.chos]
-type = "boot"
-target = "../arch/${ARCH}-chos.json"
-deploy = "/chos/chos.elf"
-linker-script = "./arch/${ARCH}/linker.ld"
+type = "kernel"
+deploy = ["chos.elf", "/boot/chos.elf"]
+
+[package.metadata.chos.x86_64]
+target = "file:./arch/x86_64/x86_64-chos.json"
+linker-script = "./arch/x86_64/linker.ld"
 copy = [
-    ["./arch/${ARCH}/cmdline.txt", "/chos/cmdline.txt"],
+    ["./arch/x86_64/cmdline.txt", "/boot/cmdline.txt"],
 ]
 
 [package.metadata.chos.debug]

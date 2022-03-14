@@ -37,6 +37,12 @@ impl<H> TermColorLogHandler<H> {
     pub const fn new(h: H) -> Self {
         Self { h }
     }
+    pub fn inner(&self) -> &H {
+        &self.h
+    }
+    pub fn inner_mut(&mut self) -> &mut H {
+        &mut self.h
+    }
     fn apply_fmt<F>(&self, f: F, args: Arguments<'_>, lvl: LogLevel)
     where
         F: Fn(&H, Arguments<'_>, LogLevel),
@@ -88,7 +94,7 @@ pub unsafe fn unsafe_log_impl(args: Arguments<'_>, lvl: LogLevel) {
 }
 
 pub macro print ($($args:tt)*) {
-    $crate::log::log_impl(format_args!($($args)*))
+    $crate::log::log_impl(format_args!($($args)*), $crate::log::LogLevel::Info)
 }
 
 pub macro unsafe_print ($($args:tt)*) {
@@ -195,6 +201,24 @@ cfg_if! {
         pub macro critical ($($args:tt)*) {}
         pub macro unsafe_critical ($($args:tt)*) {}
     }
+}
+
+pub macro here {
+    () => {
+        $crate::log::debug!("@ {}:{}", file!(), line!())
+    },
+    ($($args:tt)*) => {
+        $crate::log::debug!("@ {}:{} {}", file!(), line!(), format_args!($($args)*))
+    },
+}
+
+pub macro unsafe_here {
+    () => {
+        $crate::log::unsafe_debug!("@ {}:{}", file!(), line!())
+    },
+    ($($args:tt)*) => {
+        $crate::log::unsafe_debug!("@ {}:{} {}", file!(), line!(), format_args!($($args)*))
+    },
 }
 
 pub trait Domain {

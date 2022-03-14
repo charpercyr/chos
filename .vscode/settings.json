@@ -1,5 +1,5 @@
 {
-    "rust-analyzer.cargo.target": "arch/x86_64-chos.json",
+    "rust-analyzer.cargo.target": "x86_64-unknown-uefi",
     "rust-analyzer.checkOnSave.allTargets": false,
     "rust-analyzer.cargo.allFeatures": true,
     "rust-analyzer.checkOnSave.extraArgs": [

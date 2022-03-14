@@ -32,9 +32,9 @@ pub struct RunOpts {
     /// Start qemu in debug mode
     #[structopt(long, short = "d")]
     pub debug: bool,
-    #[structopt(long, short, default_value = "4G")]
+    #[structopt(long, short, default_value = "8G")]
     pub mem: String,
-    #[structopt(long, short, default_value = "2")]
+    #[structopt(long, short, default_value = "4")]
     pub smp: usize,
     /// Don't rebuild before deploying
     #[structopt(long)]

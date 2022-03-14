@@ -2,6 +2,7 @@
 #![no_main]
 #![allow(incomplete_features)]
 #![feature(abi_efiapi)]
+#![feature(abi_x86_interrupt)]
 #![feature(decl_macro)]
 #![feature(fn_traits)]
 #![feature(inline_const)]

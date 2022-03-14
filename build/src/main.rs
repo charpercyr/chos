@@ -1,4 +1,5 @@
 #![feature(once_cell)]
+#![feature(path_file_prefix)]
 
 mod build;
 mod clean;
@@ -6,8 +7,8 @@ mod config;
 mod consts;
 mod deploy;
 mod opts;
-mod util;
 mod run;
+mod util;
 
 use std::lazy::SyncLazy;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,7 @@ use config::TargetMatch;
 use deploy::deploy_main;
 use run::run_main;
 use structopt::StructOpt;
+use util::Target;
 
 static ROOT_CONFIG: SyncLazy<PathBuf> =
     SyncLazy::new(|| PathBuf::from_str("./Cargo.toml").unwrap());
@@ -34,10 +36,7 @@ fn expand_glob(path: &Path) -> impl Iterator<Item = PathBuf> {
     vec![path.to_path_buf()].into_iter()
 }
 
-fn find_all_projects(
-    workspace: &config::WorkspaceRoot,
-    target: TargetMatch,
-) -> Vec<Project> {
+fn find_all_projects(workspace: &config::WorkspaceRoot, target_match: TargetMatch) -> Vec<Project> {
     workspace
         .chos
         .projects
@@ -48,18 +47,23 @@ fn find_all_projects(
             let mut path = PathBuf::new();
             path.push(proj.clone());
             path.push("Cargo.toml");
-            let manifest = Manifest::<config::ProjectRoot>::from_path_with_metadata(&path).ok()?;
+            let manifest = Manifest::<config::ProjectRoot>::from_path_with_metadata(&path)
+                .expect("Invalid configuration");
             let package = manifest.package?;
             let name = package.name.clone();
             let config = package.metadata?.chos?;
+            let flags = workspace
+                .chos
+                .flags
+                .get_flags(target_match)
+                .merge(&config.flags.get_flags(target_match));
+            let target =
+                Target::from_base_str(&proj, flags.target.as_ref().expect("Target must be set"));
             Some(Project {
                 name,
                 path: proj,
-                flags: workspace
-                    .chos
-                    .flags
-                    .get_flags(target)
-                    .merge(&config.flags.get_flags(target)),
+                flags,
+                target,
             })
         })
         .collect()
@@ -77,6 +81,7 @@ pub struct Project {
     pub name: String,
     pub path: PathBuf,
     pub flags: config::Flags,
+    pub target: Target,
 }
 
 fn main() {

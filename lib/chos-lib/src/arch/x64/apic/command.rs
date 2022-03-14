@@ -1,5 +1,4 @@
 use core::hint::spin_loop;
-use core::time::Duration;
 
 use super::reg::{
     CommandDeliveryMode, CommandRegister, CommandRegisters, DeliveryStatus, DestinationMode,
@@ -7,6 +6,7 @@ use super::reg::{
 };
 use crate::arch::mm::FrameSize4K;
 use crate::cpumask::Cpumask;
+use crate::duration::Duration64;
 use crate::mm::VFrame;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,18 +141,18 @@ impl InterruptCommand<'_> {
         &mut self,
         lapic_id: u8,
         code: VFrame<FrameSize4K>,
-        delay: impl Fn(Duration),
+        mut delay: impl FnMut(Duration64),
     ) {
         let dst = Destination::physical(lapic_id);
         self.send(dst, Command::init());
         self.send(dst, Command::init_deassert());
 
-        delay(Duration::from_millis(10));
+        delay(Duration64::from_millis(10));
 
         for _ in 0..2 {
             self.send_nowait(dst, Command::sipi(code));
         }
-        delay(Duration::from_micros(200));
+        delay(Duration64::from_micros(200));
         self.wait_for_delivery();
     }
 }

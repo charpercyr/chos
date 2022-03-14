@@ -73,10 +73,6 @@ impl Loopdev {
             fsmount: fsmount.to_path_buf(),
         })
     }
-
-    fn loopdev(&self) -> &Path {
-        &self.loopdev
-    }
 }
 
 impl Drop for Loopdev {
@@ -168,7 +164,7 @@ pub fn deploy(
         copy_file(mount.path(), &binary_path, &deploy.1)?;
 
         for (from, to) in &proj.flags.copy {
-            copy_file(mount.path(), from, to)?;
+            copy_file(mount.path(), &proj.path.join(from), to)?;
         }
     }
 

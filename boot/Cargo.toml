@@ -29,5 +29,9 @@ flags = ["--features=chos-lib/log-debug"]
 flags = ["--features=chos-lib/log-info"]
 
 [package.metadata.chos.x86_64]
-target = "x86_64-unknown-uefi"
-deploy = ["chos-boot.efi", "/boot/EFI/BOOT/BOOTX64.EFI"]
+target = "file:./arch/x86_64/x86_64-chos-uefi.json"
+# target = "x86_64-unknown-uefi"
+deploy = ["chos-boot.efi", "/boot/chos-boot.efi"]
+copy = [
+    ["./arch/x86_64/startup.nsh", "/boot/startup.nsh"]
+]

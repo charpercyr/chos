@@ -8,8 +8,6 @@
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
 #![feature(core_intrinsics)]
-#![feature(const_fn_fn_ptr_basics)]
-#![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]
@@ -33,6 +31,7 @@ pub mod async_;
 pub mod boot;
 mod config;
 pub mod cpumask;
+pub mod duration;
 pub mod elf;
 pub mod fmt;
 pub mod init;
@@ -61,7 +60,9 @@ pub use cfg_if;
 
 #[cfg(test)]
 #[no_mangle]
-extern "C" fn __lock_disable_sched_save() -> usize { 0 }
+extern "C" fn __lock_disable_sched_save() -> usize {
+    0
+}
 
 #[cfg(test)]
 #[no_mangle]

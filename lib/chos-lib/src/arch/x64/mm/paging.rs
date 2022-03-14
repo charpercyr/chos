@@ -4,7 +4,7 @@ use core::slice::{Iter, IterMut};
 use modular_bitfield::prelude::*;
 
 use super::{PAddr, VAddr};
-use crate::arch::regs::{Cr3, Cr3Flags};
+use crate::arch::regs::{CR3, Cr3Flags};
 use crate::config::domain;
 use crate::init::ConstInit;
 use crate::log::domain_debug;
@@ -66,6 +66,14 @@ impl PageTable {
         }
     }
 
+    pub fn inner(&self) -> &[PageEntry; PAGE_TABLE_SIZE] {
+        &self.entries
+    }
+
+    pub fn inner_mut(&mut self) -> &mut [PageEntry; PAGE_TABLE_SIZE] {
+        &mut self.entries
+    }
+
     pub fn iter(&self) -> PageTableIter<'_> {
         PageTableIter {
             iter: self.entries.iter(),
@@ -84,11 +92,11 @@ impl PageTable {
 
     pub unsafe fn set_page_table(addr: PFrame<FrameSize4K>) {
         domain_debug!(domain::PAGE_TABLE, "Using {:?} as page table", addr);
-        Cr3::write(addr, Cr3Flags::empty())
+        CR3.write(addr, Cr3Flags::empty())
     }
 
     pub unsafe fn get_current_page_table() -> PFrame<FrameSize4K> {
-        Cr3::read().0
+        CR3.read().0
     }
 }
 

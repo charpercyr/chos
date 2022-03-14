@@ -42,11 +42,9 @@ macro_rules! match_arch {
 #[macro_export]
 macro_rules! include_asm {
     ($($path:expr),* $(,)?) => {
-        $(
-            core::arch::global_asm!(concat!(
-                ".att_syntax\n",
-                include_str!($path),
-            ));
-        )*
+            core::arch::global_asm!(
+                $(include_str!($path))*,
+                options(raw, att_syntax),
+            );
     };
 }

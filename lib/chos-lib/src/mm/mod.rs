@@ -1,5 +1,7 @@
 use core::fmt::{self, Debug};
 use core::marker::PhantomData;
+use core::mem::size_of;
+use core::slice::from_raw_parts_mut;
 use core::{cmp, hash};
 
 use bitflags::bitflags;
@@ -204,6 +206,38 @@ frame!(VFrame: VAddr);
 impl<S: FrameSize> PFrame<S> {
     pub const fn identity(self) -> VFrame<S> {
         unsafe { VFrame::new_unchecked(self.addr.identity()) }
+    }
+}
+
+impl<S: FrameSize> PFrameRange<S> {
+    pub const fn identity(self) -> VFrameRange<S> {
+        VFrameRange::new(self.start.identity(), self.end.identity())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SizeNotAlignedError;
+impl<S: FrameSize> VFrameRange<S> {
+    pub unsafe fn as_slice_ptr_mut<T>(&self) -> Result<*mut [T], SizeNotAlignedError> {
+        if (self.frame_count() << S::PAGE_SHIFT) % (size_of::<T>() as u64) != 0 {
+            Err(SizeNotAlignedError)
+        } else {
+            let base = self.start.addr.as_mut_ptr();
+            let count = ((self.frame_count() << S::PAGE_SHIFT) as usize) / size_of::<T>();
+            Ok(from_raw_parts_mut(base, count))
+        }
+    }
+
+    pub unsafe fn as_slice_ptr<T>(&self) -> Result<*const [T], SizeNotAlignedError> {
+        self.as_slice_ptr_mut().map(|s| s as *const [T])
+    }
+
+    pub unsafe fn as_slice_mut<'a, T>(&self) -> Result<&'a mut [T], SizeNotAlignedError> {
+        self.as_slice_ptr_mut().map(|s| &mut *s)
+    }
+
+    pub unsafe fn as_slice<'a, T>(&self) -> Result<&'a [T], SizeNotAlignedError> {
+        self.as_slice_ptr().map(|s| &*s)
     }
 }
 

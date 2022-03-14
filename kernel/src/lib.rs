@@ -3,8 +3,6 @@
 #![feature(asm_const)]
 #![feature(associated_type_bounds)]
 #![feature(bool_to_option)]
-#![feature(const_fn_fn_ptr_basics)]
-#![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(core_intrinsics)]
 #![feature(default_alloc_error_handler)]
