@@ -7,8 +7,6 @@
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
 #![feature(core_intrinsics)]
-#![feature(const_fn_fn_ptr_basics)]
-#![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(decl_macro)]
 #![feature(dropck_eyepatch)]

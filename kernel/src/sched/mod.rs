@@ -1,3 +1,5 @@
+pub mod early;
+
 use core::intrinsics::likely;
 use core::sync::atomic::AtomicBool;
 

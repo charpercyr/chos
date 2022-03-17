@@ -7,7 +7,7 @@ use crate::arch::msr::Msr;
 pub struct CS;
 
 impl CS {
-    pub fn get() -> u16 {
+    pub fn read() -> u16 {
         unsafe {
             let value;
             asm! {
@@ -23,32 +23,32 @@ impl CS {
 const FSBASE: Msr = Msr::new(0xc0000100);
 pub struct FS;
 impl FS {
-    pub fn get() -> VAddr {
-        unsafe { VAddr::new_unchecked(FSBASE.read()) }
+    pub fn read() -> VAddr {
+        unsafe { VAddr::new_unchecked(FSBASE.read_raw()) }
     }
-    pub unsafe fn set(addr: VAddr) {
-        FSBASE.write_shared(addr.as_u64())
+    pub unsafe fn write(addr: VAddr) {
+        FSBASE.write_raw_shared(addr.as_u64())
     }
 }
 
 const GSBASE: Msr = Msr::new(0xc0000101);
 pub struct GS;
 impl GS {
-    pub fn get() -> VAddr {
-        unsafe { VAddr::new_unchecked(GSBASE.read()) }
+    pub fn read() -> VAddr {
+        unsafe { VAddr::new_unchecked(GSBASE.read_raw()) }
     }
-    pub unsafe fn set(addr: VAddr) {
-        GSBASE.write_shared(addr.as_u64())
+    pub unsafe fn write(addr: VAddr) {
+        GSBASE.write_raw_shared(addr.as_u64())
     }
 }
 
 const KERNEL_GSBASE: Msr = Msr::new(0xc0000102);
 pub struct KernelGs;
 impl KernelGs {
-    pub fn get() -> VAddr {
-        unsafe { VAddr::new_unchecked(KERNEL_GSBASE.read()) }
+    pub fn read() -> VAddr {
+        unsafe { VAddr::new_unchecked(KERNEL_GSBASE.read_raw()) }
     }
-    pub unsafe fn set(addr: VAddr) {
-        KERNEL_GSBASE.write_shared(addr.as_u64())
+    pub unsafe fn write(addr: VAddr) {
+        KERNEL_GSBASE.write_raw_shared(addr.as_u64())
     }
 }

@@ -25,9 +25,11 @@ MPSTART_16:
     movl $(MPSTART_GDT32_PTR - START + BASE), %eax
     lgdt (%eax)
 
-    // Enable protected mode
     mov %cr0, %eax
-    or $1, %al
+    // Enable protected mode
+    or $1, %eax
+    // Enable write through and cache
+    and $(~(1 << 29 | 1 << 30)), %eax
     mov %eax, %cr0
 
     // Jmp to protected mode, 2nd entry (code segment)

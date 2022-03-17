@@ -112,7 +112,7 @@ impl<'a> Rsdt<'a> {
     unsafe fn find_table<T>(&self, sig: &[u8; 4]) -> Option<&T> {
         self.tables()
             .find(|&sdt| &sdt.sig == sig)
-            .map(|hdr| unsafe { transmute(hdr) })
+            .map(|hdr| transmute(hdr))
     }
 }
 

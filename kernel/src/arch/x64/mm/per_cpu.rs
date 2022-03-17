@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use core::intrinsics::copy_nonoverlapping;
 use core::mem::MaybeUninit;
-use core::ptr::{from_raw_parts, null, write_bytes};
+use core::ptr::write_bytes;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{FrameSize4K, PAddr, VAddr, PAGE_SIZE64};
@@ -28,12 +28,11 @@ struct TlsData {
     phys_tls_base: PAddr,
     kernel_tls_base: VAddr,
     pages: u64,
-    mods_tls_base: *const [u64],
 }
 static mut TLS_DATA: MaybeUninit<&'static [TlsData]> = MaybeUninit::uninit();
 
 pub fn per_cpu_base() -> VAddr {
-    GS::get()
+    GS::read()
 }
 
 pub fn per_cpu_base_for(id: usize) -> VAddr {
@@ -126,7 +125,6 @@ pub unsafe fn init_per_cpu_data(
             pages: total_pages,
             phys_tls_base: pbases[i],
             kernel_tls_base: vbase.add((i as u64) * total_pages).addr(),
-            mods_tls_base: from_raw_parts(null(), 0),
         });
     }
     let tls_data = tls_data.assume_init();
@@ -148,14 +146,14 @@ pub unsafe fn init_per_cpu_data_for_cpu(core_id: usize) {
     let tls_data = *TLS_DATA.assume_init_ref();
     // Check that we have per-cpu data
     if tls_data.len() != 0 {
-        GS::set((&TLS_DATA.assume_init_ref()[core_id]).into())
+        GS::write((&TLS_DATA.assume_init_ref()[core_id]).into())
     }
     CPU_INFO.with_static(|info| {
         *info = CpuInfo { id: core_id };
-        FS::set(info.into());
+        FS::write(info.into());
     });
 }
 
 pub fn arch_this_cpu_info() -> &'static CpuInfo {
-    unsafe { FS::get().as_ref() }
+    unsafe { FS::read().as_ref() }
 }

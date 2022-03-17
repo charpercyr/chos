@@ -1,5 +1,9 @@
+mod efer;
+
 use core::arch::asm;
 use core::marker::PhantomData;
+
+pub use efer::*;
 
 pub use crate::access::*;
 use crate::int::IntSplit;
@@ -12,7 +16,7 @@ impl<P> Msr<P> {
         Self(reg, PhantomData)
     }
 
-    pub unsafe fn read(&self) -> u64
+    pub unsafe fn read_raw(&self) -> u64
     where
         P: ReadAccess,
     {
@@ -27,14 +31,14 @@ impl<P> Msr<P> {
         u64::join(vh, vl)
     }
 
-    pub unsafe fn write(&mut self, v: u64)
+    pub unsafe fn write_raw(&mut self, v: u64)
     where
         P: WriteAccess,
     {
-        self.write_shared(v)
+        self.write_raw_shared(v)
     }
 
-    pub unsafe fn write_shared(&self, v: u64)
+    pub unsafe fn write_raw_shared(&self, v: u64)
     where
         P: WriteAccess,
     {
@@ -47,19 +51,19 @@ impl<P> Msr<P> {
         }
     }
 
-    pub unsafe fn update(&mut self, f: impl FnOnce(&mut u64))
+    pub unsafe fn update_raw(&mut self, f: impl FnOnce(&mut u64))
     where
         P: ReadAccess + WriteAccess,
     {
-        self.update_shared(f)
+        self.update_raw_shared(f)
     }
 
-    pub unsafe fn update_shared(&self, f: impl FnOnce(&mut u64))
+    pub unsafe fn update_raw_shared(&self, f: impl FnOnce(&mut u64))
     where
         P: ReadAccess + WriteAccess,
     {
-        let mut v = self.read();
+        let mut v = self.read_raw();
         f(&mut v);
-        self.write_shared(v);
+        self.write_raw_shared(v);
     }
 }

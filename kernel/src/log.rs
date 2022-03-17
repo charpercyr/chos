@@ -1,7 +1,7 @@
 
 use core::fmt::Arguments;
 
-use chos_lib::fmt::size_of_fmt;
+// use chos_lib::fmt::size_of_fmt;
 use crate::mm::PerCpu;
 
 use crate::mm::per_cpu;
@@ -18,9 +18,8 @@ impl LogBuffer {
         }
     }
 
-    pub fn write_fmt(&self, fmt: Arguments<'_>) {
-        let size = size_of_fmt(fmt);
-        let size_bytes = size.to_ne_bytes();
+    pub fn write_fmt(&self, _fmt: Arguments<'_>) {
+        todo!()
     }
 }
 

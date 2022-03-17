@@ -42,6 +42,7 @@ impl<T> AsyncLock<T> {
     }
 }
 
+#[must_use = "Future do nothing unless awaited"]
 pub struct AsyncLockFut<'lock, T: ?Sized> {
     lock: &'lock AsyncLock<T>,
     fut: AsyncSemWaitFut<'lock>,

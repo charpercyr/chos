@@ -265,7 +265,7 @@ impl<H> Entry<H> {
     where
         H: HandlerFn,
     {
-        let cs = CS::get();
+        let cs = CS::read();
         self.set_handler_gdt_selector(h, cs)
     }
 
