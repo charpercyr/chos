@@ -47,7 +47,7 @@ cfg_if! {
             }
         }
 
-        pub fn hlt() {
+        pub fn wait_for_interrupt() {
             unsafe {
                 asm!("hlt");
             }
@@ -63,6 +63,10 @@ cfg_if! {
         }
     } else {
         pub struct IntrStatus(());
+
+        pub fn wait_for_interrupt() {
+            // Nothing
+        }
 
         pub fn disable_interrups() {
             // Nothing

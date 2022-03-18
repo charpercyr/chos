@@ -90,8 +90,6 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
         }
     }
 
-    // TODO Copy kernel info to heap & unmap lower half
-
     barrier.wait();
 
     if id != 0 {

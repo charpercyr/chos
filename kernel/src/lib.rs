@@ -2,6 +2,7 @@
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(associated_type_bounds)]
+#![feature(bench_black_box)]
 #![feature(bool_to_option)]
 #![feature(const_mut_refs)]
 #![feature(core_intrinsics)]

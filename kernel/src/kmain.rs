@@ -3,12 +3,14 @@ use alloc::string::String;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
+use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
 use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
 
+use crate::arch::asm::call_with_stack;
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
@@ -57,6 +59,13 @@ fn setup_logger() {
     }
 }
 
+unsafe fn do_enter_schedule(stack: VAddr) -> ! {
+    extern "C" fn call_schedule(_: u64, _: u64, _: u64, _: u64) -> ! {
+        enter_schedule();
+    }
+    call_with_stack(call_schedule, stack, 0, 0, 0, 0)
+}
+
 pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     {
         barrier!(args.core_count);
@@ -103,5 +112,8 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
         barrier!(args.core_count);
     }
 
-    enter_schedule()
+    let (base, size) = args.stacks.get_for(id);
+    let stack = base + size;
+
+    unsafe { do_enter_schedule(stack) }
 }

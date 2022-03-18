@@ -3,10 +3,9 @@ use chos_lib::arch::mm::{FrameSize4K, VAddr, PAGE_SIZE64};
 use chos_lib::mm::VFrame;
 use raw_alloc::AllocFlags;
 
+use super::this_cpu_info;
 use crate::arch::early::map_stack;
 use crate::mm::phys::raw_alloc;
-
-use super::this_cpu_info;
 
 const USE_STACK_GUARD_PAGE: bool = true;
 
@@ -40,17 +39,21 @@ unsafe fn allocate_kernel_stack(order: u8) -> VAddr {
     vaddr.addr()
 }
 
-pub unsafe fn allocate_kernel_stacks(stack_count: usize) -> Stacks {
+pub unsafe fn allocate_kernel_stacks_order(stack_count: usize, order: u8) -> Stacks {
     let base = STACKS_BASE;
-    let stride = (PAGE_SIZE64 << stack::KERNEL_STACK_PAGE_ORDER) + PAGE_SIZE64;
+    let stride = (PAGE_SIZE64 << order) + PAGE_SIZE64;
 
     for _ in 0..stack_count {
-        allocate_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER);
+        allocate_kernel_stack(order);
     }
 
     Stacks {
         base: base.addr(),
-        size: PAGE_SIZE64 << stack::KERNEL_STACK_PAGE_ORDER,
+        size: PAGE_SIZE64 << order,
         stride,
     }
+}
+
+pub unsafe fn allocate_kernel_stacks(stack_count: usize) -> Stacks {
+    allocate_kernel_stacks_order(stack_count, stack::KERNEL_STACK_PAGE_ORDER)
 }
