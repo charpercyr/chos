@@ -1,23 +1,50 @@
-
 mod cr;
 mod flags;
 mod seg;
+
+use core::arch::asm;
 
 pub use cr::*;
 pub use flags::*;
 pub use seg::*;
 
+use super::mm::VAddr;
+
+pub struct Rsp;
+
+impl Rsp {
+    #[inline(always)]
+    pub fn read_raw() -> u64 {
+        let rsp;
+        unsafe {
+            asm! {
+                "mov %rsp, {rsp}",
+                rsp = lateout(reg) rsp,
+                options(att_syntax, nomem, nostack),
+            }
+        }
+        rsp
+    }
+
+    #[inline(always)]
+    pub fn read() -> VAddr {
+        unsafe { VAddr::new_unchecked(Self::read_raw()) }
+    }
+}
+
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct IntrRegs {
-    pub user: u64,
-    pub rip: u64,
+    pub error: u64,
+    pub rip: VAddr,
     pub cs: u64,
-    pub flags: Flags,
-    pub rsp: u64,
+    pub rflags: Flags,
+    pub rsp: VAddr,
     pub ss: u64,
 }
 
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct ScratchRegs {
     pub rax: u64,
     pub r11: u64,
@@ -32,6 +59,7 @@ pub struct ScratchRegs {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct AllRegs {
     pub r15: u64,
     pub r14: u64,

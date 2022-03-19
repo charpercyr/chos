@@ -6,8 +6,8 @@ use chos_lib::arch::apic::{self, Apic};
 use chos_lib::arch::intr::{enable_interrupts, IoPl};
 use chos_lib::arch::ioapic::{self, IOApic};
 use chos_lib::arch::mm::VAddr;
-use chos_lib::arch::regs::Cr2;
-use chos_lib::arch::tables::{Descriptor, Gdt, Idt, InterruptStackFrame, PageFaultError, Tss};
+use chos_lib::arch::regs::{Cr2, Rsp, ScratchRegs};
+use chos_lib::arch::tables::{interrupt, Descriptor, Gdt, Idt, PageFaultError, StackFrame, Tss};
 use chos_lib::log::{debug, println};
 use chos_lib::sync::{SpinLazy, SpinOnceCell, Spinlock};
 
@@ -64,10 +64,11 @@ macro_rules! ioapic_intr {
     ($($n:expr),* $(,)?) => {
         paste::item! {
             $(
-                extern "x86-interrupt" fn [<ioapic_intr_ $n>](frame: InterruptStackFrame) {
+                #[interrupt]
+                extern "x86-interrupt" fn [<ioapic_intr_ $n>](frame: &mut StackFrame<ScratchRegs>) {
                     let handler = IOAPIC_INTR_HANDLERS[$n].load(Ordering::Relaxed);
                     if handler != 0 {
-                        let handler: fn(InterruptStackFrame) = unsafe { core::mem::transmute(handler) };
+                        let handler: fn(&mut StackFrame<ScratchRegs>) = unsafe { core::mem::transmute(handler) };
                         handler(frame);
                     }
                     unsafe { LAPIC.as_mut_unchecked().eoi() };
@@ -83,15 +84,16 @@ fn is_addr_in_kernel(addr: VAddr) -> bool {
     addr >= virt::KERNEL_BASE
 }
 
-fn handle_intr_error(frame: InterruptStackFrame) {
-    if is_addr_in_kernel(frame.ip) {
+fn handle_intr_error(frame: &mut StackFrame<ScratchRegs>) {
+    if is_addr_in_kernel(frame.intr.rip) {
         panic!("Error in kernel: {:#?}", frame);
     } else {
         todo!("Handle user errors");
     }
 }
 
-extern "x86-interrupt" fn intr_error(frame: InterruptStackFrame) {
+#[interrupt]
+extern "x86-interrupt" fn intr_error(frame: &mut StackFrame<ScratchRegs>) {
     handle_intr_error(frame);
 }
 
@@ -108,25 +110,35 @@ fn rsp() -> u64 {
     }
 }
 
-extern "x86-interrupt" fn intr_double_fault(frame: InterruptStackFrame, _: u64) -> ! {
+#[interrupt]
+extern "x86-interrupt" fn intr_double_fault(frame: &mut StackFrame<ScratchRegs>, _: u64) -> ! {
     panic!("DOUBLE FAULT: {:#x?}\nRSP = {:#x}", frame, rsp());
 }
 
-extern "x86-interrupt" fn intr_gpf(frame: InterruptStackFrame, _: u64) {
+#[interrupt]
+extern "x86-interrupt" fn intr_gpf(frame: &mut StackFrame<ScratchRegs>, _: u64) {
     handle_intr_error(frame);
 }
 
-extern "x86-interrupt" fn intr_breakpoint(frame: InterruptStackFrame) {
-    debug!("BREAKPOINT @ {:#x}, rsp = {:#x}", frame.ip, frame.sp);
+#[interrupt]
+extern "x86-interrupt" fn intr_breakpoint(frame: &mut StackFrame<ScratchRegs>) {
+    debug!(
+        "BREAKPOINT @ {:#x}, rsp = {:#x}",
+        frame.intr.rip, frame.intr.rsp
+    );
 }
 
-extern "x86-interrupt" fn intr_page_fault(frame: InterruptStackFrame, error: PageFaultError) {
+#[interrupt]
+extern "x86-interrupt" fn intr_page_fault(
+    frame: &mut StackFrame<ScratchRegs>,
+    error: PageFaultError,
+) {
     panic!(
         "PAGE FAULT: {:#x?} [{:?}]\nTried to access {:#x}\nRSP = {:#x}",
         frame,
         error,
         Cr2::read(),
-        rsp()
+        Rsp::read(),
     );
 }
 
@@ -182,7 +194,8 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
     idt[(IOAPIC_IDT_BASE + 23) as usize].set_handler(ioapic_intr_23);
 
     idt[0x80].set_handler({
-        extern "x86-interrupt" fn callback(_: InterruptStackFrame) {
+        #[interrupt]
+        extern "x86-interrupt" fn callback(_: &mut StackFrame) {
             println!("Hello");
             unsafe { LAPIC.as_mut_unchecked().eoi() };
         }
@@ -281,7 +294,7 @@ pub struct IoApicAllocateError;
 
 pub fn allocate_ioapic_interrupt(
     mut mask: u64,
-    intr_fn: fn(InterruptStackFrame),
+    intr_fn: fn(&mut StackFrame<ScratchRegs>),
     dest: ioapic::Destination,
 ) -> Result<u8, IoApicAllocateError> {
     let mut ioapic = IOAPIC.try_get().expect("IOApic not initialized").lock();

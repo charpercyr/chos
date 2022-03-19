@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 use core::slice::from_raw_parts;
 
-use chos_lib::elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType};
+use chos_lib::{elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType}, arch::mm::VAddr};
 use multiboot2 as mb;
 
 static mut ELF_INITIALIZED: bool = false;
@@ -42,8 +42,8 @@ pub fn init_symbols(sections: mb::ElfSectionsTag) {
     }
 }
 
-pub fn find_symbol(addr: usize) -> Option<(&'static str, usize)> {
-    let addr = addr as u64;
+pub fn find_symbol(addr: VAddr) -> Option<(&'static str, usize)> {
+    let addr = addr.as_u64();
     if let Some((symt, strt)) = unsafe { get_tables() } {
         symt.iter()
             .find(|s| {

@@ -1,7 +1,6 @@
 use core::arch::asm;
 use core::convert::TryInto;
 use core::fmt;
-use core::intrinsics::transmute;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::{Deref, Index, IndexMut};
@@ -11,38 +10,27 @@ use bitflags::bitflags;
 
 use super::DescriptorRegister;
 use crate::arch::intr::IoPl;
-use crate::arch::mm::VAddr;
-use crate::arch::regs::{Flags, CS};
+use crate::arch::regs::{ScratchRegs, CS};
 use crate::config::domain;
 use crate::log::domain_debug;
 use crate::Volatile;
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Debug)]
-pub struct InterruptStackFrameValue {
-    pub ip: VAddr,
-    pub cs: usize,
-    pub flags: Flags,
-    pub sp: VAddr,
-    pub ss: usize,
+pub struct StackFrame<Regs = ScratchRegs> {
+    regs: Regs,
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct InterruptStackFrame {
-    value: InterruptStackFrameValue,
-}
-
-impl InterruptStackFrame {
-    pub unsafe fn as_mut(&mut self) -> &mut Volatile<InterruptStackFrameValue> {
-        transmute(&mut self.value)
+impl<Regs> StackFrame<Regs> {
+    pub unsafe fn as_mut(&mut self) -> &mut Volatile<Regs> {
+        Volatile::from_mut(&mut self.regs)
     }
 }
 
-impl Deref for InterruptStackFrame {
-    type Target = InterruptStackFrameValue;
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl<Regs> Deref for StackFrame<Regs> {
+    type Target = Regs;
+    fn deref(&self) -> &Regs {
+        &self.regs
     }
 }
 
@@ -61,26 +49,42 @@ bitflags! {
     }
 }
 
-pub type Handler = extern "x86-interrupt" fn(InterruptStackFrame);
-pub type NoReturnHandler = extern "x86-interrupt" fn(InterruptStackFrame) -> !;
-pub type HandlerWithError = extern "x86-interrupt" fn(InterruptStackFrame, u64);
-pub type NoReturnHandlerWithError = extern "x86-interrupt" fn(InterruptStackFrame, u64) -> !;
-pub type PageFaultHandler = extern "x86-interrupt" fn(InterruptStackFrame, PageFaultError);
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct HandlerFn<F>(F);
+impl<F> HandlerFn<F> {
+    /**
+     * DO NOT CALL THIS DIRECTLY, USE THE #[interrupt] attribute instead, it generates the right code for handling an interrupt.
+     */
+    pub const unsafe fn new(f: F) -> Self {
+        Self(f)
+    }
+    pub fn into_inner(self) -> F {
+        self.0
+    }
+}
+
+pub type Handler = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>)>;
+pub type HandlerNoReturn = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>) -> !>;
+pub type HandlerError = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, u64)>;
+pub type HandlerErrorNoReturn = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, u64) -> !>;
+pub type HandlerPageFault = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, PageFaultError)>;
 
 mod private {
     pub trait Sealed {}
 }
-pub trait HandlerFn: private::Sealed {
+
+pub trait HandlerFnCast: private::Sealed {
     fn to_u64(self) -> u64;
 }
 macro_rules! handler_fns {
     ($($h:ty),* $(,)?) => {
         $(
             impl private::Sealed for $h {}
-            impl HandlerFn for $h {
+            impl HandlerFnCast for $h {
                 #[inline]
                 fn to_u64(self) -> u64 {
-                    self as u64
+                    self.into_inner() as u64
                 }
             }
         )*
@@ -88,10 +92,10 @@ macro_rules! handler_fns {
 }
 handler_fns!(
     Handler,
-    NoReturnHandler,
-    HandlerWithError,
-    NoReturnHandlerWithError,
-    PageFaultHandler,
+    HandlerNoReturn,
+    HandlerError,
+    HandlerErrorNoReturn,
+    HandlerPageFault,
 );
 
 #[repr(C, align(16))]
@@ -105,22 +109,22 @@ pub struct Idt {
     /* 05 */ pub bound_range_exceeded: Entry<Handler>,
     /* 06 */ pub invalid_opcode: Entry<Handler>,
     /* 07 */ pub device_not_available: Entry<Handler>,
-    /* 08 */ pub double_fault: Entry<NoReturnHandlerWithError>,
+    /* 08 */ pub double_fault: Entry<HandlerErrorNoReturn>,
     /* 09 */ coprocessor_segment_overrun: Entry<Handler>,
-    /* 10 */ pub invalid_tss: Entry<HandlerWithError>,
-    /* 11 */ pub segment_not_present: Entry<HandlerWithError>,
-    /* 12 */ pub stack_segment_fault: Entry<HandlerWithError>,
-    /* 13 */ pub general_protection_fault: Entry<HandlerWithError>,
-    /* 14 */ pub page_fault: Entry<PageFaultHandler>,
+    /* 10 */ pub invalid_tss: Entry<HandlerError>,
+    /* 11 */ pub segment_not_present: Entry<HandlerError>,
+    /* 12 */ pub stack_segment_fault: Entry<HandlerError>,
+    /* 13 */ pub general_protection_fault: Entry<HandlerError>,
+    /* 14 */ pub page_fault: Entry<HandlerPageFault>,
     res1: Entry<Handler>,
     /* 16 */ pub x87_floating_point: Entry<Handler>,
-    /* 17 */ pub alignment_check: Entry<HandlerWithError>,
-    /* 18 */ pub machine_check: Entry<NoReturnHandler>,
+    /* 17 */ pub alignment_check: Entry<HandlerError>,
+    /* 18 */ pub machine_check: Entry<HandlerError>,
     /* 19 */ pub simd_floating_point: Entry<Handler>,
     /* 20 */ pub virtualization: Entry<Handler>,
     res2: [Entry<Handler>; 8],
-    /* 29 */ pub vmm_communication_exception: Entry<HandlerWithError>,
-    /* 30 */ pub security_exception: Entry<HandlerWithError>,
+    /* 29 */ pub vmm_communication_exception: Entry<HandlerError>,
+    /* 30 */ pub security_exception: Entry<HandlerError>,
     res3: Entry<Handler>,
     pub interrupts: [Entry<Handler>; 256 - 32],
 }
@@ -214,7 +218,8 @@ impl EntryOptions {
     }
 
     pub fn set_stack_index(&mut self, idx: Option<u8>) -> &mut Self {
-        self.0.set_bits(0..3, idx.map(|idx| idx + 1).unwrap_or(0) as u16);
+        self.0
+            .set_bits(0..3, idx.map(|idx| idx + 1).unwrap_or(0) as u16);
         self
     }
 }
@@ -263,7 +268,7 @@ impl<H> Entry<H> {
 
     pub fn set_handler(&mut self, h: H) -> &mut EntryOptions
     where
-        H: HandlerFn,
+        H: HandlerFnCast,
     {
         let cs = CS::read();
         self.set_handler_gdt_selector(h, cs)
@@ -271,7 +276,7 @@ impl<H> Entry<H> {
 
     pub fn set_handler_gdt_selector(&mut self, h: H, gdt_selector: u16) -> &mut EntryOptions
     where
-        H: HandlerFn,
+        H: HandlerFnCast,
     {
         let h = h.to_u64();
         self.pointer_low = h.get_bits(0..16) as u16;
@@ -297,3 +302,5 @@ impl<H> fmt::Debug for Entry<H> {
             .finish()
     }
 }
+
+pub use chos_lib_macros::interrupt;

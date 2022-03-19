@@ -4,7 +4,8 @@ use chos_config::arch::mm::virt;
 use chos_lib::arch::acpi::Rsdt;
 use chos_lib::arch::hpet::{Hpet, TimerType};
 use chos_lib::arch::ioapic;
-use chos_lib::arch::tables::InterruptStackFrame;
+use chos_lib::arch::regs::ScratchRegs;
+use chos_lib::arch::tables::StackFrame;
 use chos_lib::int::CeilDiv;
 
 use super::intr::allocate_ioapic_interrupt;
@@ -14,7 +15,7 @@ use crate::timer::{on_tick, on_tick_main_cpu, NS_PER_TICKS};
 
 static mut HPET: MaybeUninit<Hpet> = MaybeUninit::uninit();
 
-fn timer_callback(_: InterruptStackFrame) {
+fn timer_callback(_: &mut StackFrame<ScratchRegs>) {
     let id = this_cpu_info().id;
     if id == 0 {
         on_tick_main_cpu();

@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
 use chos_lib::arch::mm::VAddr;
-use chos_lib::arch::tables::InterruptStackFrame;
+use chos_lib::arch::tables::{interrupt, StackFrame};
 use chos_lib::arch::x64::acpi::hpet::Hpet;
 use chos_lib::sync::{Sem, SpinSem};
 
@@ -11,7 +11,8 @@ static DONE: SpinSem = SpinSem::new(0);
 
 const IOAPIC_TIMER_ROUTE: u8 = 8;
 
-extern "x86-interrupt" fn timer_callback(_: InterruptStackFrame) {
+#[interrupt]
+extern "x86-interrupt" fn timer_callback(_: &mut StackFrame) {
     DONE.signal();
     unsafe {
         super::intr::eoi();

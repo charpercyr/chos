@@ -3,8 +3,8 @@ use core::mem::MaybeUninit;
 use chos_lib::arch::intr::enable_interrupts;
 use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::port::PortWriteOnly;
-use chos_lib::arch::regs::Cr2;
-use chos_lib::arch::tables::{Handler, Idt, InterruptStackFrame, PageFaultError};
+use chos_lib::arch::regs::{Cr2, ScratchRegs};
+use chos_lib::arch::tables::{interrupt, Handler, Idt, PageFaultError, StackFrame};
 use chos_lib::arch::x64::acpi::madt::{self, Madt};
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::arch::x64::intr::without_interrupts;
@@ -14,41 +14,47 @@ use rustc_demangle::demangle;
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
 
-extern "x86-interrupt" fn intr_breakpoint(f: InterruptStackFrame) {
+#[interrupt]
+extern "x86-interrupt" fn intr_breakpoint(f: &mut StackFrame<ScratchRegs>) {
     unsafe { crate::unsafe_println!("BREAKPOINT: {:#x?}", f) };
 }
 
-extern "x86-interrupt" fn intr_double_fault(f: InterruptStackFrame, _: u64) -> ! {
+#[interrupt]
+extern "x86-interrupt" fn intr_double_fault(f: &mut StackFrame<ScratchRegs>, _: u64) -> ! {
     panic!("DOUBLE FAULT: {:#x?}", f);
 }
 
-extern "x86-interrupt" fn intr_page_fault(f: InterruptStackFrame, e: PageFaultError) {
+#[interrupt]
+extern "x86-interrupt" fn intr_page_fault(f: &mut StackFrame<ScratchRegs>, e: PageFaultError) {
     use crate::unsafe_println;
     unsafe {
-        if let Some((name, offset)) = super::symbols::find_symbol(f.ip.as_u64() as _) {
+        if let Some((name, offset)) = super::symbols::find_symbol(f.intr.rip) {
             unsafe_println!(
                 "PAGE FAULT @ 0x{:x} [{:#} + 0x{:x}]",
-                f.ip,
+                f.intr.rip,
                 demangle(name),
                 offset,
             )
         } else {
-            unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.ip);
+            unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.intr.rip);
         }
         unsafe_println!("Tried to access 0x{:x} : {:?}", Cr2::read(), e);
     }
     panic!();
 }
 
-extern "x86-interrupt" fn intr_general_protection_fault(f: InterruptStackFrame, _: u64) {
+#[interrupt]
+extern "x86-interrupt" fn intr_general_protection_fault(f: &mut StackFrame<ScratchRegs>, _: u64) {
     panic!("GPF: {:#x?}", f);
 }
 
-extern "x86-interrupt" fn intr_invalid_opcode(f: InterruptStackFrame) {
+#[interrupt]
+extern "x86-interrupt" fn intr_invalid_opcode(f: &mut StackFrame<ScratchRegs>) {
     panic!("Invalid Instruction: {:#x?}", f)
 }
 
-extern "x86-interrupt" fn intr_spurious(_: InterruptStackFrame) {
+#[interrupt]
+extern "x86-interrupt" fn intr_spurious(_: &mut StackFrame<ScratchRegs>) {
     // Nothing
 }
 
