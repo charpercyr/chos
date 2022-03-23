@@ -2,8 +2,8 @@ use core::mem::size_of;
 use core::ptr::write;
 
 use chos_lib::arch::mm::FrameSize4K;
-use chos_lib::arch::x64::mm::{PAddr, PageTable, VAddr, PAGE_SIZE64};
-use chos_lib::log::{info, debug};
+use chos_lib::arch::x64::mm::{PageTable, PAGE_SIZE64};
+use chos_lib::log::{debug, info};
 use chos_lib::mm::*;
 
 use super::mapper::BootMapper;

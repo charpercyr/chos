@@ -1,15 +1,15 @@
 use chos_lib::arch::intr::wait_for_interrupt;
-use chos_lib::arch::mm::VAddr;
+use chos_lib::mm::VAddr;
 use chos_lib::log::debug;
 use chos_lib::sync::SpinLazy;
 
 use super::{Task, TaskArc};
 use crate::cpumask::cpu_count;
-use crate::mm::stack::{allocate_kernel_stacks_order, Stacks};
+use crate::early::{allocate_early_stacks_order, EarlyStacks};
 use crate::mm::{per_cpu_lazy, PerCpu};
 
-static IDLE_STACKS_STRUCT: SpinLazy<Stacks> =
-    SpinLazy::new(|| unsafe { allocate_kernel_stacks_order(cpu_count(), 0) });
+static IDLE_STACKS_STRUCT: SpinLazy<EarlyStacks> =
+    SpinLazy::new(|| unsafe { allocate_early_stacks_order(cpu_count(), 0) });
 
 per_cpu_lazy! {
     static mut ref IDLE_STACK: VAddr = {

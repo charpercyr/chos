@@ -5,7 +5,7 @@ use core::mem::MaybeUninit;
 use modular_bitfield::specifiers::*;
 use modular_bitfield::{bitfield, BitfieldSpecifier};
 
-use super::mm::VAddr;
+use crate::mm::VAddr;
 use crate::{PaddedVolatile, ReadOnly, ReadWrite, Volatile};
 
 #[bitfield(bits = 64)]

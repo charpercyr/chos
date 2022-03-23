@@ -5,7 +5,7 @@ use core::ptr::{read, write, write_bytes, NonNull};
 use core::slice::from_raw_parts_mut;
 
 use bitvec::slice::BitSlice;
-use chos_lib::arch::mm::VAddr;
+use chos_lib::mm::VAddr;
 use chos_lib::init::ConstInit;
 use chos_lib::int::{align_upusize, ceil_divusize};
 use chos_lib::pool::Pool;

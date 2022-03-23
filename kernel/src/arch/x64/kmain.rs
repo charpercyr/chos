@@ -9,6 +9,6 @@ pub struct ArchKernelArgs {
 
 impl ArchKernelArgs {
     pub unsafe fn rsdt(&self) -> Rsdt<'_> {
-        Rsdt::new_offset(self.rsdt, virt::PHYSICAL_MAP_BASE)
+        Rsdt::new_offset(self.rsdt, virt::PHYSICAL_MAP_BASE.addr())
     }
 }

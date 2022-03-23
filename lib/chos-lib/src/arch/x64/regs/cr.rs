@@ -2,8 +2,8 @@ use core::arch::asm;
 
 use bitflags::bitflags;
 
-use crate::arch::mm::{FrameSize4K, PAddr, VAddr, PAGE_MASK};
-use crate::mm::PFrame;
+use crate::arch::mm::{FrameSize4K, PAGE_MASK};
+use crate::mm::{PFrame, VAddr, PAddr};
 
 macro cr_read($reg:expr) {{
     let cr: u64;

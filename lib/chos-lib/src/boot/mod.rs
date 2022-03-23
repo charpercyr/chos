@@ -1,7 +1,7 @@
 use core::ptr::NonNull;
 
 use crate::arch::boot::ArchKernelBootInfo;
-use crate::arch::x64::mm::PAddr;
+use crate::mm::PAddr;
 use crate::log::LogHandler;
 
 #[derive(Copy, Clone, Debug)]

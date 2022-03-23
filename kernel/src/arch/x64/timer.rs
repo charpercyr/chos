@@ -4,7 +4,6 @@ use chos_config::arch::mm::virt;
 use chos_lib::arch::acpi::Rsdt;
 use chos_lib::arch::hpet::{Hpet, TimerType};
 use chos_lib::arch::ioapic;
-use chos_lib::arch::regs::ScratchRegs;
 use chos_lib::arch::tables::StackFrame;
 use chos_lib::int::CeilDiv;
 
@@ -15,7 +14,7 @@ use crate::timer::{on_tick, on_tick_main_cpu, NS_PER_TICKS};
 
 static mut HPET: MaybeUninit<Hpet> = MaybeUninit::uninit();
 
-fn timer_callback(_: &mut StackFrame<ScratchRegs>) {
+fn timer_callback(_: StackFrame) {
     let id = this_cpu_info().id;
     if id == 0 {
         on_tick_main_cpu();
@@ -25,10 +24,10 @@ fn timer_callback(_: &mut StackFrame<ScratchRegs>) {
 }
 
 pub fn arch_init_timer(args: &KernelArgs) {
-    let rsdt = unsafe { Rsdt::new_offset(args.arch.rsdt, virt::PHYSICAL_MAP_BASE) };
+    let rsdt = unsafe { Rsdt::new_offset(args.arch.rsdt, virt::PHYSICAL_MAP_BASE.addr()) };
     let hpet_tbl = rsdt.hpet().expect("Need HPET table");
 
-    let mut hpet = unsafe { Hpet::new(virt::DEVICE_BASE + hpet_tbl.address as u64) };
+    let mut hpet = unsafe { Hpet::new(virt::DEVICE_BASE.addr() + hpet_tbl.address as u64) };
 
     unsafe {
         let comparator = (NS_PER_TICKS * 1_000_000).ceil_div(hpet.period() as u64);

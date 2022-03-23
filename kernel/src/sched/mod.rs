@@ -7,9 +7,10 @@ use core::intrinsics::likely;
 use core::ptr::NonNull;
 use core::sync::atomic::AtomicBool;
 
-use chos_lib::arch::mm::VAddr;
+use chos_lib::arch::intr::wait_for_interrupt;
 use chos_lib::init::ConstInit;
 use chos_lib::log::debug;
+use chos_lib::mm::VAddr;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
 use intrusive_collections::LinkedListAtomicLink;
 
@@ -63,14 +64,10 @@ chos_lib::intrusive_adapter!(TaskAdapter = TaskArc: Task { link: LinkedListAtomi
 
 pub fn schedule() {
     const SCHEDULERS: [fn() -> Option<TaskArc>; 2] = [ktask::find_next_task, idle::find_next_task];
-    let mut next_task = None;
-    for sched in &SCHEDULERS {
-        if let Some(task) = sched() {
-            next_task = Some(task);
-            break;
-        }
-    }
-    let next_task = next_task.expect("Should always have a task to schedule");
+    let next_task = SCHEDULERS
+        .iter()
+        .find_map(|scheduler| scheduler())
+        .expect("Should always have a task to schedule");
     debug!(
         "Scheduling task name '{}'",
         next_task.debug_name().unwrap_or("<unknown>")
@@ -82,7 +79,9 @@ pub fn enter_schedule() -> ! {
     IN_SCHED.store(true, core::sync::atomic::Ordering::Relaxed);
     debug!("enter_schedule()");
     schedule();
-    loop {}
+    loop {
+        wait_for_interrupt();
+    }
     // unreachable!();
 }
 
@@ -106,14 +105,22 @@ fn in_sched() -> bool {
 fn __lock_disable_sched_save() -> u64 {
     if likely(in_sched()) {
         SCHED_DISABLE.with(|v| *v += 1);
+        true
+    } else {
+        false
     }
-    0
+    .into()
 }
 
 #[no_mangle]
 #[inline]
-fn __lock_restore_sched(_: u64) {
-    if likely(in_sched()) {
+fn __lock_restore_sched(in_sched: u64) {
+    let in_sched = match in_sched {
+        0 => false,
+        1 => true,
+        _ => panic!("Invalid value for in_sched"),
+    };
+    if likely(in_sched) {
         SCHED_DISABLE.with(|v| *v -= 1);
     }
 }

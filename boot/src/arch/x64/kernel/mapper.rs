@@ -1,7 +1,6 @@
 use chos_lib::arch::mm::{FrameSize1G, OffsetMapper};
-use chos_lib::arch::x64::mm::PAddr;
 use chos_lib::mm::{
-    LoggingMapper, MapFlags, MapperFlush, PFrame, PFrameRange, RangeMapper, VFrame,
+    LoggingMapper, MapFlags, MapperFlush, PAddr, PFrame, PFrameRange, RangeMapper, VFrame,
 };
 use multiboot2::MemoryMapTag;
 

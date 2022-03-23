@@ -1,8 +1,8 @@
 use chos_lib::arch::intr::without_interrupts;
-use chos_lib::arch::mm::{PAddr, VAddr};
+use chos_lib::mm::{PAddr, VAddr};
 
 use super::virt::paddr_of;
-use crate::arch::mm::per_cpu::{per_cpu_base, per_cpu_base_for, arch_this_cpu_info};
+use crate::arch::mm::per_cpu::{arch_this_cpu_info, per_cpu_base, per_cpu_base_for};
 
 pub macro per_cpu ($($(pub $(($($vis:tt)*))?)? static mut ref $name:ident: $ty:ty = $init:expr;)*) {
     paste::item! {
@@ -75,7 +75,7 @@ pub unsafe trait PerCpu {
         unsafe {
             let (addr, _) = self.get().to_raw_parts();
             let vaddr = VAddr::new_unchecked(addr as u64);
-            paddr_of(vaddr, super::virt::MemoryRegion::PerCpu).expect("PAddr should be valid")
+            paddr_of(vaddr, super::virt::MemoryRegionType::PerCpu).expect("PAddr should be valid")
         }
     }
 
@@ -110,11 +110,17 @@ pub unsafe trait PerCpu {
         }
     }
 
-    fn clone(&self) -> Self::Target where Self::Target: Clone {
+    fn clone(&self) -> Self::Target
+    where
+        Self::Target: Clone,
+    {
         self.with(|v| v.clone())
     }
 
-    fn copy(&self) -> Self::Target where Self::Target: Copy {
+    fn copy(&self) -> Self::Target
+    where
+        Self::Target: Copy,
+    {
         self.with(|v| *v)
     }
 }

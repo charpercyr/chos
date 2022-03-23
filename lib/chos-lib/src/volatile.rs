@@ -1,36 +1,35 @@
 use core::intrinsics::{unaligned_volatile_load, unaligned_volatile_store, volatile_copy_memory};
 use core::marker::PhantomData;
 use core::mem::{forget, transmute, ManuallyDrop, MaybeUninit};
-use core::ptr;
+use core::{ptr, slice};
 
 pub use crate::access::*;
+use crate::init::ConstInit;
 
 #[repr(transparent)]
-pub struct Volatile<T, P = ReadWrite>(T, PhantomData<P>);
+pub struct Volatile<T: ?Sized, A = ReadWrite> {
+    access: PhantomData<A>,
+    value: T,
+}
 
-impl<T, P> Volatile<T, P> {
+impl<T, A> Volatile<T, A> {
     pub const fn new(value: T) -> Self {
-        Self(value, PhantomData)
-    }
-
-    pub const fn from_ref(r: &T) -> &Self {
-        unsafe { transmute(r) }
-    }
-
-    pub const fn from_mut(r: &mut T) -> &mut Self {
-        unsafe { transmute(r) }
+        Self {
+            access: PhantomData,
+            value,
+        }
     }
 
     pub fn write(&mut self, value: T)
     where
-        P: WriteAccess,
+        A: WriteAccess,
     {
-        unsafe { ptr::write_volatile(&mut self.0, value) }
+        unsafe { ptr::write_volatile(&mut self.value, value) }
     }
 
     pub unsafe fn write_unaligned(this: *mut Self, value: T)
     where
-        P: WriteAccess,
+        A: WriteAccess,
     {
         unaligned_volatile_store(this.cast(), value)
     }
@@ -38,50 +37,134 @@ impl<T, P> Volatile<T, P> {
     pub fn read(&self) -> T
     where
         T: Copy,
-        P: ReadAccess,
+        A: ReadAccess,
     {
-        unsafe { ptr::read_volatile(&self.0) }
+        unsafe { ptr::read_volatile(&self.value) }
     }
 
     pub unsafe fn read_unaligned(this: *const Self) -> T
     where
         T: Copy,
-        P: ReadAccess,
+        A: ReadAccess,
     {
         unaligned_volatile_load(this.cast())
     }
 
     pub fn update<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R
     where
-        P: ReadAccess + WriteAccess,
+        A: ReadAccess + WriteAccess,
     {
         unsafe {
-            let mut v = ptr::read_volatile(&self.0);
+            let mut v = ptr::read_volatile(&self.value);
             let r = f(&mut v);
-            ptr::write_volatile(&mut self.0, v);
+            ptr::write_volatile(&mut self.value, v);
             r
         }
     }
 
+    pub unsafe fn update_unaligned<R>(this: *mut Self, f: impl FnOnce(&mut T) -> R) -> R {
+        let mut v = unaligned_volatile_load(this.cast());
+        let r = f(&mut v);
+        unaligned_volatile_store(this.cast(), v);
+        r
+    }
+
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R
     where
-        P: ReadAccess,
+        A: ReadAccess,
     {
-        let v = unsafe { ptr::read_volatile(&self.0) };
+        let v = unsafe { ptr::read_volatile(&self.value) };
         let r = f(&v);
         forget(v);
         r
     }
 
     pub fn into_inner(self) -> T {
-        self.0
+        self.value
+    }
+}
+
+impl<T: ?Sized, A> Volatile<T, A> {
+    pub const fn from_ref(r: &T) -> &Self {
+        unsafe { transmute(r) }
+    }
+
+    pub const fn from_mut(r: &mut T) -> &mut Self {
+        unsafe { transmute(r) }
+    }
+}
+
+impl<T, A, const N: usize> Volatile<[T; N], A> {
+    pub const fn as_array_of_volatile(&self) -> &[Volatile<T, A>; N] {
+        unsafe { transmute(self) }
+    }
+    pub const fn as_array_of_volatile_mut(&mut self) -> &mut [Volatile<T, A>; N] {
+        unsafe { transmute(self) }
+    }
+
+    pub fn copy_array(dst: &mut Self, src: &Self) {
+        unsafe { volatile_copy_memory(dst.value.as_mut_ptr(), src.value.as_ptr(), N) }
+    }
+
+    pub const fn len(&self) -> usize {
+        N
+    }
+}
+
+impl<T, A> Volatile<[T], A> {
+    pub const fn as_slice_of_volatile(&self) -> &[Volatile<T, A>] {
+        unsafe { transmute(self) }
+    }
+
+    pub const fn as_slice_of_volatile_mut(&mut self) -> &mut [Volatile<T, A>] {
+        unsafe { transmute(self) }
+    }
+
+    pub fn copy_slice(dst: &mut Self, src: &Self) {
+        assert!(dst.value.len() == src.value.len());
+        unsafe { volatile_copy_memory(dst.value.as_mut_ptr(), src.value.as_ptr(), dst.value.len()) }
+    }
+
+    pub fn iter(&self) -> slice::Iter<'_, Volatile<T, A>> {
+        self.as_slice_of_volatile().iter()
+    }
+
+    pub fn iter_mut(&mut self) -> slice::IterMut<'_, Volatile<T, A>> {
+        self.as_slice_of_volatile_mut().iter_mut()
+    }
+
+    pub fn len(&self) -> usize {
+        self.value.len()
+    }
+}
+
+impl<'a, T, A> IntoIterator for &'a Volatile<[T], A> {
+    type IntoIter = slice::Iter<'a, Volatile<T, A>>;
+    type Item = &'a Volatile<T, A>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a, T, A> IntoIterator for &'a mut Volatile<[T], A> {
+    type IntoIter = slice::IterMut<'a, Volatile<T, A>>;
+    type Item = &'a mut Volatile<T, A>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
     }
 }
 
 impl<T, P> From<T> for Volatile<T, P> {
     fn from(value: T) -> Self {
-        Self(value, PhantomData)
+        Self {
+            access: PhantomData,
+            value,
+        }
     }
+}
+
+impl<T: ConstInit, A> ConstInit for Volatile<T, A> {
+    const INIT: Self = Self::new(T::INIT);
 }
 
 pub unsafe fn copy_volatile<T: Copy, PS: ReadAccess, PD: WriteAccess>(
@@ -89,7 +172,7 @@ pub unsafe fn copy_volatile<T: Copy, PS: ReadAccess, PD: WriteAccess>(
     dst: *mut Volatile<T, PD>,
     count: usize,
 ) {
-    volatile_copy_memory::<T>(&mut (*dst).0, &(*src).0, count)
+    volatile_copy_memory::<T>(&mut (*dst).value, &(*src).value, count)
 }
 
 crate::forward_fmt!(

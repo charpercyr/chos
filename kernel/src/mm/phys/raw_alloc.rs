@@ -5,11 +5,11 @@ use core::slice::from_raw_parts_mut;
 
 use bitflags::bitflags;
 use chos_config::arch::mm::virt;
-use chos_lib::arch::mm::{FrameSize4K, PAddr, PAGE_SIZE64};
+use chos_lib::arch::mm::PAGE_SIZE64;
 use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::domain_debug;
-use chos_lib::mm::{PFrame, PFrameRange};
+use chos_lib::mm::{PFrame, PFrameRange, PAddr};
 use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
@@ -33,7 +33,7 @@ struct Region {
 
 impl Region {
     fn base_paddr(&self) -> PAddr {
-        let addr = (self as *const Self as u64) - virt::PHYSICAL_MAP_BASE.as_u64();
+        let addr = (self as *const Self as u64) - virt::PHYSICAL_MAP_BASE.addr().as_u64();
         PAddr::new(addr)
     }
 
@@ -138,10 +138,10 @@ fn calculate_meta(total_pages: u64) -> Metadata {
     }
 }
 
-pub unsafe fn add_region(frame: PFrameRange<FrameSize4K>, flags: RegionFlags) {
+pub unsafe fn add_region(frame: PFrameRange, flags: RegionFlags) {
     let paddr = frame.start().addr();
     assert!(paddr.is_page_aligned());
-    let region = (paddr.as_u64() + virt::PHYSICAL_MAP_BASE.as_u64()) as *mut Region;
+    let region = (paddr.as_u64() + virt::PHYSICAL_MAP_BASE.addr().as_u64()) as *mut Region;
 
     let total_pages = frame.frame_count();
 
@@ -182,7 +182,7 @@ pub unsafe fn add_region(frame: PFrameRange<FrameSize4K>, flags: RegionFlags) {
         let block_head = &mut blocks[order as usize];
         let block = ((current_page + meta_pages) * PAGE_SIZE64
             + paddr.as_u64()
-            + virt::PHYSICAL_MAP_BASE.as_u64()) as *mut Block;
+            + virt::PHYSICAL_MAP_BASE.addr().as_u64()) as *mut Block;
         write(
             block,
             Block {
@@ -205,7 +205,7 @@ pub unsafe fn add_region(frame: PFrameRange<FrameSize4K>, flags: RegionFlags) {
     REGIONS.push_front(UnsafeMut::from_raw(region));
 }
 
-pub unsafe fn add_regions(it: impl IntoIterator<Item = (PFrameRange<FrameSize4K>, RegionFlags)>) {
+pub unsafe fn add_regions(it: impl IntoIterator<Item = (PFrameRange, RegionFlags)>) {
     for (paddr, flags) in it {
         add_region(paddr, flags)
     }
@@ -215,7 +215,7 @@ unsafe fn alloc_in_region(
     region: &mut Region,
     order: u8,
     flags: AllocFlags,
-) -> Result<PAddr, AllocError> {
+) -> Result<PFrame, AllocError> {
     if order > region.meta.biggest_order {
         return Err(AllocError);
     }
@@ -227,7 +227,7 @@ unsafe fn alloc_in_region(
         let ptr = block.as_mut() as *mut Block;
         write_bytes(ptr, 0xcc, 1);
 
-        let paddr = (ptr as u64) - virt::PHYSICAL_MAP_BASE.as_u64();
+        let paddr = (ptr as u64) - virt::PHYSICAL_MAP_BASE.addr().as_u64();
 
         if order < meta.biggest_order {
             let bitmap = region.bitmap();
@@ -240,21 +240,25 @@ unsafe fn alloc_in_region(
 
         region.meta.free_pages -= 1 << order;
 
-        Ok(PAddr::new(paddr))
+        Ok(PFrame::new_unchecked(PAddr::new(paddr)))
     } else {
         let block = alloc_in_region(region, order + 1, flags)?;
-        let other_block = block.as_u64() + (PAGE_SIZE64 << order);
-        put_back_block(region, PAddr::new(other_block), order);
+        let other_block = block.addr().as_u64() + (PAGE_SIZE64 << order);
+        put_back_block(
+            region,
+            PFrame::new_unchecked(PAddr::new(other_block)),
+            order,
+        );
         Ok(block)
     }
 }
 
-unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
+unsafe fn put_back_block(region: &mut Region, pframe: PFrame, order: u8) {
     let meta = region.meta;
     let base_paddr = region.base_paddr();
     let (blocks, bitmap) = region.block_list_bitmap();
     let block = &mut blocks[order as usize];
-    let ptr = (paddr.as_u64() + virt::PHYSICAL_MAP_BASE.as_u64()) as *mut Block;
+    let ptr = (pframe.addr().as_u64() + virt::PHYSICAL_MAP_BASE.addr().as_u64()) as *mut Block;
     write(
         ptr,
         Block {
@@ -264,7 +268,7 @@ unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
 
     block.blocks.push_front(UnsafeMut::from_raw(ptr));
 
-    let page = (paddr.as_u64() - base_paddr.as_u64()) / PAGE_SIZE64 - meta.meta_pages;
+    let page = (pframe.addr().as_u64() - base_paddr.as_u64()) / PAGE_SIZE64 - meta.meta_pages;
     let page_bit = (page >> (order + 1)) + block.bitmap_offset;
     let word = page_bit / (size_of::<usize>() as u64);
     let bit = page_bit % (size_of::<usize>() as u64);
@@ -273,13 +277,13 @@ unsafe fn put_back_block(region: &mut Region, paddr: PAddr, order: u8) {
     region.meta.free_pages += 1 << order;
 }
 
-unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
+unsafe fn free_in_region(region: &mut Region, pframe: PFrame, order: u8) {
     let meta = region.meta;
     assert!(order <= meta.biggest_order, "Order is too big");
     let base_paddr = region.base_paddr();
     let (blocks, bitmap) = region.block_list_bitmap();
     let block = &mut blocks[order as usize];
-    let page = (paddr.as_u64() - base_paddr.as_u64()) / PAGE_SIZE64 - meta.meta_pages;
+    let page = (pframe.addr().as_u64() - base_paddr.as_u64()) / PAGE_SIZE64 - meta.meta_pages;
     let page_bit = (page >> (order + 1)) + block.bitmap_offset;
     let word = page_bit / (size_of::<usize>() as u64);
     let bit = page_bit % (size_of::<usize>() as u64);
@@ -287,28 +291,33 @@ unsafe fn free_in_region(region: &mut Region, paddr: PAddr, order: u8) {
         let mut cursor = block.blocks.front_mut();
         loop {
             if let Some(b) = cursor.get() {
-                let other_paddr = b as *const Block as u64 - virt::PHYSICAL_MAP_BASE.as_u64();
-                if paddr.as_u64().abs_diff(other_paddr) == (PAGE_SIZE64 << order) {
+                let other_paddr =
+                    b as *const Block as u64 - virt::PHYSICAL_MAP_BASE.addr().as_u64();
+                if pframe.addr().as_u64().abs_diff(other_paddr) == (PAGE_SIZE64 << order) {
                     cursor.remove();
                     bitmap[word as usize] ^= 1 << bit;
                     let other_paddr = PAddr::new(other_paddr);
-                    free_in_region(region, paddr.min(other_paddr), order + 1);
+                    free_in_region(
+                        region,
+                        PFrame::new_unchecked(pframe.addr().min(other_paddr)),
+                        order + 1,
+                    );
                     break;
                 }
                 cursor.move_next();
             } else {
                 panic!(
                     "Could not find block {:012x}",
-                    paddr.as_u64() + (PAGE_SIZE64 << order),
+                    pframe.addr().as_u64() + (PAGE_SIZE64 << order),
                 );
             }
         }
     } else {
-        put_back_block(region, paddr, order);
+        put_back_block(region, pframe, order);
     }
 }
 
-pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
+pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PFrame, AllocError> {
     domain_debug!(
         domain::PALLOC,
         "alloc_pages(order = {}, flags = {:?})",
@@ -325,7 +334,7 @@ pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PAddr
     Err(AllocError)
 }
 
-pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
+pub unsafe fn dealloc_pages_unlocked(page: PFrame, order: u8) {
     domain_debug!(
         domain::PALLOC,
         "dealloc_pages(page = {:x}, order = {})",
@@ -333,7 +342,7 @@ pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
         order
     );
     for region in REGIONS.iter_mut() {
-        if region.contains(page) {
+        if region.contains(page.addr()) {
             free_in_region(region, page, order);
             return;
         }
@@ -343,19 +352,19 @@ pub unsafe fn dealloc_pages_unlocked(page: PAddr, order: u8) {
 
 static ALLOC_LOCK: Spinlock<()> = Spinlock::INIT;
 
-pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PAddr, AllocError> {
+pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PFrame, AllocError> {
     let _guard = ALLOC_LOCK.lock();
-    alloc_pages_unlocked(order, flags)
+    unsafe { alloc_pages_unlocked(order, flags) }
 }
 
-pub unsafe fn dealloc_pages(page: PAddr, order: u8) {
+pub unsafe fn dealloc_pages(pframe: PFrame, order: u8) {
     let _guard = ALLOC_LOCK.lock();
-    dealloc_pages_unlocked(page, order)
+    dealloc_pages_unlocked(pframe, order)
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct RegionInfo {
-    pub range: PFrameRange<FrameSize4K>,
+    pub range: PFrameRange,
     pub free_pages: u64,
     pub total_pages: u64,
     pub biggest_order: u8,

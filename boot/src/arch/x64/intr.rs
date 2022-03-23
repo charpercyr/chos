@@ -1,31 +1,31 @@
 use core::mem::MaybeUninit;
 
 use chos_lib::arch::intr::enable_interrupts;
-use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::port::PortWriteOnly;
-use chos_lib::arch::regs::{Cr2, ScratchRegs};
+use chos_lib::arch::regs::Cr2;
 use chos_lib::arch::tables::{interrupt, Handler, Idt, PageFaultError, StackFrame};
 use chos_lib::arch::x64::acpi::madt::{self, Madt};
 use chos_lib::arch::x64::apic::Apic;
 use chos_lib::arch::x64::intr::without_interrupts;
 use chos_lib::arch::x64::ioapic::{self, IOApic};
+use chos_lib::mm::VAddr;
 use rustc_demangle::demangle;
 
 pub const INTERRUPT_SPURIOUS: u8 = 0xff;
 pub const INTERRUPT_IOAPIC_BASE: u8 = 0x20;
 
 #[interrupt]
-extern "x86-interrupt" fn intr_breakpoint(f: &mut StackFrame<ScratchRegs>) {
+extern "x86-interrupt" fn intr_breakpoint(f: StackFrame) {
     unsafe { crate::unsafe_println!("BREAKPOINT: {:#x?}", f) };
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_double_fault(f: &mut StackFrame<ScratchRegs>, _: u64) -> ! {
+extern "x86-interrupt" fn intr_double_fault(f: StackFrame, _: u64) -> ! {
     panic!("DOUBLE FAULT: {:#x?}", f);
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_page_fault(f: &mut StackFrame<ScratchRegs>, e: PageFaultError) {
+extern "x86-interrupt" fn intr_page_fault(f: StackFrame, e: PageFaultError) {
     use crate::unsafe_println;
     unsafe {
         if let Some((name, offset)) = super::symbols::find_symbol(f.intr.rip) {
@@ -44,17 +44,17 @@ extern "x86-interrupt" fn intr_page_fault(f: &mut StackFrame<ScratchRegs>, e: Pa
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_general_protection_fault(f: &mut StackFrame<ScratchRegs>, _: u64) {
+extern "x86-interrupt" fn intr_general_protection_fault(f: StackFrame, _: u64) {
     panic!("GPF: {:#x?}", f);
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_invalid_opcode(f: &mut StackFrame<ScratchRegs>) {
+extern "x86-interrupt" fn intr_invalid_opcode(f: StackFrame) {
     panic!("Invalid Instruction: {:#x?}", f)
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_spurious(_: &mut StackFrame<ScratchRegs>) {
+extern "x86-interrupt" fn intr_spurious(_: StackFrame) {
     // Nothing
 }
 

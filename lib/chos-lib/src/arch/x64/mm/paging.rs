@@ -3,12 +3,11 @@ use core::slice::{Iter, IterMut};
 
 use modular_bitfield::prelude::*;
 
-use super::{PAddr, VAddr};
 use crate::arch::regs::{Cr3, Cr3Flags};
 use crate::config::domain;
 use crate::init::ConstInit;
 use crate::log::domain_debug;
-use crate::mm::{FrameSize, PFrame, VFrame};
+use crate::mm::{FrameSize, PFrame, VFrame, PAddr, VAddr};
 
 pub const PAGE_TABLE_SIZE: usize = 512;
 
@@ -43,12 +42,12 @@ impl PageEntry {
     }
 
     pub fn set_paddr(&mut self, addr: PAddr) {
-        assert!(addr.is_page_aligned(), "Address is not page aligned");
+        assert!(addr.is_page_aligned(), "Address {:#x} is not page aligned", addr);
         self.set_addr(addr.page());
     }
 
     pub fn with_paddr(self, addr: PAddr) -> Self {
-        assert!(addr.is_page_aligned(), "Address is not page aligned");
+        assert!(addr.is_page_aligned(), "Address {:#x} is not page aligned", addr);
         self.with_addr(addr.page())
     }
 }
@@ -208,3 +207,5 @@ impl VFrame<FrameSize1G> {
         (p4, p3)
     }
 }
+
+pub type DefaultFrameSize = FrameSize4K;

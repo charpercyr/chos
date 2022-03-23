@@ -4,12 +4,12 @@ use core::mem::MaybeUninit;
 use core::ptr::write_bytes;
 
 use chos_config::arch::mm::virt;
-use chos_lib::arch::mm::{FrameSize4K, PAddr, VAddr, PAGE_SIZE64};
+use chos_lib::arch::mm::FrameSize4K;
 use chos_lib::arch::regs::{FS, GS};
 use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::debug;
-use chos_lib::mm::{MapFlags, MapperFlush, PFrame, PFrameRange, RangeMapper, VFrame};
+use chos_lib::mm::{FrameSize, MapFlags, MapperFlush, PAddr, PFrameRange, RangeMapper, VAddr};
 
 use super::virt::MMFrameAllocator;
 use crate::mm::phys::{raw_alloc, AllocFlags};
@@ -71,8 +71,8 @@ pub unsafe fn init_per_cpu_data(
         1,
         "Only supporting 1 TLS program header entry"
     );
-    let total_pages = total_size.ceil_div(PAGE_SIZE64);
-    let vbase = VFrame::new_unchecked(virt::PER_CPU_BASE);
+    let total_pages = total_size.ceil_div(FrameSize4K::PAGE_SIZE);
+    let vbase = virt::PER_CPU_BASE;
     let mut vcur = vbase;
     let mut pbases = Box::new_uninit_slice(core_count);
     for i in 0..core_count {
@@ -83,10 +83,7 @@ pub unsafe fn init_per_cpu_data(
                 .expect("Alloc should not fail");
             mapper
                 .map_range(
-                    PFrameRange::new(
-                        PFrame::new_unchecked(pages),
-                        PFrame::new_unchecked(pages + (PAGE_SIZE64 << order)),
-                    ),
+                    PFrameRange::new(pages, pages.add(1 << order)),
                     vcur,
                     MapFlags::WRITE | MapFlags::GLOBAL,
                     &mut MMFrameAllocator,
@@ -123,7 +120,7 @@ pub unsafe fn init_per_cpu_data(
         tls_data[i as usize] = MaybeUninit::new(TlsData {
             id: i as u64,
             pages: total_pages,
-            phys_tls_base: pbases[i],
+            phys_tls_base: pbases[i].addr(),
             kernel_tls_base: vbase.add((i as u64) * total_pages).addr(),
         });
     }

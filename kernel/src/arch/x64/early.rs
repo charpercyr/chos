@@ -2,13 +2,13 @@ use alloc::vec::Vec;
 
 use chos_config::arch::mm::{phys, virt};
 use chos_lib::arch::boot::ArchKernelBootInfo;
-use chos_lib::arch::mm::{FrameSize1G, FrameSize4K, OffsetMapper, PAddr, PageTable, VAddr};
+use chos_lib::arch::mm::{FrameSize1G, FrameSize4K, OffsetMapper, PageTable};
 use chos_lib::boot::{KernelBootInfo, KernelMemInfo};
 use chos_lib::elf::Elf;
 use chos_lib::log::debug;
 use chos_lib::mm::{
     LoggingMapper, MapFlags, MapperFlush, PAddrResolver, PFrame, PFrameRange, RangeMapper, VFrame,
-    VFrameRange,
+    VFrameRange, PAddr, VAddr,
 };
 use multiboot2::MemoryArea;
 
@@ -17,7 +17,7 @@ use super::mm::virt::MMFrameAllocator;
 use crate::arch::mm::per_cpu::init_per_cpu_data;
 use crate::kmain::KernelArgs;
 use crate::mm::phys::{add_region, add_regions, RegionFlags};
-use crate::mm::virt::{paddr_of, MemoryRegion};
+use crate::mm::virt::{paddr_of, MemoryRegionType};
 
 fn is_early_memory(area: &MemoryArea, mem_info: &KernelMemInfo) -> bool {
     area.typ() == multiboot2::MemoryAreaType::Available
@@ -30,7 +30,8 @@ fn is_non_early_memory(area: &MemoryArea, mem_info: &KernelMemInfo) -> bool {
 }
 
 unsafe fn setup_early_memory_allocator(info: &KernelBootInfo) {
-    let mbh = multiboot2::load(info.arch.multiboot_header as usize).expect("Could not load multiboot structure");
+    let mbh = multiboot2::load(info.arch.multiboot_header as usize)
+        .expect("Could not load multiboot structure");
     if let Some(mem) = mbh.memory_map_tag() {
         let iter = mem.all_memory_areas().filter_map(|area| {
             is_early_memory(area, &info.mem_info).then(|| {
@@ -62,14 +63,14 @@ static mut EARLY_KERNEL_TABLE: PageTable = PageTable::empty();
 unsafe fn get_early_kernel_mapper() -> LoggingMapper<OffsetMapper<'static>> {
     LoggingMapper::new(OffsetMapper::new(
         &mut EARLY_KERNEL_TABLE,
-        virt::PHYSICAL_MAP_BASE,
+        virt::PHYSICAL_MAP_BASE.addr(),
     ))
 }
 
 pub unsafe fn use_early_kernel_table() {
     let page_paddr = paddr_of(
         get_early_kernel_mapper().inner().p4.as_vaddr(),
-        MemoryRegion::Static,
+        MemoryRegionType::Static,
     )
     .unwrap();
     PageTable::set_page_table(PFrame::new_unchecked(page_paddr));
@@ -106,19 +107,19 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
     map(
         &mut mapper,
         mem_size,
-        VFrame::new_unchecked(virt::PHYSICAL_MAP_BASE),
+        VFrame::new_unchecked(virt::PHYSICAL_MAP_BASE.addr()),
         MapFlags::WRITE | MapFlags::GLOBAL,
     );
     map(
         &mut mapper,
         mem_size,
-        VFrame::new_unchecked(virt::HEAP_BASE),
+        VFrame::new_unchecked(virt::HEAP_BASE.addr()),
         MapFlags::WRITE | MapFlags::GLOBAL,
     );
     map(
         &mut mapper,
         mem_size,
-        VFrame::new_unchecked(virt::DEVICE_BASE),
+        VFrame::new_unchecked(virt::DEVICE_BASE.addr()),
         MapFlags::WRITE | MapFlags::NOCACHE | MapFlags::GLOBAL,
     );
 
@@ -126,8 +127,8 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
     mapper
         .map_elf_load_sections(
             &elf,
-            PFrame::<FrameSize4K>::new_unchecked(phys::KERNEL_DATA_BASE),
-            VFrame::new_unchecked(virt::STATIC_BASE),
+            PFrame::<FrameSize4K>::new_unchecked(phys::KERNEL_DATA_BASE.addr()),
+            VFrame::new_unchecked(virt::STATIC_BASE.addr()),
             MapFlags::GLOBAL,
             &mut MMFrameAllocator,
         )
@@ -185,15 +186,15 @@ pub unsafe fn unmap_early_lower_memory(mem_size: u64) {
 
 pub unsafe fn init_non_early_memory(args: &KernelArgs) {
     let mbh =
-        multiboot2::load_with_offset(args.arch.mbh, virt::PHYSICAL_MAP_BASE.as_usize()).expect("Could not load multiboot structure");
+        multiboot2::load_with_offset(args.arch.mbh, virt::PHYSICAL_MAP_BASE.addr().as_usize())
+            .expect("Could not load multiboot structure");
     let mem_entries: Vec<_> = mbh
         .memory_map_tag()
         .expect("Should have a memory map")
         .all_memory_areas()
         .filter_map(|area| {
-            is_non_early_memory(area, &args.mem_info).then(|| {
-                (PAddr::new(area.start_address()), area.size())
-            })
+            is_non_early_memory(area, &args.mem_info)
+                .then(|| (PAddr::new(area.start_address()), area.size()))
         })
         .collect();
     for (paddr, size) in mem_entries {
@@ -232,10 +233,7 @@ pub unsafe fn init_non_early_memory(args: &KernelArgs) {
                 area.start(),
                 area.end(),
             );
-            add_region(
-                area,
-                RegionFlags::empty(),
-            );
+            add_region(area, RegionFlags::empty());
         }
     }
 }

@@ -5,23 +5,24 @@ use chos_lib::arch::acpi::madt;
 use chos_lib::arch::apic::{self, Apic};
 use chos_lib::arch::intr::{enable_interrupts, IoPl};
 use chos_lib::arch::ioapic::{self, IOApic};
-use chos_lib::arch::mm::VAddr;
-use chos_lib::arch::regs::{Cr2, Rsp, ScratchRegs};
+use chos_lib::arch::regs::{Cr2, Rsp};
 use chos_lib::arch::tables::{interrupt, Descriptor, Gdt, Idt, PageFaultError, StackFrame, Tss};
-use chos_lib::log::{debug, println};
+use chos_lib::log::debug;
+use chos_lib::mm::VAddr;
 use chos_lib::sync::{SpinLazy, SpinOnceCell, Spinlock};
 
+use crate::early::{allocate_early_stacks, EarlyStacks};
 use crate::kmain::KernelArgs;
-use crate::mm::stack::{allocate_kernel_stacks, Stacks};
+use crate::mm::virt::{handle_kernel_page_fault, PageFaultReason, PageFaultResult};
 use crate::mm::{per_cpu_lazy, this_cpu_info, PerCpu};
 
 const TSS_SEGMENT: u16 = 0x18;
 
-const PAGE_FAULT_IST: u8 = 0;
-static PAGE_FAULT_STACK: SpinOnceCell<Stacks> = SpinOnceCell::new();
+const PAGE_FAULT_IST: u8 = 1;
+static PAGE_FAULT_STACK: SpinOnceCell<EarlyStacks> = SpinOnceCell::new();
 
-const DOUBLE_FAULT_IST: u8 = 1;
-static DOUBLE_FAULT_STACK: SpinOnceCell<Stacks> = SpinOnceCell::new();
+const DOUBLE_FAULT_IST: u8 = 2;
+static DOUBLE_FAULT_STACK: SpinOnceCell<EarlyStacks> = SpinOnceCell::new();
 
 per_cpu_lazy! {
     static mut ref TSS: Tss = {
@@ -31,8 +32,8 @@ per_cpu_lazy! {
         let (pf_base, pf_size) = PAGE_FAULT_STACK.try_get().expect("PAGE_FAULT_STACK should be init").get_for(cpu_id);
         let (df_base, df_size) = DOUBLE_FAULT_STACK.try_get().expect("DOUBLE_FAULT_STACK should be init").get_for(cpu_id);
 
-        debug!("Using {:#x} for Page Fault Stack (ist = 0)", pf_base + pf_size);
-        debug!("Using {:#x} for Double Fault Stack (ist = 1)", df_base + df_size);
+        debug!("Using {:#x} for Page Fault Stack (ist = {})", pf_base + pf_size, PAGE_FAULT_IST);
+        debug!("Using {:#x} for Double Fault Stack (ist = {})", df_base + df_size, DOUBLE_FAULT_IST);
 
         tss.ist[PAGE_FAULT_IST as usize] = pf_base + pf_size;
         tss.ist[DOUBLE_FAULT_IST as usize] = df_base + df_size;
@@ -65,10 +66,10 @@ macro_rules! ioapic_intr {
         paste::item! {
             $(
                 #[interrupt]
-                extern "x86-interrupt" fn [<ioapic_intr_ $n>](frame: &mut StackFrame<ScratchRegs>) {
+                extern "x86-interrupt" fn [<ioapic_intr_ $n>](frame: StackFrame) {
                     let handler = IOAPIC_INTR_HANDLERS[$n].load(Ordering::Relaxed);
                     if handler != 0 {
-                        let handler: fn(&mut StackFrame<ScratchRegs>) = unsafe { core::mem::transmute(handler) };
+                        let handler: fn(StackFrame) = unsafe { core::mem::transmute(handler) };
                         handler(frame);
                     }
                     unsafe { LAPIC.as_mut_unchecked().eoi() };
@@ -81,10 +82,10 @@ macro_rules! ioapic_intr {
 ioapic_intr!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
 
 fn is_addr_in_kernel(addr: VAddr) -> bool {
-    addr >= virt::KERNEL_BASE
+    addr >= virt::KERNEL_BASE.addr()
 }
 
-fn handle_intr_error(frame: &mut StackFrame<ScratchRegs>) {
+fn handle_intr_error(frame: StackFrame) {
     if is_addr_in_kernel(frame.intr.rip) {
         panic!("Error in kernel: {:#?}", frame);
     } else {
@@ -93,7 +94,7 @@ fn handle_intr_error(frame: &mut StackFrame<ScratchRegs>) {
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_error(frame: &mut StackFrame<ScratchRegs>) {
+extern "x86-interrupt" fn intr_error(frame: StackFrame) {
     handle_intr_error(frame);
 }
 
@@ -111,17 +112,17 @@ fn rsp() -> u64 {
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_double_fault(frame: &mut StackFrame<ScratchRegs>, _: u64) -> ! {
+extern "x86-interrupt" fn intr_double_fault(frame: StackFrame, _: u64) -> ! {
     panic!("DOUBLE FAULT: {:#x?}\nRSP = {:#x}", frame, rsp());
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_gpf(frame: &mut StackFrame<ScratchRegs>, _: u64) {
+extern "x86-interrupt" fn intr_gpf(frame: StackFrame, _: u64) {
     handle_intr_error(frame);
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_breakpoint(frame: &mut StackFrame<ScratchRegs>) {
+extern "x86-interrupt" fn intr_breakpoint(frame: StackFrame) {
     debug!(
         "BREAKPOINT @ {:#x}, rsp = {:#x}",
         frame.intr.rip, frame.intr.rsp
@@ -129,10 +130,19 @@ extern "x86-interrupt" fn intr_breakpoint(frame: &mut StackFrame<ScratchRegs>) {
 }
 
 #[interrupt]
-extern "x86-interrupt" fn intr_page_fault(
-    frame: &mut StackFrame<ScratchRegs>,
-    error: PageFaultError,
-) {
+extern "x86-interrupt" fn intr_page_fault(frame: StackFrame, error: PageFaultError) {
+    let vaddr = Cr2::read();
+    if !error.contains(PageFaultError::USER_MODE | PageFaultError::PROTECTION_VIOLATION) {
+        let reason = if error.contains(PageFaultError::CAUSED_BY_WRITE) {
+            PageFaultReason::Write
+        } else {
+            PageFaultReason::Read
+        };
+        match handle_kernel_page_fault(vaddr, reason) {
+            PageFaultResult::Mapped(_) => return,
+            PageFaultResult::NotMapped => (),
+        };
+    }
     panic!(
         "PAGE FAULT: {:#x?} [{:?}]\nTried to access {:#x}\nRSP = {:#x}",
         frame,
@@ -193,15 +203,6 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
     idt[(IOAPIC_IDT_BASE + 22) as usize].set_handler(ioapic_intr_22);
     idt[(IOAPIC_IDT_BASE + 23) as usize].set_handler(ioapic_intr_23);
 
-    idt[0x80].set_handler({
-        #[interrupt]
-        extern "x86-interrupt" fn callback(_: &mut StackFrame) {
-            println!("Hello");
-            unsafe { LAPIC.as_mut_unchecked().eoi() };
-        }
-        callback
-    });
-
     idt
 });
 
@@ -233,12 +234,11 @@ pub unsafe fn arch_init_interrupts_cpu(args: &KernelArgs) {
             lint.set_pin_polarity(match nmi.flags.polarity() {
                 madt::Polarity::ActiveLow => apic::Polarity::ActiveLow,
                 madt::Polarity::ActiveHigh => apic::Polarity::ActiveHigh,
-                madt::Polarity::Conforming
-                    if nmi.flags.trigger_mode() == madt::TriggerMode::Level =>
-                {
-                    apic::Polarity::ActiveLow
-                }
-                madt::Polarity::Conforming => apic::Polarity::ActiveHigh,
+                madt::Polarity::Conforming => match nmi.flags.trigger_mode() {
+                    madt::TriggerMode::Level => apic::Polarity::ActiveLow,
+                    madt::TriggerMode::Edge => apic::Polarity::ActiveHigh,
+                    madt::TriggerMode::Conforming => apic::Polarity::ActiveHigh,
+                },
             });
             lint.set_trigger_mode(match nmi.flags.trigger_mode() {
                 madt::TriggerMode::Conforming | madt::TriggerMode::Edge => apic::TriggerMode::Edge,
@@ -262,23 +262,23 @@ pub unsafe fn arch_init_interrupts(args: &KernelArgs) {
         .ioapics()
         .find(|&e| e.global_system_interrupt_base == 0)
         .expect("Should have at least 1 ioapic");
-    let lapic_addr = virt::DEVICE_BASE
+    let lapic_addr = virt::DEVICE_BASE.addr()
         + madt
             .lapic_address_override()
             .map(|a| a.address)
             .next()
             .unwrap_or(madt.lapic_address as u64);
 
-    let mut ioapic = IOApic::new(virt::DEVICE_BASE + ioapic.ioapic_address as u64);
+    let mut ioapic = IOApic::new(virt::DEVICE_BASE.addr() + ioapic.ioapic_address as u64);
 
     for i in 0..ioapic.max_red_entries() {
         ioapic.update_redirection(i, |red| red.disable());
     }
 
-    SpinOnceCell::force_set(&PAGE_FAULT_STACK, allocate_kernel_stacks(args.core_count))
+    SpinOnceCell::force_set(&PAGE_FAULT_STACK, allocate_early_stacks(args.core_count))
         .ok()
         .expect("PAGE_FAULT_STACK already init");
-    SpinOnceCell::force_set(&DOUBLE_FAULT_STACK, allocate_kernel_stacks(args.core_count))
+    SpinOnceCell::force_set(&DOUBLE_FAULT_STACK, allocate_early_stacks(args.core_count))
         .ok()
         .expect("DOUBLE_FAULT_STACK already init");
     SpinOnceCell::force_set(&IOAPIC, Spinlock::new(ioapic))
@@ -294,7 +294,7 @@ pub struct IoApicAllocateError;
 
 pub fn allocate_ioapic_interrupt(
     mut mask: u64,
-    intr_fn: fn(&mut StackFrame<ScratchRegs>),
+    intr_fn: fn(StackFrame),
     dest: ioapic::Destination,
 ) -> Result<u8, IoApicAllocateError> {
     let mut ioapic = IOAPIC.try_get().expect("IOApic not initialized").lock();

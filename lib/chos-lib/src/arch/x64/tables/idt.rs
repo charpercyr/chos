@@ -64,11 +64,11 @@ impl<F> HandlerFn<F> {
     }
 }
 
-pub type Handler = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>)>;
-pub type HandlerNoReturn = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>) -> !>;
-pub type HandlerError = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, u64)>;
-pub type HandlerErrorNoReturn = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, u64) -> !>;
-pub type HandlerPageFault = HandlerFn<extern "x86-interrupt" fn(&mut StackFrame<ScratchRegs>, PageFaultError)>;
+pub type Handler = HandlerFn<extern "x86-interrupt" fn(StackFrame<ScratchRegs>)>;
+pub type HandlerNoReturn = HandlerFn<extern "x86-interrupt" fn(StackFrame<ScratchRegs>) -> !>;
+pub type HandlerError = HandlerFn<extern "x86-interrupt" fn(StackFrame<ScratchRegs>, u64)>;
+pub type HandlerErrorNoReturn = HandlerFn<extern "x86-interrupt" fn(StackFrame<ScratchRegs>, u64) -> !>;
+pub type HandlerPageFault = HandlerFn<extern "x86-interrupt" fn(StackFrame<ScratchRegs>, PageFaultError)>;
 
 mod private {
     pub trait Sealed {}

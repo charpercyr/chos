@@ -1,7 +1,8 @@
 use core::mem::MaybeUninit;
 use core::slice::from_raw_parts;
 
-use chos_lib::{elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType}, arch::mm::VAddr};
+use chos_lib::elf::{LookupStrategy, StrTab, Symtab, SymtabEntryType};
+use chos_lib::mm::VAddr;
 use multiboot2 as mb;
 
 static mut ELF_INITIALIZED: bool = false;

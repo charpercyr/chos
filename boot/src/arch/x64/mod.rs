@@ -11,15 +11,14 @@ mod timer;
 use core::mem::transmute;
 use core::ptr::NonNull;
 
-use chos_config::arch::mm::{virt, phys};
+use chos_config::arch::mm::{phys, virt};
 use chos_lib::arch::boot::ArchKernelBootInfo;
-use chos_lib::arch::mm::{PAddr, VAddr};
 use chos_lib::arch::x64::acpi::Rsdt;
 use chos_lib::arch::x64::mm::PageTable;
 use chos_lib::boot::{KernelBootInfo, KernelEntry};
 use chos_lib::fmt::Bytes;
 use chos_lib::log::{debug, println};
-use chos_lib::mm::PFrame;
+use chos_lib::mm::{PAddr, PFrame, VAddr};
 use chos_lib::sync::spin::barrier::SpinBarrier;
 use cmdline::iter_cmdline;
 use multiboot2 as mb;
@@ -70,7 +69,12 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     debug!("############");
     debug!();
 
-    debug!("Multiboot structure @ {:#x} (len={} [{}])", mbp, Bytes(mbh.total_size() as u64), mbh.total_size());
+    debug!(
+        "Multiboot structure @ {:#x} (len={} [{}])",
+        mbp,
+        Bytes(mbh.total_size() as u64),
+        mbh.total_size()
+    );
 
     if let Some(sections) = mbh.elf_sections_tag() {
         symbols::init_symbols(sections);
@@ -96,7 +100,10 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 (kernel.end_address() - kernel.start_address()) as usize,
             )
         };
-        assert!(kernel.as_ptr() as usize + kernel.len() <= phys::KERNEL_DATA_BASE.as_usize(), "Kernel ELF is too big, it will overlap with the data base");
+        assert!(
+            kernel.as_ptr() as usize + kernel.len() <= phys::KERNEL_DATA_BASE.addr().as_usize(),
+            "Kernel ELF is too big, it will overlap with the data base"
+        );
         chos_lib::elf::Elf::new(kernel).expect("Invalid kernel ELF")
     } else {
         panic!("No kernel")
@@ -130,7 +137,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
     debug!("Total available memory: {}", Bytes(total_mem));
     let mem_info = unsafe { kernel::map_kernel(&kernel, memory_map) };
 
-    let entry = kernel.raw().entry + virt::STATIC_BASE.as_u64();
+    let entry = kernel.raw().entry + virt::STATIC_BASE.addr().as_u64();
     let entry: KernelEntry = unsafe { core::mem::transmute(entry) };
 
     let apic_count = madt.apic_count();

@@ -3,12 +3,13 @@ mod flags;
 mod seg;
 
 use core::arch::asm;
+use core::ops::{Deref, DerefMut};
 
 pub use cr::*;
 pub use flags::*;
 pub use seg::*;
 
-use super::mm::VAddr;
+use crate::mm::VAddr;
 
 pub struct Rsp;
 
@@ -58,6 +59,19 @@ pub struct ScratchRegs {
     pub intr: IntrRegs,
 }
 
+impl Deref for ScratchRegs {
+    type Target = IntrRegs;
+    fn deref(&self) -> &IntrRegs {
+        &self.intr
+    }
+}
+
+impl DerefMut for ScratchRegs {
+    fn deref_mut(&mut self) -> &mut IntrRegs {
+        &mut self.intr
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AllRegs {
@@ -67,5 +81,18 @@ pub struct AllRegs {
     pub r12: u64,
     pub rbp: u64,
     pub rbx: u64,
-    pub unsaved: ScratchRegs,
+    pub scratch: ScratchRegs,
+}
+
+impl Deref for AllRegs {
+    type Target = ScratchRegs;
+    fn deref(&self) -> &ScratchRegs {
+        &self.scratch
+    }
+}
+
+impl DerefMut for AllRegs {
+    fn deref_mut(&mut self) -> &mut ScratchRegs {
+        &mut self.scratch
+    }
 }

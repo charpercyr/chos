@@ -2,12 +2,10 @@ use core::mem::transmute;
 
 use static_assertions as sa;
 
-use crate::{NoAccess, ReadWrite, WriteOnly};
+use crate::{NoAccess, ReadWrite, WriteOnly, mm::VAddr};
 
 mod redirection;
 pub use redirection::*;
-
-use super::mm::VAddr;
 
 type Register<P> = crate::PaddedVolatile<u32, P, 0x10>;
 sa::const_assert_eq!(core::mem::size_of::<Register<NoAccess>>(), 0x10);

@@ -1,5 +1,5 @@
-use chos_lib::arch::mm::VAddr;
 use chos_lib::include_asm;
+use chos_lib::mm::VAddr;
 
 include_asm!("./call.S");
 

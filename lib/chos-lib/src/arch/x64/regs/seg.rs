@@ -1,7 +1,7 @@
 use core::arch::asm;
 
-use crate::arch::mm::VAddr;
 use crate::arch::msr::Msr;
+use crate::mm::VAddr;
 
 #[derive(Debug)]
 pub struct CS;

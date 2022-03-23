@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use super::mm::VAddr;
+use crate::mm::VAddr;
 
 #[repr(C, packed)]
 struct Frame {

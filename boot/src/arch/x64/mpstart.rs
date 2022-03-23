@@ -1,11 +1,10 @@
 use core::mem::MaybeUninit;
 use core::ptr::null;
 
-use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::regs::Cr3;
 use chos_lib::arch::x64::acpi::madt;
 use chos_lib::arch::x64::apic::Apic;
-use chos_lib::mm::VFrame;
+use chos_lib::mm::{VAddr, VFrame};
 use chos_lib::sync::spin::barrier::SpinBarrier;
 
 const MPSTART_RELOC_ADDRESS: VAddr = VAddr::new(0x8000);

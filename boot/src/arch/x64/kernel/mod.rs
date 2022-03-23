@@ -6,14 +6,13 @@ use core::ptr::{copy_nonoverlapping, write_bytes};
 use core::u8;
 
 use chos_config::arch::x64::mm::{phys, virt};
-use chos_lib::arch::mm::{FrameSize4K, PAddr, PageTable};
-use chos_lib::arch::x64::mm::VAddr;
+use chos_lib::arch::mm::PageTable;
 use chos_lib::boot::{KernelMemEntry, KernelMemInfo};
 use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::fmt::Bytes;
 use chos_lib::int::CeilDiv;
 use chos_lib::log::debug;
-use chos_lib::mm::{MapFlags, MapperFlush, PFrame, RangeMapper, VFrame};
+use chos_lib::mm::{MapFlags, MapperFlush, PAddr, PFrame, RangeMapper, VAddr, VFrame};
 use multiboot2::MemoryMapTag;
 
 use crate::arch::x64::kernel::mapper::BootMapper;
@@ -35,8 +34,8 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
         )
     });
     let (pmap_start, pmap_end) = (
-        pmap_start + phys::KERNEL_DATA_BASE.as_u64(),
-        pmap_end + phys::KERNEL_DATA_BASE.as_u64(),
+        pmap_start + phys::KERNEL_DATA_BASE.addr().as_u64(),
+        pmap_end + phys::KERNEL_DATA_BASE.addr().as_u64(),
     );
 
     debug!(
@@ -58,22 +57,22 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
             "COPY {:08x} - {:08x} to {:08x} - {:08x}",
             data.as_ptr() as u64,
             data.as_ptr() as u64 + p.file_size(),
-            phys::KERNEL_DATA_BASE.as_u64() + p.vaddr(),
-            phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()
+            phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr(),
+            phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr() + p.file_size()
         );
         copy_nonoverlapping(
             data.as_ptr(),
-            (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr()) as *mut u8,
+            (phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr()) as *mut u8,
             p.file_size() as usize,
         );
         if p.file_size() < p.mem_size() {
             debug!(
                 "ZERO {:08x} - {:08x}",
-                phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size(),
-                phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.mem_size(),
+                phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr() + p.file_size(),
+                phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr() + p.mem_size(),
             );
             write_bytes(
-                (phys::KERNEL_DATA_BASE.as_u64() + p.vaddr() + p.file_size()) as *mut u8,
+                (phys::KERNEL_DATA_BASE.addr().as_u64() + p.vaddr() + p.file_size()) as *mut u8,
                 0,
                 (p.mem_size() - p.file_size()) as usize,
             );
@@ -82,14 +81,18 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
 
     let mut palloc = PAlloc::new(PFrame::new_align_up(PAddr::new(pmap_end)));
     let mut mapper = BootMapper::new(&mut palloc);
-    mapper.identity_map_memory(&mut palloc, memory, VFrame::new(VAddr::null()));
-    mapper.identity_map_memory(&mut palloc, memory, VFrame::new(virt::PHYSICAL_MAP_BASE));
+    mapper.identity_map_memory(&mut palloc, memory, VFrame::new_unchecked(VAddr::null()));
+    mapper.identity_map_memory(
+        &mut palloc,
+        memory,
+        VFrame::new_unchecked(virt::PHYSICAL_MAP_BASE.addr()),
+    );
     mapper
         .mapper
         .map_elf_load_sections(
             kernel,
-            PFrame::<FrameSize4K>::new_unchecked(phys::KERNEL_DATA_BASE),
-            VFrame::new_unchecked(virt::STATIC_BASE),
+            phys::KERNEL_DATA_BASE,
+            virt::STATIC_BASE,
             MapFlags::empty(),
             &mut palloc,
         )
@@ -103,7 +106,7 @@ pub unsafe fn map_kernel(kernel: &Elf, memory: &MemoryMapTag) -> KernelMemInfo {
 
     KernelMemInfo {
         code: KernelMemEntry {
-            phys: phys::KERNEL_DATA_BASE,
+            phys: phys::KERNEL_DATA_BASE.addr(),
             size: (pmap_end - pmap_start) as usize,
         },
         total_size: memory

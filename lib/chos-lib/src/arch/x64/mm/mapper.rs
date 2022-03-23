@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
-use super::{FrameSize1G, FrameSize2M, FrameSize4K, PAddr, PageEntry, PageTable, VAddr};
+use super::{FrameSize1G, FrameSize2M, FrameSize4K, PageEntry, PageTable};
 use crate::mm::*;
 
 const FLUSH_MAX_INVLPG_FRAMES: u64 = 11;

@@ -2,9 +2,9 @@ use core::convert::TryInto;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
-use chos_lib::arch::mm::VAddr;
 use chos_lib::arch::tables::{interrupt, StackFrame};
 use chos_lib::arch::x64::acpi::hpet::Hpet;
+use chos_lib::mm::VAddr;
 use chos_lib::sync::{Sem, SpinSem};
 
 static DONE: SpinSem = SpinSem::new(0);
@@ -12,7 +12,7 @@ static DONE: SpinSem = SpinSem::new(0);
 const IOAPIC_TIMER_ROUTE: u8 = 8;
 
 #[interrupt]
-extern "x86-interrupt" fn timer_callback(_: &mut StackFrame) {
+extern "x86-interrupt" fn timer_callback(_: StackFrame) {
     DONE.signal();
     unsafe {
         super::intr::eoi();

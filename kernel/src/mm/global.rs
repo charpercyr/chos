@@ -3,9 +3,10 @@ use core::mem::align_of;
 use core::ptr::null_mut;
 use core::slice;
 
-use chos_lib::arch::mm::{VAddr, PAGE_SHIFT};
+use chos_lib::arch::mm::PAGE_SHIFT;
 use chos_lib::int::ceil_log2u64;
 use chos_lib::log::domain_debug;
+use chos_lib::mm::{PFrame, VAddr, VFrame};
 use chos_lib::sync::spin::lock::Spinlock;
 
 use super::phys::MMSlabAllocator;
@@ -76,7 +77,7 @@ struct KAlloc;
 unsafe impl GlobalAlloc for KAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if layout.size() == 0 {
-            return layout.align() as _
+            return layout.align() as _;
         }
         domain_debug!(
             domain::GLOBAL_ALLOC,
@@ -96,9 +97,9 @@ unsafe impl GlobalAlloc for KAlloc {
         let order = ceil_log2u64(layout.size() as u64) - PAGE_SHIFT;
         raw_alloc::alloc_pages(order as u8, AllocFlags::empty())
             .map(|paddr| {
-                let vaddr = map_paddr(paddr, crate::mm::virt::MemoryRegion::Normal)
-                    .unwrap_or(VAddr::null());
-                vaddr.as_mut_ptr()
+                let vaddr = map_paddr(paddr, crate::mm::virt::MemoryRegionType::Normal)
+                    .unwrap_or(VFrame::null());
+                vaddr.addr().as_mut_ptr()
             })
             .unwrap_or(null_mut())
     }
@@ -125,10 +126,10 @@ unsafe impl GlobalAlloc for KAlloc {
         let order = ceil_log2u64(layout.size() as u64) - PAGE_SHIFT;
         let paddr = paddr_of(
             VAddr::new(ptr as u64),
-            crate::mm::virt::MemoryRegion::Normal,
+            crate::mm::virt::MemoryRegionType::Normal,
         )
         .expect("Should exist");
-        raw_alloc::dealloc_pages(paddr, order as u8);
+        raw_alloc::dealloc_pages(PFrame::new(paddr), order as u8);
     }
 }
 

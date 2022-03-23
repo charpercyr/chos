@@ -2,23 +2,24 @@ pub mod raw_alloc;
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
-use chos_lib::arch::mm::{PAddr, VAddr, PAGE_SIZE};
+use chos_lib::arch::mm::PAGE_SIZE;
 use chos_lib::init::ConstInit;
+use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame};
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
 use chos_lib::sync::fake::FakeLock;
 use chos_lib::sync::lock::Lock;
 use chos_lib::sync::spin::lock::RawSpinLock;
-use intrusive_collections::linked_list;
+use intrusive_collections::{rbtree, KeyAdapter};
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
-use super::virt::{map_paddr, map_page, paddr_of, MemoryRegion};
+use super::virt::{map_paddr, map_page, paddr_of, MemoryRegionType};
 
 #[derive(Debug)]
 pub struct Page {
     count: IArcCount,
-    list_link: linked_list::AtomicLink,
-    pub paddr: PAddr,
+    rb_link: rbtree::AtomicLink,
+    pub frame: PFrame,
     pub order: u8,
 }
 
@@ -29,11 +30,30 @@ impl IArcAdapter for Page {
     }
 }
 
-chos_lib::intrusive_adapter!(pub PageListBoxAdapter = PageBox: Page { list_link: linked_list::AtomicLink });
-chos_lib::intrusive_adapter!(pub PageListArcAdapter = PageArc: Page { list_link: linked_list::AtomicLink });
+impl Page {
+    pub fn frame_range(&self) -> PFrameRange {
+        PFrameRange::new(self.frame, self.frame.add(1 << self.order))
+    }
+}
+
+chos_lib::intrusive_adapter!(pub PageListBoxAdapter = PageBox: Page { rb_link: rbtree::AtomicLink });
+chos_lib::intrusive_adapter!(pub PageListArcAdapter = PageArc: Page { rb_link: rbtree::AtomicLink });
+
+impl<'a> KeyAdapter<'a> for PageListBoxAdapter {
+    type Key = PFrame;
+    fn get_key(&self, value: &'a Page) -> PFrame {
+        value.frame
+    }
+}
+impl<'a> KeyAdapter<'a> for PageListArcAdapter {
+    type Key = PFrame;
+    fn get_key(&self, value: &'a Page) -> PFrame {
+        value.frame
+    }
+}
 
 struct PageSlab {
-    vaddr: VAddr,
+    vaddr: VFrame,
 }
 
 impl PageSlab {
@@ -48,7 +68,7 @@ impl Slab for PageSlab {
     }
 
     fn vaddr(&self) -> VAddr {
-        self.vaddr
+        self.vaddr.addr()
     }
 }
 
@@ -58,15 +78,16 @@ unsafe impl SlabAllocator for PageSlabAllocator {
     type Slab = PageSlab;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
         let paddr = raw_alloc::alloc_pages_unlocked(PageSlab::ORDER, AllocFlags::empty())?;
-        let vaddr = map_paddr(paddr, MemoryRegion::Alloc).map_err(|_| {
+        let vaddr = map_paddr(paddr, MemoryRegionType::Alloc).map_err(|_| {
             raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER);
             AllocError
         })?;
         Ok(PageSlab { vaddr })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
-        let paddr = paddr_of(frame.vaddr, MemoryRegion::Alloc).expect("Should be mapped");
-        raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER)
+        let paddr =
+            paddr_of(frame.vaddr.addr(), MemoryRegionType::Alloc).expect("Should be mapped");
+        raw_alloc::dealloc_pages_unlocked(PFrame::new_unchecked(paddr), PageSlab::ORDER)
     }
 }
 
@@ -89,7 +110,11 @@ unsafe impl Pool<Page> for PagePoolImpl {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<Page>) {
-        let &Page { order, paddr, .. } = ptr.as_ref();
+        let &Page {
+            order,
+            frame: paddr,
+            ..
+        } = ptr.as_ref();
         let mut slab = self.alloc.lock();
         slab.dealloc(ptr);
         raw_alloc::dealloc_pages(paddr, order);
@@ -102,16 +127,16 @@ chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 pub type PageBox = PoolBox<Page, PagePool>;
 pub type PageArc = IArc<Page, PagePool>;
 
-pub unsafe fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
+pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
     let paddr = raw_alloc::alloc_pages(order, flags)?;
     PoolBox::try_new(Page {
         count: IArcCount::INIT,
-        list_link: linked_list::AtomicLink::new(),
-        paddr,
+        rb_link: rbtree::AtomicLink::new(),
+        frame: paddr,
         order,
     })
     .map_err(|e| {
-        raw_alloc::dealloc_pages(paddr, order);
+        unsafe { raw_alloc::dealloc_pages(paddr, order) };
         e
     })
 }
@@ -141,8 +166,11 @@ unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
     type Slab = MMSlab<O>;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
         let page = alloc_pages(O, AllocFlags::empty())?;
-        let vaddr = map_page(&page, MemoryRegion::Normal).map_err(|_| AllocError)?;
-        Ok(MMSlab { page, vaddr })
+        let vaddr = map_page(&page, MemoryRegionType::Normal).map_err(|_| AllocError)?;
+        Ok(MMSlab {
+            page,
+            vaddr: vaddr.addr(),
+        })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
         drop(frame)

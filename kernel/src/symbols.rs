@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use chos_lib::arch::mm::VAddr;
+use chos_lib::mm::VAddr;
 use chos_lib::elf::{Elf, SymtabEntryType};
 use chos_lib::init::ConstInit;
 use chos_lib::log::debug;

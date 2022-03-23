@@ -1,10 +1,13 @@
+mod addr;
+pub use addr::*;
+
 use core::fmt::{self, Debug};
 use core::marker::PhantomData;
 use core::{cmp, hash};
 
 use bitflags::bitflags;
 
-use crate::arch::mm::{PAddr, VAddr};
+use crate::arch::mm::{DefaultFrameSize};
 use crate::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use crate::int::ceil_divu64;
 
@@ -14,7 +17,7 @@ pub struct FrameAlignError;
 macro_rules! frame {
     ($name:ident : $addr:ty) => {
         #[repr(transparent)]
-        pub struct $name<S: FrameSize> {
+        pub struct $name<S: FrameSize = DefaultFrameSize> {
             addr: $addr,
             size: PhantomData<S>,
         }
@@ -114,7 +117,7 @@ macro_rules! frame {
         }
 
         paste::item! {
-            pub struct [<$name Range>]<S: FrameSize> {
+            pub struct [<$name Range>]<S: FrameSize = DefaultFrameSize> {
                 start: $name<S>,
                 end: $name<S>,
             }
@@ -171,6 +174,14 @@ macro_rules! frame {
                         None
                     }
                 }
+
+                pub fn contains_address(&self, rhs: $addr) -> bool {
+                    self.start.addr() <= rhs && self.end.addr() > rhs
+                }
+
+                pub fn contains_frame(&self, rhs: $name<S>) -> bool {
+                    self.contains_address(rhs.addr())
+                }
             }
 
             impl<S: FrameSize> Iterator for [<$name Range>]<S> {
@@ -204,6 +215,19 @@ frame!(VFrame: VAddr);
 impl<S: FrameSize> PFrame<S> {
     pub const fn identity(self) -> VFrame<S> {
         unsafe { VFrame::new_unchecked(self.addr.identity()) }
+    }
+
+    pub const fn offset(self, base: VFrame<S>) -> VFrame<S> {
+        unsafe { VFrame::new_unchecked(base.addr.add_paddr(self.addr)) }
+    }
+}
+
+impl<S: FrameSize> PFrameRange<S> {
+    pub const fn identity(self) -> VFrameRange<S> {
+        VFrameRange::new(self.start.identity(), self.end.identity())
+    }
+    pub const fn offset(self, base: VFrame<S>) -> VFrameRange<S> {
+        VFrameRange::new(self.start.offset(base), self.end.offset(base))
     }
 }
 

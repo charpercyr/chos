@@ -28,12 +28,12 @@ fn symbol_value(idx: usize, sym: SymtabEntry, strtab: Option<&StrTab>) -> i64 {
 
 fn symbol_offset_value(idx: usize, sym: SymtabEntry, strtab: Option<&StrTab>) -> i64 {
     check_symbol(idx, sym, strtab);
-    unsafe { transmute(sym.value() + BASE.as_u64()) }
+    unsafe { transmute(sym.value() + BASE.addr().as_u64()) }
 }
 
 pub unsafe fn do_relocation(symtab: &Symtab, e: &RelaEntry, strtab: Option<&StrTab>) {
     use chos_lib::elf::X64RelaType::*;
-    let off = (e.offset() + BASE.as_u64()) as *mut i64;
+    let off = (e.offset() + BASE.addr().as_u64()) as *mut i64;
     match e.x64_typ() {
         None => (),
         _64 => write_volatile(

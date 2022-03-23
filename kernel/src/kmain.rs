@@ -3,7 +3,7 @@ use alloc::string::String;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
-use chos_lib::arch::mm::VAddr;
+use chos_lib::mm::VAddr;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
@@ -15,8 +15,8 @@ use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::cpumask::init_cpumask;
+use crate::early::EarlyStacks;
 use crate::intr::{init_interrupts, init_interrupts_cpu};
-use crate::mm::stack::Stacks;
 use crate::mm::this_cpu_info;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols;
@@ -31,7 +31,7 @@ pub struct KernelArgs {
     pub core_count: usize,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelArgs,
-    pub stacks: Stacks,
+    pub early_stacks: EarlyStacks,
 }
 
 struct Logger {
@@ -90,7 +90,7 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
             }
 
             add_elf_symbols(
-                virt::STATIC_BASE,
+                virt::STATIC_BASE.addr(),
                 &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
             );
 
@@ -112,7 +112,7 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
         barrier!(args.core_count);
     }
 
-    let (base, size) = args.stacks.get_for(id);
+    let (base, size) = args.early_stacks.get_for(id);
     let stack = base + size;
 
     unsafe { do_enter_schedule(stack) }

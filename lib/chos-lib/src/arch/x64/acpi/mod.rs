@@ -7,7 +7,7 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem::{size_of, transmute};
 
-use super::mm::VAddr;
+use crate::mm::VAddr;
 
 #[derive(Clone, Copy)]
 #[repr(C, packed)]

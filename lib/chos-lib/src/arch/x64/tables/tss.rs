@@ -1,9 +1,9 @@
 use core::arch::asm;
 use core::mem::size_of;
 
-use crate::arch::mm::VAddr;
 use crate::config::domain;
 use crate::log::domain_debug;
+use crate::mm::VAddr;
 
 #[repr(C, packed)]
 pub struct Tss {

@@ -6,9 +6,9 @@ pub use command::*;
 pub use interrupt::*;
 pub use reg::*;
 
-use super::mm::VAddr;
 use crate::cpumask::Cpumask;
 use crate::Volatile;
+use crate::mm::VAddr;
 
 pub struct Apic<'a> {
     regs: &'a mut reg::ApicRegisters,
