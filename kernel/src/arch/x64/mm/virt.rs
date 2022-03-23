@@ -3,12 +3,13 @@ use core::alloc::AllocError;
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::{FrameSize4K, OffsetMapper, PageTable};
 use chos_lib::mm::{
-    FrameAllocator, MapFlags, MapperFlush, PAddr, PFrame, RangeMapper, VAddr, VFrame,
+    FrameAllocator, FrameSize, LoggingMapper, MapFlags, MapperFlush, PAddr, PFrame, PFrameRange,
+    RangeMapper, VAddr, VFrame,
 };
 
 use crate::arch::early::{copy_early_kernel_table_to, early_paddr_of};
 use crate::mm::phys::{raw_alloc, AllocFlags, Page};
-use crate::mm::{per_cpu, PerCpu};
+use crate::mm::{per_cpu, per_cpu_lazy, PerCpu};
 
 pub struct MMFrameAllocator;
 
@@ -32,6 +33,10 @@ per_cpu! {
     static mut ref PAGE_TABLE: PageTable = PageTable::empty();
 }
 
+per_cpu_lazy! {
+    static mut ref MAPPER: LoggingMapper<OffsetMapper<'static>> = unsafe { LoggingMapper::new(OffsetMapper::new(PAGE_TABLE.get_mut(), virt::PHYSICAL_MAP_BASE.addr())) };
+}
+
 pub unsafe fn init_kernel_virt() {
     PAGE_TABLE.with(|pgt| {
         copy_early_kernel_table_to(pgt);
@@ -41,16 +46,35 @@ pub unsafe fn init_kernel_virt() {
     });
 }
 
+pub fn map_frames<S: FrameSize>(
+    range: PFrameRange<S>,
+    vbase: VFrame<S>,
+    flags: MapFlags,
+) -> Result<(), AllocError>
+where
+    OffsetMapper<'static>: RangeMapper<S, PGTFrameSize = FrameSize4K>,
+{
+    unsafe {
+        MAPPER.with_static(|mapper| {
+            mapper
+                .map_range(range, vbase, flags, &mut MMFrameAllocator)
+                .map_err(|err| {
+                    chos_lib::log::error!(
+                        "Map error {:?}, tried to map {:#x}-{:#x} to {:#x} [{:?}]",
+                        err,
+                        range.start(),
+                        range.end(),
+                        vbase,
+                        flags,
+                    );
+                    AllocError
+                })?
+                .flush();
+            Ok(())
+        })
+    }
+}
+
 pub fn map_page(page: &Page, vbase: VFrame, flags: MapFlags) -> Result<(), AllocError> {
-    PAGE_TABLE.with(|pgt| unsafe {
-        let mut mapper = OffsetMapper::new(pgt, virt::KERNEL_BASE.addr());
-        mapper
-            .map_range(page.frame_range(), vbase, flags, &mut MMFrameAllocator)
-            .map_err(|err| {
-                chos_lib::log::error!("Map error {:?}", err);
-                AllocError
-            })?
-            .flush();
-        Ok(())
-    })
+    map_frames(page.frame_range(), vbase, flags)
 }

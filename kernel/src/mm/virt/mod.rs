@@ -1,9 +1,13 @@
 pub mod stack;
 
+use core::mem::MaybeUninit;
+
 use chos_config::arch::mm::{phys, virt};
 use chos_lib::mm::{PAddr, PFrame, VAddr, VFrame, VFrameRange};
 
+use self::stack::init_kernel_stacks;
 use super::phys::Page;
+use crate::kmain::KernelArgs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemoryRegionType {
@@ -47,6 +51,7 @@ trait MemoryRegion {
 struct IdentityMemoryRegion {
     name: &'static str,
     base: VFrame,
+    size: u64,
     typ: MemoryRegionType,
 }
 
@@ -81,6 +86,7 @@ impl MemoryRegion for IdentityMemoryRegion {
 struct StaticMemoryRegion {
     pbase: PFrame,
     vbase: VFrame,
+    size: u64,
 }
 
 impl MemoryRegion for StaticMemoryRegion {
@@ -108,30 +114,68 @@ impl MemoryRegion for StaticMemoryRegion {
     }
 }
 
-static ALL_MEMORY_REGIONS: [&'static (dyn MemoryRegion + Sync); 4] = [
-    &IdentityMemoryRegion {
-        name: "alloc",
-        base: virt::PHYSICAL_MAP_BASE,
-        typ: MemoryRegionType::Alloc,
-    },
-    &IdentityMemoryRegion {
-        name: "heap",
-        base: virt::HEAP_BASE,
-        typ: MemoryRegionType::Normal,
-    },
-    &IdentityMemoryRegion {
-        name: "iomem",
-        base: virt::DEVICE_BASE,
-        typ: MemoryRegionType::IoMem,
-    },
-    &StaticMemoryRegion {
-        pbase: phys::KERNEL_DATA_BASE,
-        vbase: virt::STATIC_BASE,
-    },
-];
+pub struct StackMemoryRegion;
+
+impl MemoryRegion for StackMemoryRegion {
+    fn typ(&self) -> MemoryRegionType {
+        MemoryRegionType::Stack
+    }
+    fn name(&self) -> &str {
+        "kernel"
+    }
+
+    fn vaddr_range(&self) -> VFrameRange {
+        todo!()
+    }
+
+    fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr> {
+        todo!()
+    }
+
+    fn map_paddr(&self, _: PFrame) -> Result<VFrame, MemoryMapError> {
+        Err(MemoryMapError::CannotMap)
+    }
+
+    fn handle_page_fault(&self, reason: PageFaultReason) -> PageFaultResult {
+        todo!()
+    }
+}
+
+static mut ALLOC_REGION: IdentityMemoryRegion = IdentityMemoryRegion {
+    typ: MemoryRegionType::Alloc,
+    name: "alloc",
+    base: virt::PHYSICAL_MAP_BASE,
+    size: 0,
+};
+static mut IOMEM_REGION: IdentityMemoryRegion = IdentityMemoryRegion {
+    typ: MemoryRegionType::IoMem,
+    name: "iomem",
+    base: virt::DEVICE_BASE,
+    size: 0,
+};
+static mut HEAP_REGION: IdentityMemoryRegion = IdentityMemoryRegion {
+    typ: MemoryRegionType::Normal,
+    name: "heap",
+    base: virt::HEAP_BASE,
+    size: 0,
+};
+static mut STATIC_REGION: StaticMemoryRegion = StaticMemoryRegion {
+    pbase: phys::KERNEL_DATA_BASE,
+    vbase: virt::STATIC_BASE,
+    size: 0,
+};
+static mut ALL_MEMORY_REGIONS: MaybeUninit<[&'static (dyn MemoryRegion + Sync); 5]> = unsafe {
+    MaybeUninit::new([
+        &ALLOC_REGION,
+        &HEAP_REGION,
+        &IOMEM_REGION,
+        &STATIC_REGION,
+        &StackMemoryRegion,
+    ])
+};
 
 fn get_memory_region_by_type(typ: MemoryRegionType) -> Option<&'static (dyn MemoryRegion + Sync)> {
-    for &region in &ALL_MEMORY_REGIONS {
+    for &region in unsafe { ALL_MEMORY_REGIONS.assume_init_ref() } {
         if region.typ() == typ {
             return Some(region);
         }
@@ -140,7 +184,7 @@ fn get_memory_region_by_type(typ: MemoryRegionType) -> Option<&'static (dyn Memo
 }
 
 fn get_memory_region_by_vaddr(vaddr: VAddr) -> Option<&'static (dyn MemoryRegion + Sync)> {
-    for &region in &ALL_MEMORY_REGIONS {
+    for &region in unsafe { ALL_MEMORY_REGIONS.assume_init_ref() } {
         if region.vaddr_range().contains_address(vaddr) {
             return Some(region);
         }
@@ -170,4 +214,19 @@ pub fn handle_kernel_page_fault(vaddr: VAddr, reason: PageFaultReason) -> PageFa
     get_memory_region_by_vaddr(vaddr)
         .map(|r| r.handle_page_fault(reason))
         .unwrap_or(PageFaultResult::NotMapped)
+}
+
+pub unsafe fn init_kernel_virt(args: &KernelArgs) {
+    init_kernel_stacks(args.core_count, &[args.early_stacks]);
+    ALLOC_REGION.size = args.mem_info.total_size;
+    HEAP_REGION.size = args.mem_info.total_size;
+    IOMEM_REGION.size = args.mem_info.total_size;
+    STATIC_REGION.size = args.mem_info.code.size as u64;
+    ALL_MEMORY_REGIONS = MaybeUninit::new([
+        &ALLOC_REGION,
+        &HEAP_REGION,
+        &IOMEM_REGION,
+        &STATIC_REGION,
+        &StackMemoryRegion,
+    ]);
 }

@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use chos_config::arch::mm::virt;
+use chos_config::arch::mm::{stack, virt};
 use chos_lib::arch::acpi::madt;
 use chos_lib::arch::apic::{self, Apic};
 use chos_lib::arch::intr::{enable_interrupts, IoPl};
@@ -11,32 +11,28 @@ use chos_lib::log::debug;
 use chos_lib::mm::VAddr;
 use chos_lib::sync::{SpinLazy, SpinOnceCell, Spinlock};
 
-use crate::early::{allocate_early_stacks, EarlyStacks};
 use crate::kmain::KernelArgs;
+use crate::mm::virt::stack::alloc_kernel_stack;
 use crate::mm::virt::{handle_kernel_page_fault, PageFaultReason, PageFaultResult};
-use crate::mm::{per_cpu_lazy, this_cpu_info, PerCpu};
+use crate::mm::{per_cpu_lazy, PerCpu};
 
 const TSS_SEGMENT: u16 = 0x18;
 
 const PAGE_FAULT_IST: u8 = 1;
-static PAGE_FAULT_STACK: SpinOnceCell<EarlyStacks> = SpinOnceCell::new();
-
 const DOUBLE_FAULT_IST: u8 = 2;
-static DOUBLE_FAULT_STACK: SpinOnceCell<EarlyStacks> = SpinOnceCell::new();
 
 per_cpu_lazy! {
     static mut ref TSS: Tss = {
         let mut tss = Tss::new();
 
-        let cpu_id = this_cpu_info().id;
-        let (pf_base, pf_size) = PAGE_FAULT_STACK.try_get().expect("PAGE_FAULT_STACK should be init").get_for(cpu_id);
-        let (df_base, df_size) = DOUBLE_FAULT_STACK.try_get().expect("DOUBLE_FAULT_STACK should be init").get_for(cpu_id);
+        let pf_stack = alloc_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER).expect("Stack alloc should not fail");
+        let df_stack = alloc_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER).expect("Stack alloc should not fail");
 
-        debug!("Using {:#x} for Page Fault Stack (ist = {})", pf_base + pf_size, PAGE_FAULT_IST);
-        debug!("Using {:#x} for Double Fault Stack (ist = {})", df_base + df_size, DOUBLE_FAULT_IST);
+        debug!("Using {:#x} for Page Fault Stack (ist = {})", pf_stack.range.start(), PAGE_FAULT_IST);
+        debug!("Using {:#x} for Double Fault Stack (ist = {})", df_stack.range.start(), DOUBLE_FAULT_IST);
 
-        tss.ist[PAGE_FAULT_IST as usize] = pf_base + pf_size;
-        tss.ist[DOUBLE_FAULT_IST as usize] = df_base + df_size;
+        tss.ist[PAGE_FAULT_IST as usize] = pf_stack.range.end().addr();
+        tss.ist[DOUBLE_FAULT_IST as usize] = pf_stack.range.end().addr();
         tss
     };
     static mut ref GDT: Gdt<6> = {
@@ -275,12 +271,6 @@ pub unsafe fn arch_init_interrupts(args: &KernelArgs) {
         ioapic.update_redirection(i, |red| red.disable());
     }
 
-    SpinOnceCell::force_set(&PAGE_FAULT_STACK, allocate_early_stacks(args.core_count))
-        .ok()
-        .expect("PAGE_FAULT_STACK already init");
-    SpinOnceCell::force_set(&DOUBLE_FAULT_STACK, allocate_early_stacks(args.core_count))
-        .ok()
-        .expect("DOUBLE_FAULT_STACK already init");
     SpinOnceCell::force_set(&IOAPIC, Spinlock::new(ioapic))
         .ok()
         .expect("IOAPIC already init");

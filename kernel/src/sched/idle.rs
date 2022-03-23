@@ -3,12 +3,12 @@ use chos_lib::log::debug;
 use chos_lib::mm::VAddr;
 
 use super::{Task, TaskArc};
-use crate::mm::virt::stack::alloc_stack;
+use crate::mm::virt::stack::alloc_kernel_stack;
 use crate::mm::{per_cpu_lazy, PerCpu};
 
 per_cpu_lazy! {
     static mut ref IDLE_STACK: VAddr = {
-        let stack = alloc_stack(0).expect("Stack alloc should not fail");
+        let stack = alloc_kernel_stack(0).expect("Stack alloc should not fail");
         let stack = stack.range.end().addr();
         debug!("Using {:#x} for idle stack", stack);
         stack

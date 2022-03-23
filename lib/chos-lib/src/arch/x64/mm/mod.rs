@@ -13,7 +13,7 @@ pub type PAddrRepr = u64;
 pub type VAddrRepr = u64;
 
 const CANONICAL_SHIFT: u8 = 47;
-const CANONICAL_MASK: VAddrRepr = VAddrRepr::MAX - ((1 << CANONICAL_SHIFT) - 1);
+const CANONICAL_MASK: VAddrRepr = !((1 << CANONICAL_SHIFT) - 1);
 
 pub const fn is_canonical(addr: VAddrRepr) -> bool {
     (addr & CANONICAL_MASK) == 0 || (addr & CANONICAL_MASK) == CANONICAL_MASK

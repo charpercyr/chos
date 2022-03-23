@@ -1,8 +1,8 @@
-use core::ptr::{Pointee, from_raw_parts, from_raw_parts_mut};
+use core::ptr::{from_raw_parts, from_raw_parts_mut, Pointee};
 use core::{fmt, ops};
 
 use super::{FrameSize, PFrame, VFrame};
-use crate::arch::mm::{DefaultFrameSize, PAddrRepr, is_canonical};
+use crate::arch::mm::{is_canonical, make_canonical, DefaultFrameSize, PAddrRepr, VAddrRepr};
 use crate::int::align_upu64;
 
 #[repr(transparent)]
@@ -202,12 +202,8 @@ impl VAddr {
         Self::new_unchecked(v as u64)
     }
 
-    pub const fn make_canonical(addr: u64) -> Self {
-        if (addr & (1 << 47)) != 0 {
-            Self(addr | 0xffff_0000_0000_0000)
-        } else {
-            Self(addr & 0x0000_ffff_ffff_ffff)
-        }
+    pub const fn make_canonical(addr: VAddrRepr) -> Self {
+        unsafe { VAddr::new_unchecked(make_canonical(addr)) }
     }
 
     pub const fn as_u64(self) -> u64 {

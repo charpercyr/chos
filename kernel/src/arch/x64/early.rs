@@ -7,8 +7,8 @@ use chos_lib::boot::{KernelBootInfo, KernelMemInfo};
 use chos_lib::elf::Elf;
 use chos_lib::log::debug;
 use chos_lib::mm::{
-    LoggingMapper, MapFlags, MapperFlush, PAddrResolver, PFrame, PFrameRange, RangeMapper, VFrame,
-    VFrameRange, PAddr, VAddr,
+    LoggingMapper, MapFlags, MapperFlush, PAddr, PAddrResolver, PFrame, PFrameRange, RangeMapper,
+    VAddr, VFrame, VFrameRange,
 };
 use multiboot2::MemoryArea;
 
@@ -17,7 +17,7 @@ use super::mm::virt::MMFrameAllocator;
 use crate::arch::mm::per_cpu::init_per_cpu_data;
 use crate::kmain::KernelArgs;
 use crate::mm::phys::{add_region, add_regions, RegionFlags};
-use crate::mm::virt::{paddr_of, MemoryRegionType};
+use crate::mm::virt::{init_kernel_virt, paddr_of, MemoryRegionType};
 
 fn is_early_memory(area: &MemoryArea, mem_info: &KernelMemInfo) -> bool {
     area.typ() == multiboot2::MemoryAreaType::Available
@@ -185,6 +185,7 @@ pub unsafe fn unmap_early_lower_memory(mem_size: u64) {
 }
 
 pub unsafe fn init_non_early_memory(args: &KernelArgs) {
+    init_kernel_virt(args);
     let mbh =
         multiboot2::load_with_offset(args.arch.mbh, virt::PHYSICAL_MAP_BASE.addr().as_usize())
             .expect("Could not load multiboot structure");
