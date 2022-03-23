@@ -1,20 +1,15 @@
 use chos_lib::arch::intr::wait_for_interrupt;
-use chos_lib::mm::VAddr;
 use chos_lib::log::debug;
-use chos_lib::sync::SpinLazy;
+use chos_lib::mm::VAddr;
 
 use super::{Task, TaskArc};
-use crate::cpumask::cpu_count;
-use crate::early::{allocate_early_stacks_order, EarlyStacks};
+use crate::mm::virt::stack::alloc_stack;
 use crate::mm::{per_cpu_lazy, PerCpu};
-
-static IDLE_STACKS_STRUCT: SpinLazy<EarlyStacks> =
-    SpinLazy::new(|| unsafe { allocate_early_stacks_order(cpu_count(), 0) });
 
 per_cpu_lazy! {
     static mut ref IDLE_STACK: VAddr = {
-        let (base, size) = IDLE_STACKS_STRUCT.get().get_for_this_cpu();
-        let stack = base + size;
+        let stack = alloc_stack(0).expect("Stack alloc should not fail");
+        let stack = stack.range.end().addr();
         debug!("Using {:#x} for idle stack", stack);
         stack
     };

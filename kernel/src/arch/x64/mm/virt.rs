@@ -1,11 +1,13 @@
 use core::alloc::AllocError;
 
 use chos_config::arch::mm::virt;
-use chos_lib::arch::mm::{FrameSize4K, PageTable};
-use chos_lib::mm::{FrameAllocator, PFrame, VFrame, PAddr, VAddr};
+use chos_lib::arch::mm::{FrameSize4K, OffsetMapper, PageTable};
+use chos_lib::mm::{
+    FrameAllocator, MapFlags, MapperFlush, PAddr, PFrame, RangeMapper, VAddr, VFrame,
+};
 
 use crate::arch::early::{copy_early_kernel_table_to, early_paddr_of};
-use crate::mm::phys::{raw_alloc, AllocFlags};
+use crate::mm::phys::{raw_alloc, AllocFlags, Page};
 use crate::mm::{per_cpu, PerCpu};
 
 pub struct MMFrameAllocator;
@@ -37,4 +39,18 @@ pub unsafe fn init_kernel_virt() {
         let paddr = early_paddr_of(vaddr).expect("PerCpu should be mapped");
         PageTable::set_page_table(PFrame::new(paddr));
     });
+}
+
+pub fn map_page(page: &Page, vbase: VFrame, flags: MapFlags) -> Result<(), AllocError> {
+    PAGE_TABLE.with(|pgt| unsafe {
+        let mut mapper = OffsetMapper::new(pgt, virt::KERNEL_BASE.addr());
+        mapper
+            .map_range(page.frame_range(), vbase, flags, &mut MMFrameAllocator)
+            .map_err(|err| {
+                chos_lib::log::error!("Map error {:?}", err);
+                AllocError
+            })?
+            .flush();
+        Ok(())
+    })
 }

@@ -1,12 +1,13 @@
 use core::alloc::AllocError;
 
 use chos_lib::init::ConstInit;
-use chos_lib::mm::{VAddr, VFrame, VFrameRange};
+use chos_lib::mm::{VAddr, VFrame, VFrameRange, MapFlags};
 use chos_lib::pool;
 use chos_lib::pool::PoolBox;
 use chos_lib::sync::Spinlock;
 use intrusive_collections::{rbtree, KeyAdapter};
 
+use crate::arch::mm::virt::map_page;
 use crate::mm::phys::{alloc_pages, AllocFlags, MMPoolObjectAllocator, Page, PageBox};
 
 struct StackAlloc {
@@ -30,12 +31,12 @@ impl<'a> KeyAdapter<'a> for StackAllocAdapter {
 
 struct AllStacks {
     stack_tree: rbtree::RBTree<StackAllocAdapter>,
-    next_base: VAddr,
+    next_base: VFrame,
 }
 
 static ALL_STACKS: Spinlock<AllStacks> = Spinlock::new(AllStacks {
     stack_tree: rbtree::RBTree::new(StackAllocAdapter::new()),
-    next_base: VAddr::null(),
+    next_base: VFrame::null(),
 });
 
 pub struct Stack {
@@ -46,7 +47,11 @@ unsafe fn map_stack_unlocked(
     all_stacks: &mut AllStacks,
     page: &Page,
 ) -> Result<VFrame, AllocError> {
-    todo!()
+    let vbase = all_stacks.next_base;
+    // Add guard page
+    all_stacks.next_base = all_stacks.next_base.add((1 << page.order) + 1);
+    map_page(page, vbase, MapFlags::WRITE | MapFlags::GLOBAL)?;
+    Ok(vbase)
 }
 
 pub fn map_stack(page: &Page) -> Result<VFrame, AllocError> {
