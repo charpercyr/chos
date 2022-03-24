@@ -6,19 +6,18 @@ use chos_lib::arch::mm::FrameSize4K;
 use chos_lib::boot::KernelBootInfo;
 use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
-use chos_lib::mm::FrameSize;
-use chos_lib::mm::{VAddr, VFrame};
-use chos_lib::sync::{SpinBarrier, SpinOnceCell};
+use chos_lib::mm::{FrameSize, VAddr, VFrame};
 use raw_alloc::AllocFlags;
 
 use crate::arch::asm::call_with_stack;
 use crate::arch::early::{
-    arch_copy_boot_data, arch_init_early_memory, map_stack, use_early_kernel_table,
+    arch_copy_boot_data, arch_init_early_memory, early_map_stack, use_early_kernel_table,
 };
 use crate::arch::mm::per_cpu::init_per_cpu_data_for_cpu;
 use crate::kmain::{kernel_main, KernelArgs};
 use crate::mm::phys::raw_alloc;
 use crate::mm::this_cpu_info;
+use crate::util::barrier;
 
 fn hlt_loop() -> ! {
     unsafe {
@@ -97,7 +96,7 @@ unsafe fn allocate_early_stack(order: u8) -> VAddr {
         .expect("Should not fail")
         .addr();
     let vaddr = STACKS_BASE;
-    map_stack(vaddr, pages, 1 << order);
+    early_map_stack(vaddr, pages, 1 << order);
     STACKS_BASE = STACKS_BASE.add(1 << order);
     if USE_STACK_GUARD_PAGE {
         STACKS_BASE = STACKS_BASE.add(1);
@@ -105,7 +104,7 @@ unsafe fn allocate_early_stack(order: u8) -> VAddr {
     vaddr.addr()
 }
 
-pub unsafe fn allocate_early_stacks_order(stack_count: usize, order: u8) -> EarlyStacks {
+unsafe fn allocate_early_stacks_order(stack_count: usize, order: u8) -> EarlyStacks {
     let base = STACKS_BASE;
     let stride = (FrameSize4K::PAGE_SIZE << order) + FrameSize4K::PAGE_SIZE;
 
@@ -120,15 +119,13 @@ pub unsafe fn allocate_early_stacks_order(stack_count: usize, order: u8) -> Earl
     }
 }
 
-pub unsafe fn allocate_early_stacks(stack_count: usize) -> EarlyStacks {
+unsafe fn allocate_early_stacks(stack_count: usize) -> EarlyStacks {
     allocate_early_stacks_order(stack_count, stack::KERNEL_STACK_PAGE_ORDER)
 }
 
 #[no_mangle]
 pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
-    static BARRIER: SpinOnceCell<SpinBarrier> = SpinOnceCell::new();
     static mut EARLY_DATA: MaybeUninit<EarlyData> = MaybeUninit::uninit();
-    let barrier = BARRIER.get_or_init(|| SpinBarrier::new(info.core_count));
 
     if id == 0 {
         unsafe { chos_lib::log::set_handler(info.early_log) };
@@ -149,7 +146,7 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
         }
     }
 
-    barrier.wait();
+    barrier!(info.core_count);
 
     if id != 0 {
         unsafe { init_early_memory_secondary(id) };

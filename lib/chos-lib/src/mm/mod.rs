@@ -1,15 +1,16 @@
 mod addr;
-pub use addr::*;
-
 use core::fmt::{self, Debug};
 use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
 use core::{cmp, hash};
 
+pub use addr::*;
 use bitflags::bitflags;
 
 use crate::arch::mm::{DefaultFrameSize};
 use crate::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use crate::int::ceil_divu64;
+use crate::log::{print, println};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FrameAlignError;
@@ -34,6 +35,11 @@ macro_rules! frame {
             }
         }
         impl<S: FrameSize> Eq for $name<S> {}
+        impl<S: FrameSize> PartialEq<$addr> for $name<S> {
+            fn eq(&self, rhs: &$addr) -> bool {
+                self.addr.eq(rhs)
+            }
+        }
 
         impl<S: FrameSize> PartialOrd for $name<S> {
             fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
@@ -45,6 +51,12 @@ macro_rules! frame {
                 self.addr.cmp(&rhs.addr)
             }
         }
+        impl<S: FrameSize> PartialOrd<$addr> for $name<S> {
+            fn partial_cmp(&self, rhs: &$addr) -> Option<cmp::Ordering> {
+                self.addr.partial_cmp(rhs)
+            }
+        }
+
         impl<S: FrameSize> hash::Hash for $name<S> {
             fn hash<H: hash::Hasher>(&self, h: &mut H) {
                 self.addr.hash(h)
@@ -239,7 +251,7 @@ pub trait FrameSize: Clone + Copy + Debug {
 }
 
 pub unsafe trait FrameAllocator<S: FrameSize> {
-    type Error;
+    type Error: fmt::Debug;
     unsafe fn alloc_frame(&mut self) -> Result<VFrame<S>, Self::Error>;
     unsafe fn dealloc_frame(&mut self, frame: VFrame<S>) -> Result<(), Self::Error>;
 }
@@ -380,19 +392,30 @@ pub trait PAddrResolver {
 }
 
 pub struct LoggingMapper<M> {
-    mapper: M,
+    inner: M,
 }
 impl<M> LoggingMapper<M> {
-    pub const fn new(mapper: M) -> Self {
-        Self { mapper }
+    pub const fn new(inner: M) -> Self {
+        Self { inner }
     }
 
     pub fn inner(&self) -> &M {
-        &self.mapper
+        &self.inner
     }
 
     pub fn inner_mut(&mut self) -> &mut M {
-        &mut self.mapper
+        &mut self.inner
+    }
+}
+impl<M> Deref for LoggingMapper<M> {
+    type Target = M;
+    fn deref(&self) -> &M {
+        &self.inner
+    }
+}
+impl<M> DerefMut for LoggingMapper<M> {
+    fn deref_mut(&mut self) -> &mut M {
+        &mut self.inner
     }
 }
 impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
@@ -412,7 +435,7 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
             pframe,
             flags
         );
-        self.mapper.map(pframe, vframe, flags, alloc)
+        self.inner.map(pframe, vframe, flags, alloc)
     }
     unsafe fn unmap<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
@@ -420,7 +443,7 @@ impl<S: FrameSize, M: Mapper<S>> Mapper<S> for LoggingMapper<M> {
         alloc: &mut A,
     ) -> Result<Self::Flush, UnmapError<A::Error>> {
         crate::log::debug!("UNMAP {:016x} ({})", frame, S::DEBUG_STR);
-        self.mapper.unmap(frame, alloc)
+        self.inner.unmap(frame, alloc)
     }
 }
 
@@ -441,7 +464,7 @@ impl<S: FrameSize, M: RangeMapper<S>> RangeMapper<S> for LoggingMapper<M> {
             prange.end(),
             flags,
         );
-        self.mapper.map_range(prange, vbase, flags, alloc)
+        self.inner.map_range(prange, vbase, flags, alloc)
     }
     unsafe fn unmap_range<A: FrameAllocator<Self::PGTFrameSize> + ?Sized>(
         &mut self,
@@ -454,12 +477,46 @@ impl<S: FrameSize, M: RangeMapper<S>> RangeMapper<S> for LoggingMapper<M> {
             vrange.end(),
             S::DEBUG_STR
         );
-        self.mapper.unmap_range(vrange, alloc)
+        self.inner.unmap_range(vrange, alloc)
     }
 }
 
 impl<M: PAddrResolver> PAddrResolver for LoggingMapper<M> {
     fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr> {
-        self.mapper.paddr_of(vaddr)
+        self.inner.paddr_of(vaddr)
+    }
+}
+
+pub trait MapVisitor<'a> {
+    type Entry;
+    type Iterator: Iterator<Item = Self::Entry>;
+    fn root(&'a self) -> Self::Iterator;
+    fn children(&'a self, e: Self::Entry) -> Option<Self::Iterator>;
+}
+
+pub fn print_mapping<'a>(m: &'a impl MapVisitor<'a, Entry: fmt::Debug>) {
+    fn do_print_mapping<'a, M: MapVisitor<'a, Entry: fmt::Debug>>(m: &'a M, it: M::Iterator, lvl: usize) {
+        for e in it {
+            for _ in 0..lvl {
+                print!("|  ");
+            }
+            println!("{:?}", e);
+            if let Some(it) = m.children(e) {
+                do_print_mapping(m, it, lvl + 1);
+            }
+        }
+    }
+    do_print_mapping(m, m.root(), 0)
+}
+
+
+impl<'a, M: MapVisitor<'a>> MapVisitor<'a> for LoggingMapper<M> {
+    type Entry = M::Entry;
+    type Iterator = M::Iterator;
+    fn root(&'a self) -> Self::Iterator {
+        self.inner.root()
+    }
+    fn children(&'a self, e: Self::Entry) -> Option<Self::Iterator> {
+        self.inner.children(e)
     }
 }

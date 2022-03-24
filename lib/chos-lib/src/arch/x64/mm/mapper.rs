@@ -1,7 +1,10 @@
 use core::arch::asm;
+use core::fmt;
 use core::mem::MaybeUninit;
+use core::ptr::write;
 
-use super::{FrameSize1G, FrameSize2M, FrameSize4K, PageEntry, PageTable};
+use super::{FrameSize1G, FrameSize2M, FrameSize4K, PageEntry, PageTable, PageTableIter};
+use crate::log::error;
 use crate::mm::*;
 
 const FLUSH_MAX_INVLPG_FRAMES: u64 = 11;
@@ -72,6 +75,69 @@ impl<'a> OffsetMapper<'a> {
             p4,
             base: VAddr::null(),
         }
+    }
+
+    pub fn duplicate<A: FrameAllocator<FrameSize4K> + ?Sized>(
+        dst: &mut Self,
+        src: &Self,
+        alloc: &mut A,
+    ) -> Result<(), MapError<A::Error>> {
+        fn dup_entry<A: FrameAllocator<FrameSize4K> + ?Sized>(
+            dst_base: VAddr,
+            src_base: VAddr,
+            dst_entry: &mut PageEntry,
+            src_entry: &PageEntry,
+            level: usize,
+            alloc: &mut A,
+        ) -> Result<(), MapError<A::Error>> {
+            if src_entry.present() {
+                *dst_entry = *src_entry;
+                match level {
+                    0 | 1 | 2 if !src_entry.huge_page() => unsafe {
+                        // info!(
+                        //     "Dup table at {:p} to {:p} (lvl={})",
+                        //     src_entry, dst_entry, level
+                        // );
+                        let src_pgt: &PageTable =
+                            resolve_page_vaddr(src_base, src_entry.paddr()).as_ref();
+                        let dst_frame = alloc.alloc_frame().map_err(MapError::FrameAllocError)?;
+                        let dst_paddr = resolve_page_paddr(dst_base, dst_frame.addr());
+                        write(dst_frame.addr().as_mut_ptr(), PageTable::empty());
+                        let dst_pgt: &mut PageTable = dst_frame.addr().as_mut();
+                        dst_entry.set_paddr(dst_paddr);
+                        for (dst_entry, src_entry) in dst_pgt.iter_mut().zip(src_pgt.iter()) {
+                            dup_entry(dst_base, src_base, dst_entry, src_entry, level + 1, alloc)
+                                .map_err(|e| {
+                                if let Err(dealloc_err) = alloc.dealloc_frame(dst_frame) {
+                                    error!("Could not dealloc frame {:?}", dealloc_err);
+                                }
+                                e
+                            })?;
+                        }
+                    },
+                    _ => {
+                        // info!(
+                        //     "Dup entry at {:p} to {:p} (lvl={})",
+                        //     src_entry, dst_entry, level
+                        // );
+                    } // Nothing to do, copying entry is good enough
+                }
+            }
+            Ok(())
+        }
+        if dst
+            .p4
+            .iter()
+            .zip(src.p4.iter())
+            .any(|(dst, src)| dst.present() && src.present())
+        {
+            return Err(MapError::AlreadyMapped);
+        }
+
+        for (dst_entry, src_entry) in dst.p4.iter_mut().zip(src.p4.iter()) {
+            dup_entry(dst.base, src.base, dst_entry, src_entry, 0, alloc)?;
+        }
+        Ok(())
     }
 }
 
@@ -265,11 +331,11 @@ impl PAddrResolver for OffsetMapper<'_> {
     }
 }
 
-unsafe fn resolve_page_vaddr(base: VAddr, addr: PAddr) -> VAddr {
-    VAddr::new_unchecked(addr.as_u64() + base.as_u64())
+fn resolve_page_vaddr(base: VAddr, addr: PAddr) -> VAddr {
+    VAddr::new(addr.as_u64() + base.as_u64())
 }
 
-unsafe fn resolve_page_paddr(base: VAddr, addr: VAddr) -> PAddr {
+fn resolve_page_paddr(base: VAddr, addr: VAddr) -> PAddr {
     PAddr::new(addr.as_u64() - base.as_u64())
 }
 
@@ -415,4 +481,57 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> Drop for Alloc
 
 unsafe fn page_table_from_entry(base: VAddr, entry: PageEntry) -> Option<&'static PageTable> {
     entry.present().then(|| (base + entry.paddr()).as_ref())
+}
+
+pub struct OffsetMapperVisitorEntry<'a> {
+    entry: &'a PageEntry,
+    lvl: usize,
+}
+
+impl fmt::Debug for OffsetMapperVisitorEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self.entry, f)
+    }
+}
+
+pub struct OffsetMapperVisitorIter<'a> {
+    iter: core::iter::Filter<PageTableIter<'a>, fn(&&'a PageEntry) -> bool>,
+    lvl: usize,
+}
+
+impl<'a> Iterator for OffsetMapperVisitorIter<'a> {
+    type Item = OffsetMapperVisitorEntry<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|entry| OffsetMapperVisitorEntry {
+            entry,
+            lvl: self.lvl,
+        })
+    }
+}
+
+impl<'a> MapVisitor<'a> for OffsetMapper<'a>
+where
+    Self: 'a,
+{
+    type Entry = OffsetMapperVisitorEntry<'a>;
+    type Iterator = OffsetMapperVisitorIter<'a>;
+
+    fn root(&'a self) -> Self::Iterator {
+        OffsetMapperVisitorIter {
+            iter: self.p4.iter().filter(|e| e.present()),
+            lvl: 0,
+        }
+    }
+
+    fn children(&'a self, e: Self::Entry) -> Option<Self::Iterator> {
+        let table_paddr = resolve_page_vaddr(self.base, e.entry.paddr());
+        let table: &'a PageTable = unsafe { table_paddr.as_ref() };
+        match e.lvl {
+            0 | 1 | 2 if !e.entry.huge_page() => Some(OffsetMapperVisitorIter {
+                iter: table.iter().filter(|e| e.present()),
+                lvl: e.lvl + 1,
+            }),
+            _ => None,
+        }
+    }
 }

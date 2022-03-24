@@ -30,17 +30,17 @@ unsafe impl FrameAllocator<FrameSize4K> for MMFrameAllocator {
 }
 
 per_cpu! {
-    static mut ref PAGE_TABLE: PageTable = PageTable::empty();
+    static mut ref _PAGE_TABLE: PageTable = PageTable::empty();
 }
 
 per_cpu_lazy! {
-    static mut ref MAPPER: LoggingMapper<OffsetMapper<'static>> = unsafe { LoggingMapper::new(OffsetMapper::new(PAGE_TABLE.get_mut(), virt::PHYSICAL_MAP_BASE.addr())) };
+    static mut ref MAPPER: LoggingMapper<OffsetMapper<'static>> = unsafe { LoggingMapper::new(OffsetMapper::new(_PAGE_TABLE.get_mut(), virt::PHYSICAL_MAP_BASE.addr())) };
 }
 
 pub unsafe fn init_kernel_virt() {
-    PAGE_TABLE.with(|pgt| {
-        copy_early_kernel_table_to(pgt);
-        let vaddr = VAddr::from(pgt);
+    MAPPER.with(|mapper| {
+        copy_early_kernel_table_to(mapper);
+        let vaddr = VAddr::from(&*mapper.p4);
         let paddr = early_paddr_of(vaddr).expect("PerCpu should be mapped");
         PageTable::set_page_table(PFrame::new(paddr));
     });

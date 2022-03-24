@@ -318,19 +318,26 @@ unsafe fn free_in_region(region: &mut Region, pframe: PFrame, order: u8) {
 }
 
 pub unsafe fn alloc_pages_unlocked(order: u8, flags: AllocFlags) -> Result<PFrame, AllocError> {
-    domain_debug!(
-        domain::PALLOC,
-        "alloc_pages(order = {}, flags = {:?})",
-        order,
-        flags
-    );
     for region in REGIONS.iter_mut() {
         if region.meta.biggest_order >= order && region.meta.free_pages >= (1 << order) {
             if let Ok(addr) = alloc_in_region(region, order, flags) {
+                domain_debug!(
+                    domain::PALLOC,
+                    "alloc_pages(order = {}, flags = {:?}) = {:#x}",
+                    order,
+                    flags,
+                    addr,
+                );
                 return Ok(addr);
             }
         }
     }
+    domain_debug!(
+        domain::PALLOC,
+        "alloc_pages(order = {}, flags = {:?}) = AllocError",
+        order,
+        flags,
+    );
     Err(AllocError)
 }
 

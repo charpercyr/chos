@@ -5,7 +5,7 @@ use core::mem::MaybeUninit;
 use chos_config::arch::mm::{phys, virt};
 use chos_lib::mm::{PAddr, PFrame, VAddr, VFrame, VFrameRange};
 
-use self::stack::init_kernel_stacks;
+use self::stack::{init_kernel_stacks, StackMemoryRegion};
 use super::phys::Page;
 use crate::kmain::KernelArgs;
 
@@ -45,7 +45,7 @@ trait MemoryRegion {
     fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr>;
     fn map_paddr(&self, pframe: PFrame) -> Result<VFrame, MemoryMapError>;
 
-    fn handle_page_fault(&self, reason: PageFaultReason) -> PageFaultResult;
+    fn handle_page_fault(&self, addr: VAddr, reason: PageFaultReason) -> PageFaultResult;
 }
 
 struct IdentityMemoryRegion {
@@ -78,7 +78,7 @@ impl MemoryRegion for IdentityMemoryRegion {
         Ok(self.base + pframe)
     }
 
-    fn handle_page_fault(&self, _: PageFaultReason) -> PageFaultResult {
+    fn handle_page_fault(&self, _: VAddr, _: PageFaultReason) -> PageFaultResult {
         PageFaultResult::NotMapped
     }
 }
@@ -109,35 +109,8 @@ impl MemoryRegion for StaticMemoryRegion {
         Err(MemoryMapError::CannotMap)
     }
 
-    fn handle_page_fault(&self, _: PageFaultReason) -> PageFaultResult {
+    fn handle_page_fault(&self, _: VAddr, _: PageFaultReason) -> PageFaultResult {
         PageFaultResult::NotMapped
-    }
-}
-
-pub struct StackMemoryRegion;
-
-impl MemoryRegion for StackMemoryRegion {
-    fn typ(&self) -> MemoryRegionType {
-        MemoryRegionType::Stack
-    }
-    fn name(&self) -> &str {
-        "kernel"
-    }
-
-    fn vaddr_range(&self) -> VFrameRange {
-        todo!()
-    }
-
-    fn paddr_of(&self, vaddr: VAddr) -> Option<PAddr> {
-        todo!()
-    }
-
-    fn map_paddr(&self, _: PFrame) -> Result<VFrame, MemoryMapError> {
-        Err(MemoryMapError::CannotMap)
-    }
-
-    fn handle_page_fault(&self, reason: PageFaultReason) -> PageFaultResult {
-        todo!()
     }
 }
 
@@ -212,7 +185,7 @@ pub unsafe fn unmap_page(_: VAddr) {
 
 pub fn handle_kernel_page_fault(vaddr: VAddr, reason: PageFaultReason) -> PageFaultResult {
     get_memory_region_by_vaddr(vaddr)
-        .map(|r| r.handle_page_fault(reason))
+        .map(|r| r.handle_page_fault(vaddr, reason))
         .unwrap_or(PageFaultResult::NotMapped)
 }
 

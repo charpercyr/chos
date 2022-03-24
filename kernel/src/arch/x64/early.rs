@@ -139,7 +139,7 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
     init_per_cpu_data(info.core_count, &elf, &mut mapper);
 }
 
-pub unsafe fn map_stack(vbase: VFrame<FrameSize4K>, pages: PAddr, count: u64) {
+pub unsafe fn early_map_stack(vbase: VFrame<FrameSize4K>, pages: PAddr, count: u64) {
     let pages = PFrame::new_unchecked(pages);
     let mut mapper = get_early_kernel_mapper();
     mapper
@@ -160,11 +160,13 @@ pub unsafe fn arch_copy_boot_data(data: &ArchKernelBootInfo) -> ArchKernelArgs {
     }
 }
 
-pub unsafe fn copy_early_kernel_table_to(pgt: &mut PageTable) {
-    for i in 256..512 {
-        // core::ptr::write_volatile(&mut pgt[i], EARLY_KERNEL_TABLE[i]);
-        pgt[i] = EARLY_KERNEL_TABLE[i];
-    }
+pub unsafe fn copy_early_kernel_table_to(pgt: &mut OffsetMapper) {
+    OffsetMapper::duplicate(
+        pgt,
+        get_early_kernel_mapper().inner(),
+        &mut MMFrameAllocator,
+    )
+    .expect("Copying table should not fail");
 }
 
 pub fn early_paddr_of(vaddr: VAddr) -> Option<PAddr> {

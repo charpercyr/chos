@@ -88,7 +88,7 @@ pub unsafe fn unsafe_log_impl(args: Arguments<'_>, lvl: LogLevel) {
 }
 
 pub macro print ($($args:tt)*) {
-    $crate::log::log_impl(format_args!($($args)*))
+    $crate::log::log_impl(format_args!($($args)*), $crate::log::LogLevel::Info)
 }
 
 pub macro unsafe_print ($($args:tt)*) {
