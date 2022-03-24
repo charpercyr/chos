@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::alloc::AllocError;
 
 use chos_config::arch::mm::{phys, virt};
 use chos_lib::arch::boot::ArchKernelBootInfo;
@@ -16,7 +17,7 @@ use super::kmain::ArchKernelArgs;
 use super::mm::virt::MMFrameAllocator;
 use crate::arch::mm::per_cpu::init_per_cpu_data;
 use crate::kmain::KernelArgs;
-use crate::mm::phys::{add_region, add_regions, RegionFlags};
+use crate::mm::phys::{add_region, add_regions, Page, RegionFlags};
 use crate::mm::virt::{init_kernel_virt, paddr_of, MemoryRegionType};
 
 fn is_early_memory(area: &MemoryArea, mem_info: &KernelMemInfo) -> bool {
@@ -139,18 +140,26 @@ pub unsafe fn init_early_kernel_table(info: &KernelBootInfo) {
     init_per_cpu_data(info.core_count, &elf, &mut mapper);
 }
 
-pub unsafe fn early_map_stack(vbase: VFrame<FrameSize4K>, pages: PAddr, count: u64) {
-    let pages = PFrame::new_unchecked(pages);
-    let mut mapper = get_early_kernel_mapper();
-    mapper
-        .map_range(
-            PFrameRange::new(pages, pages.add(count)),
-            vbase,
-            MapFlags::GLOBAL | MapFlags::WRITE,
-            &mut MMFrameAllocator,
-        )
-        .unwrap()
-        .ignore();
+pub fn early_map_page(page: &Page, vbase: VFrame, flags: MapFlags) -> Result<(), AllocError> {
+    let range = page.frame_range();
+    unsafe {
+        let mut mapper = get_early_kernel_mapper();
+        mapper
+            .map_range(range, vbase, flags, &mut MMFrameAllocator)
+            .map_err(|err| {
+                chos_lib::log::error!(
+                    "Map error {:?}, tried to map {:#x}-{:#x} to {:#x} [{:?}]",
+                    err,
+                    range.start(),
+                    range.end(),
+                    vbase,
+                    flags,
+                );
+                AllocError
+            })?
+            .flush();
+        Ok(())
+    }
 }
 
 pub unsafe fn arch_copy_boot_data(data: &ArchKernelBootInfo) -> ArchKernelArgs {

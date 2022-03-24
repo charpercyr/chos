@@ -6,14 +6,13 @@ use chos_lib::arch::mm::PAGE_SIZE;
 use chos_lib::init::ConstInit;
 use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame};
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
-use chos_lib::sync::fake::FakeLock;
-use chos_lib::sync::lock::Lock;
 use chos_lib::sync::spin::lock::RawSpinLock;
+use chos_lib::sync::Spinlock;
 use intrusive_collections::{rbtree, KeyAdapter};
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
-use super::virt::{map_paddr, map_page, paddr_of, MemoryRegionType};
+use super::virt::{map_page, map_pframe, paddr_of, MemoryRegionType};
 
 #[derive(Debug)]
 pub struct Page {
@@ -78,7 +77,7 @@ unsafe impl SlabAllocator for PageSlabAllocator {
     type Slab = PageSlab;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
         let paddr = raw_alloc::alloc_pages_unlocked(PageSlab::ORDER, AllocFlags::empty())?;
-        let vaddr = map_paddr(paddr, MemoryRegionType::Alloc).map_err(|_| {
+        let vaddr = map_pframe(paddr, MemoryRegionType::Alloc).map_err(|_| {
             raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER);
             AllocError
         })?;
@@ -92,13 +91,13 @@ unsafe impl SlabAllocator for PageSlabAllocator {
 }
 
 struct PagePoolImpl {
-    alloc: Lock<FakeLock, ObjectAllocator<PageSlabAllocator, Page>>,
+    alloc: Spinlock<ObjectAllocator<PageSlabAllocator, Page>>,
 }
 
 impl PagePoolImpl {
-    pub const unsafe fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            alloc: Lock::new_with(ObjectAllocator::new(PageSlabAllocator), FakeLock::new()),
+            alloc: Spinlock::new(ObjectAllocator::new(PageSlabAllocator)),
         }
     }
 }
@@ -121,7 +120,7 @@ unsafe impl Pool<Page> for PagePoolImpl {
     }
 }
 
-static PAGE_POOL: PagePoolImpl = unsafe { PagePoolImpl::new() };
+static PAGE_POOL: PagePoolImpl = PagePoolImpl::new();
 chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 
 pub type PageBox = PoolBox<Page, PagePool>;

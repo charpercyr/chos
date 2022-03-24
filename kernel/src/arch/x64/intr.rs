@@ -28,8 +28,8 @@ per_cpu_lazy! {
         let pf_stack = alloc_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER).expect("Stack alloc should not fail");
         let df_stack = alloc_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER).expect("Stack alloc should not fail");
 
-        debug!("Using {:#x} for Page Fault Stack (ist = {})", pf_stack.range.start(), PAGE_FAULT_IST);
-        debug!("Using {:#x} for Double Fault Stack (ist = {})", df_stack.range.start(), DOUBLE_FAULT_IST);
+        debug!("Using {:#x}-{:#x} for Page Fault Stack (ist = {})", pf_stack.range.start(), pf_stack.range.end(), PAGE_FAULT_IST);
+        debug!("Using {:#x}-{:#x} for Double Fault Stack (ist = {})", df_stack.range.start(), df_stack.range.end(), DOUBLE_FAULT_IST);
 
         tss.ist[PAGE_FAULT_IST as usize] = pf_stack.range.end().addr();
         tss.ist[DOUBLE_FAULT_IST as usize] = pf_stack.range.end().addr();

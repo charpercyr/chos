@@ -9,8 +9,8 @@ use chos_lib::sync::Spinlock;
 use intrusive_collections::{rbtree, Bound, KeyAdapter};
 
 use super::{MemoryMapError, MemoryRegion, MemoryRegionType, PageFaultReason, PageFaultResult};
+use crate::arch::early;
 use crate::arch::mm::virt::map_page;
-use crate::early::EarlyStacks;
 use crate::mm::phys::{alloc_pages, AllocFlags, MMPoolObjectAllocator, Page, PageBox};
 
 struct StackAlloc {
@@ -39,30 +39,38 @@ struct AllStacks {
 
 static ALL_STACKS: Spinlock<AllStacks> = Spinlock::new(AllStacks {
     stack_tree: rbtree::RBTree::new(StackAllocAdapter::new()),
-    next_base: VFrame::null(),
+    next_base: virt::STACK_BASE,
 });
 
+#[derive(Clone, Copy, Debug)]
 pub struct Stack {
     pub range: VFrameRange,
 }
 
-fn map_stack_unlocked(all_stacks: &mut AllStacks, page: &Page) -> Result<VFrame, AllocError> {
+fn map_stack_unlocked(
+    all_stacks: &mut AllStacks,
+    page: &Page,
+    map: impl FnOnce(&Page, VFrame, MapFlags) -> Result<(), AllocError>,
+) -> Result<VFrame, AllocError> {
     let vbase = all_stacks.next_base;
     // Add guard page
     all_stacks.next_base = all_stacks.next_base.add((1 << page.order) + 1);
-    map_page(page, vbase, MapFlags::WRITE | MapFlags::GLOBAL)?;
+    map(page, vbase, MapFlags::WRITE | MapFlags::GLOBAL)?;
     Ok(vbase)
 }
 
 pub fn map_kernel_stack(page: &Page) -> Result<VFrame, AllocError> {
     let mut all_stacks = ALL_STACKS.lock();
-    map_stack_unlocked(&mut all_stacks, page)
+    map_stack_unlocked(&mut all_stacks, page, map_page)
 }
 
-pub fn alloc_kernel_stack(order: u8) -> Result<Stack, AllocError> {
+fn do_alloc_kernel_stack(
+    order: u8,
+    map: impl FnOnce(&Page, VFrame, MapFlags) -> Result<(), AllocError>,
+) -> Result<Stack, AllocError> {
     let page = alloc_pages(order, AllocFlags::empty())?;
     let mut all_stacks = ALL_STACKS.lock();
-    let vbase = map_stack_unlocked(&mut all_stacks, &page)?;
+    let vbase = map_stack_unlocked(&mut all_stacks, &page, map)?;
     let range = page.frame_range();
     all_stacks.stack_tree.insert(PoolBox::new(StackAlloc {
         link: rbtree::AtomicLink::new(),
@@ -74,23 +82,12 @@ pub fn alloc_kernel_stack(order: u8) -> Result<Stack, AllocError> {
     })
 }
 
-pub unsafe fn init_kernel_stacks(core_count: usize, early_stacks: &[EarlyStacks]) {
-    let mut all_stacks = ALL_STACKS.lock();
-    let next_base = VFrame::new(
-        early_stacks
-            .iter()
-            .map(|st| st.base + st.stride * (core_count as u64))
-            .max()
-            .unwrap_or(virt::STACK_BASE.addr()),
-    );
-    for st in early_stacks {
-        all_stacks.stack_tree.insert(PoolBox::new(StackAlloc {
-            link: rbtree::AtomicLink::new(),
-            base: VFrame::new(st.base),
-            page: None,
-        }));
-    }
-    all_stacks.next_base = next_base;
+pub fn alloc_kernel_stack(order: u8) -> Result<Stack, AllocError> {
+    do_alloc_kernel_stack(order, map_page)
+}
+
+pub fn alloc_early_stack(order: u8) -> Result<Stack, AllocError> {
+    do_alloc_kernel_stack(order, early::early_map_page)
 }
 
 pub struct StackMemoryRegion;

@@ -54,25 +54,26 @@ pub fn map_frames<S: FrameSize>(
 where
     OffsetMapper<'static>: RangeMapper<S, PGTFrameSize = FrameSize4K>,
 {
-    unsafe {
-        MAPPER.with_static(|mapper| {
-            mapper
-                .map_range(range, vbase, flags, &mut MMFrameAllocator)
-                .map_err(|err| {
-                    chos_lib::log::error!(
-                        "Map error {:?}, tried to map {:#x}-{:#x} to {:#x} [{:?}]",
-                        err,
-                        range.start(),
-                        range.end(),
-                        vbase,
-                        flags,
-                    );
-                    AllocError
-                })?
-                .flush();
-            Ok(())
-        })
+    if flags.contains(MapFlags::IMM_ALL_CPUS) {
+        todo!("Notify all cpus to map the range");
     }
+    MAPPER.with(|mapper| unsafe {
+        mapper
+            .map_range(range, vbase, flags, &mut MMFrameAllocator)
+            .map_err(|err| {
+                chos_lib::log::error!(
+                    "Map error {:?}, tried to map {:#x}-{:#x} to {:#x} [{:?}]",
+                    err,
+                    range.start(),
+                    range.end(),
+                    vbase,
+                    flags,
+                );
+                AllocError
+            })?
+            .flush();
+        Ok(())
+    })
 }
 
 pub fn map_page(page: &Page, vbase: VFrame, flags: MapFlags) -> Result<(), AllocError> {

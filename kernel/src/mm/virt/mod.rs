@@ -5,7 +5,7 @@ use core::mem::MaybeUninit;
 use chos_config::arch::mm::{phys, virt};
 use chos_lib::mm::{PAddr, PFrame, VAddr, VFrame, VFrameRange};
 
-use self::stack::{init_kernel_stacks, StackMemoryRegion};
+use self::stack::StackMemoryRegion;
 use super::phys::Page;
 use crate::kmain::KernelArgs;
 
@@ -165,14 +165,14 @@ fn get_memory_region_by_vaddr(vaddr: VAddr) -> Option<&'static (dyn MemoryRegion
     None
 }
 
-pub unsafe fn map_paddr(pframe: PFrame, typ: MemoryRegionType) -> Result<VFrame, MemoryMapError> {
+pub fn map_pframe(pframe: PFrame, typ: MemoryRegionType) -> Result<VFrame, MemoryMapError> {
     get_memory_region_by_type(typ)
         .ok_or(MemoryMapError::RegionNotFound)
         .and_then(|r| r.map_paddr(pframe))
 }
 
-pub unsafe fn map_page(page: &Page, typ: MemoryRegionType) -> Result<VFrame, MemoryMapError> {
-    map_paddr(page.frame, typ)
+pub fn map_page(page: &Page, typ: MemoryRegionType) -> Result<VFrame, MemoryMapError> {
+    map_pframe(page.frame, typ)
 }
 
 pub fn paddr_of(vaddr: VAddr, typ: MemoryRegionType) -> Option<PAddr> {
@@ -190,7 +190,6 @@ pub fn handle_kernel_page_fault(vaddr: VAddr, reason: PageFaultReason) -> PageFa
 }
 
 pub unsafe fn init_kernel_virt(args: &KernelArgs) {
-    init_kernel_stacks(args.core_count, &[args.early_stacks]);
     ALLOC_REGION.size = args.mem_info.total_size;
     HEAP_REGION.size = args.mem_info.total_size;
     IOMEM_REGION.size = args.mem_info.total_size;

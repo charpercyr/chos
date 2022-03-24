@@ -1,25 +1,23 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use chos_lib::Volatile;
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, println, LogHandler, TermColorLogHandler};
+use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::mm::VAddr;
-use chos_lib::sync::{SpinLazy, Spinlock};
+use chos_lib::sync::Spinlock;
 
 use crate::arch::asm::call_with_stack;
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
 use crate::cpumask::init_cpumask;
-use crate::early::EarlyStacks;
 use crate::intr::{init_interrupts, init_interrupts_cpu};
 use crate::mm::this_cpu_info;
-use crate::mm::virt::stack::{alloc_kernel_stack, Stack};
+use crate::mm::virt::stack::Stack;
 use crate::sched::enter_schedule;
 use crate::symbols::add_elf_symbols;
 use crate::timer::init_timer;
@@ -33,7 +31,7 @@ pub struct KernelArgs {
     pub core_count: usize,
     pub mem_info: KernelMemInfo,
     pub arch: ArchKernelArgs,
-    pub early_stacks: EarlyStacks,
+    pub early_stacks: &'static [Stack],
 }
 
 struct Logger {
@@ -114,26 +112,7 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
         }
 
         barrier!(args.core_count);
-
-        {
-            static STACK: SpinLazy<Stack> = SpinLazy::new(|| alloc_kernel_stack(0).unwrap());
-            if id == 0 {
-                let stack = STACK.get();
-                let ptr: &mut Volatile<u32> = unsafe { stack.range.start().addr().as_mut() };
-                println!("Writing @ {:#p}", ptr);
-                ptr.write(0xdeadbeef);
-            }
-            barrier!(args.core_count);
-            if id == 1 {
-                let stack = STACK.get();
-                let ptr: &Volatile<u32> = unsafe { stack.range.start().addr().as_ref() };
-                println!("Got {:#x} @ {:#p}", ptr.read(), ptr);
-            }
-        }
     }
 
-    let (base, size) = args.early_stacks.get_for(id);
-    let stack = base + size;
-
-    unsafe { do_enter_schedule(stack) }
+    unsafe { do_enter_schedule(args.early_stacks[id].range.end().addr()) }
 }

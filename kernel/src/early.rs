@@ -6,17 +6,13 @@ use chos_lib::arch::mm::FrameSize4K;
 use chos_lib::boot::KernelBootInfo;
 use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
-use chos_lib::mm::{FrameSize, VAddr, VFrame};
-use raw_alloc::AllocFlags;
+use chos_lib::mm::{VAddr, VFrame};
 
 use crate::arch::asm::call_with_stack;
-use crate::arch::early::{
-    arch_copy_boot_data, arch_init_early_memory, early_map_stack, use_early_kernel_table,
-};
+use crate::arch::early::{arch_copy_boot_data, arch_init_early_memory, use_early_kernel_table};
 use crate::arch::mm::per_cpu::init_per_cpu_data_for_cpu;
 use crate::kmain::{kernel_main, KernelArgs};
-use crate::mm::phys::raw_alloc;
-use crate::mm::this_cpu_info;
+use crate::mm::virt::stack::{alloc_early_stack, Stack};
 use crate::util::barrier;
 
 fn hlt_loop() -> ! {
@@ -39,12 +35,13 @@ pub unsafe fn init_early_memory_secondary(id: usize) {
     init_per_cpu_data_for_cpu(id);
 }
 
+const MAX_CPUS: usize = 16;
 struct EarlyData {
-    stacks: EarlyStacks,
+    stacks: &'static [MaybeUninit<Stack>; MAX_CPUS],
     kernel_args: KernelArgs,
 }
 
-unsafe fn copy_boot_data(info: &KernelBootInfo, stacks: EarlyStacks) -> KernelArgs {
+unsafe fn populate_kernel_args(info: &KernelBootInfo, stacks: &'static [Stack]) -> KernelArgs {
     KernelArgs {
         kernel_elf: info.elf.as_ref().into(),
         initrd: info.initrd.map(|ird| ird.as_ref().into()),
@@ -70,58 +67,7 @@ unsafe fn enter_kernel_main(id: usize, args: &KernelArgs, stack: VAddr) -> ! {
     )
 }
 
-const USE_STACK_GUARD_PAGE: bool = true;
-
-#[derive(Clone, Copy, Debug)]
-pub struct EarlyStacks {
-    pub base: VAddr,
-    pub size: u64,
-    pub stride: u64,
-}
-
-impl EarlyStacks {
-    pub fn get_for(&self, id: usize) -> (VAddr, u64) {
-        (self.base + (id as u64) * self.stride, self.size)
-    }
-
-    pub fn get_for_this_cpu(&self) -> (VAddr, u64) {
-        self.get_for(this_cpu_info().id)
-    }
-}
-
 static mut STACKS_BASE: VFrame<FrameSize4K> = virt::STACK_BASE;
-
-unsafe fn allocate_early_stack(order: u8) -> VAddr {
-    let pages = raw_alloc::alloc_pages(order, AllocFlags::empty())
-        .expect("Should not fail")
-        .addr();
-    let vaddr = STACKS_BASE;
-    early_map_stack(vaddr, pages, 1 << order);
-    STACKS_BASE = STACKS_BASE.add(1 << order);
-    if USE_STACK_GUARD_PAGE {
-        STACKS_BASE = STACKS_BASE.add(1);
-    }
-    vaddr.addr()
-}
-
-unsafe fn allocate_early_stacks_order(stack_count: usize, order: u8) -> EarlyStacks {
-    let base = STACKS_BASE;
-    let stride = (FrameSize4K::PAGE_SIZE << order) + FrameSize4K::PAGE_SIZE;
-
-    for _ in 0..stack_count {
-        allocate_early_stack(order);
-    }
-
-    EarlyStacks {
-        base: base.addr(),
-        size: FrameSize4K::PAGE_SIZE << order,
-        stride,
-    }
-}
-
-unsafe fn allocate_early_stacks(stack_count: usize) -> EarlyStacks {
-    allocate_early_stacks_order(stack_count, stack::KERNEL_STACK_PAGE_ORDER)
-}
 
 #[no_mangle]
 pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
@@ -138,10 +84,17 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
 
         unsafe {
             init_early_memory(info);
-            let stacks = allocate_early_stacks(info.core_count);
+            static mut STACKS: [MaybeUninit<Stack>; MAX_CPUS] = [MaybeUninit::uninit(); MAX_CPUS];
+            for i in 0..info.core_count {
+                STACKS[i] =
+                    MaybeUninit::new(alloc_early_stack(stack::KERNEL_STACK_PAGE_ORDER).unwrap());
+            }
             EARLY_DATA = MaybeUninit::new(EarlyData {
-                stacks,
-                kernel_args: copy_boot_data(info, stacks),
+                stacks: &STACKS,
+                kernel_args: populate_kernel_args(
+                    info,
+                    MaybeUninit::slice_assume_init_ref(&STACKS[0..info.core_count]),
+                ),
             });
         }
     }
@@ -157,7 +110,7 @@ pub fn entry(info: &KernelBootInfo, id: usize) -> ! {
             stacks,
             kernel_args,
         } = EARLY_DATA.assume_init_ref();
-        let stack_base = stacks.base + stacks.stride * id as u64 + stacks.size;
+        let stack_base = stacks[id].assume_init().range.end().addr();
         debug!("[{}] Using stack @ {:x}", id, stack_base);
         enter_kernel_main(id, kernel_args, stack_base);
     }

@@ -13,7 +13,7 @@ use super::phys::MMSlabAllocator;
 use super::slab::RawObjectAllocator;
 use crate::config::domain;
 use crate::mm::phys::raw_alloc::{self, AllocFlags};
-use crate::mm::virt::{map_paddr, paddr_of};
+use crate::mm::virt::{map_pframe, paddr_of};
 
 macro_rules! kalloc_sizes {
     (@array_len) => {
@@ -97,7 +97,7 @@ unsafe impl GlobalAlloc for KAlloc {
         let order = ceil_log2u64(layout.size() as u64) - PAGE_SHIFT;
         raw_alloc::alloc_pages(order as u8, AllocFlags::empty())
             .map(|paddr| {
-                let vaddr = map_paddr(paddr, crate::mm::virt::MemoryRegionType::Normal)
+                let vaddr = map_pframe(paddr, crate::mm::virt::MemoryRegionType::Normal)
                     .unwrap_or(VFrame::null());
                 vaddr.addr().as_mut_ptr()
             })

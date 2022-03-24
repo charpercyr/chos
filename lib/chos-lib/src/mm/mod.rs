@@ -7,7 +7,7 @@ use core::{cmp, hash};
 pub use addr::*;
 use bitflags::bitflags;
 
-use crate::arch::mm::{DefaultFrameSize};
+use crate::arch::mm::DefaultFrameSize;
 use crate::elf::{Elf, ProgramEntryFlags, ProgramEntryType};
 use crate::int::ceil_divu64;
 use crate::log::{print, println};
@@ -257,13 +257,15 @@ pub unsafe trait FrameAllocator<S: FrameSize> {
 }
 
 bitflags! {
-    pub struct MapFlags: u8 {
-        const WRITE =   0b0000_0001;
-        const EXEC =    0b0000_0010;
+    pub struct MapFlags: u32 {
+        const WRITE =           0b0000_0000_0001;
+        const EXEC =            0b0000_0000_0010;
 
-        const GLOBAL =  0b0001_0000;
-        const NOCACHE = 0b0010_0000;
-        const USER =    0b0100_0000;
+        const GLOBAL =          0b0000_0001_0000;
+        const NOCACHE =         0b0000_0010_0000;
+        const USER =            0b0000_0100_0000;
+
+        const IMM_ALL_CPUS =    0b0001_0000_0000;
     }
 }
 
@@ -495,7 +497,11 @@ pub trait MapVisitor<'a> {
 }
 
 pub fn print_mapping<'a>(m: &'a impl MapVisitor<'a, Entry: fmt::Debug>) {
-    fn do_print_mapping<'a, M: MapVisitor<'a, Entry: fmt::Debug>>(m: &'a M, it: M::Iterator, lvl: usize) {
+    fn do_print_mapping<'a, M: MapVisitor<'a, Entry: fmt::Debug>>(
+        m: &'a M,
+        it: M::Iterator,
+        lvl: usize,
+    ) {
         for e in it {
             for _ in 0..lvl {
                 print!("|  ");
@@ -508,7 +514,6 @@ pub fn print_mapping<'a>(m: &'a impl MapVisitor<'a, Entry: fmt::Debug>) {
     }
     do_print_mapping(m, m.root(), 0)
 }
-
 
 impl<'a, M: MapVisitor<'a>> MapVisitor<'a> for LoggingMapper<M> {
     type Entry = M::Entry;
