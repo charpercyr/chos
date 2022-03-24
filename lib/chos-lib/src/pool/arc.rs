@@ -1,3 +1,7 @@
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
+use core::alloc::Allocator;
 use core::alloc::{AllocError, Layout};
 use core::convert::TryFrom;
 use core::fmt;
@@ -96,6 +100,21 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
         unsafe { &self.ptr.as_ref().count().count }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn from_box(b: Box<T, P>) -> Self
+    where
+        P: Allocator,
+    {
+        let count = b.count();
+        count.count.fetch_add(1, Ordering::Relaxed);
+        let (ptr, alloc) = Box::into_raw_with_allocator(b);
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(ptr) },
+            alloc,
+            value: PhantomData,
+        }
+    }
+
     pub fn from_pool_box(b: PoolBox<T, P>) -> Self {
         let (ptr, alloc) = PoolBox::leak_with_allocator(b);
         let count = ptr.count();
@@ -104,6 +123,20 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
             ptr: ptr.into(),
             alloc,
             value: PhantomData,
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn into_box(this: Self) -> Result<Box<T, P>, Self>
+    where
+        P: Allocator,
+    {
+        if this.is_unique() {
+            this.get_count().fetch_sub(1, Ordering::Relaxed);
+            let (ptr, alloc) = Self::into_raw_with_allocator(this);
+            unsafe { Ok(Box::from_raw_in(ptr as _, alloc)) }
+        } else {
+            Err(this)
         }
     }
 
@@ -240,7 +273,9 @@ unsafe impl<T: IArcAdapter, P: ConstPool<T>> PointerOps for DefaultPointerOps<IA
     }
 }
 
-unsafe impl<T: IArcAdapter, P: ConstPool<T>> TryExclusivePointerOps for DefaultPointerOps<IArc<T, P>> {
+unsafe impl<T: IArcAdapter, P: ConstPool<T>> TryExclusivePointerOps
+    for DefaultPointerOps<IArc<T, P>>
+{
     unsafe fn try_get_mut(&self, value: *const Self::Value) -> Option<*mut Self::Value> {
         let mut arc = IArc::<T, P>::from_raw(value);
         let res = IArc::get_mut(&mut arc).map(|res| res as *mut T);
