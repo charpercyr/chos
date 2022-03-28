@@ -128,6 +128,7 @@ extern "x86-interrupt" fn intr_breakpoint(frame: StackFrame) {
 #[interrupt]
 extern "x86-interrupt" fn intr_page_fault(frame: StackFrame, error: PageFaultError) {
     let vaddr = Cr2::read();
+    let mut reason_str = "Not Mapped";
     if !error.contains(PageFaultError::USER_MODE | PageFaultError::PROTECTION_VIOLATION) {
         let reason = if error.contains(PageFaultError::CAUSED_BY_WRITE) {
             PageFaultReason::Write
@@ -136,11 +137,13 @@ extern "x86-interrupt" fn intr_page_fault(frame: StackFrame, error: PageFaultErr
         };
         match handle_kernel_page_fault(vaddr, reason) {
             PageFaultResult::Mapped(_) => return,
-            PageFaultResult::NotMapped => (),
+            PageFaultResult::NotMapped => reason_str = "Not Mapped",
+            PageFaultResult::StackOverflow => reason_str = "Stack Overflow",
         };
     }
     panic!(
-        "PAGE FAULT: {:#x?} [{:?}]\nTried to access {:#x}\nRSP = {:#x}",
+        "PAGE FAULT because of: {}\n{:#x?} [{:?}]\nTried to access {:#x}\nRSP = {:#x}",
+        reason_str,
         frame,
         error,
         Cr2::read(),

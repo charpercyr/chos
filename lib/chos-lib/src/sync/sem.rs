@@ -1,6 +1,7 @@
-
 pub trait Sem {
-    fn with_count(count: usize) -> Self;
+    fn with_count(count: usize) -> Self
+    where
+        Self: Sized;
 
     fn wait_count(&self, count: usize);
     fn signal_count(&self, count: usize);

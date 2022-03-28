@@ -352,3 +352,16 @@ unsafe impl<L: RawLock, F: SlabAllocator, T> Pool<T> for PoolObjectAllocator<L, 
 
 pub type DefaultPoolObjectAllocator<T, const O: u8> =
     PoolObjectAllocator<RawSpinLock, MMSlabAllocator<O>, T>;
+
+pub macro object_pool {
+    (struct $name:ident (order = $order:expr) : $typ:ty) => {
+        paste::item! {
+            static [<__ $name:snake:upper _IMPL>]: $crate::mm::slab::DefaultPoolObjectAllocator<$typ, $order> =
+                chos_lib::init::ConstInit::INIT;
+            chos_lib::pool!(struct $name: $typ => &[<__ $name:snake:upper _IMPL>]);
+        }
+    },
+    (struct $name:ident : $typ:ty) => {
+        $crate::mm::slab::object_pool!(struct $name (order = 0) : $typ);
+    },
+}

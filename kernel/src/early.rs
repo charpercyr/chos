@@ -8,7 +8,7 @@ use chos_lib::check_kernel_entry;
 use chos_lib::log::*;
 use chos_lib::mm::{VAddr, VFrame};
 
-use crate::arch::asm::call_with_stack;
+use crate::arch::asm::call_with_stack2;
 use crate::arch::early::{arch_copy_boot_data, arch_init_early_memory, use_early_kernel_table};
 use crate::arch::mm::per_cpu::init_per_cpu_data_for_cpu;
 use crate::kmain::{kernel_main, KernelArgs};
@@ -54,16 +54,14 @@ unsafe fn populate_kernel_args(info: &KernelBootInfo, stacks: &'static [Stack]) 
 }
 
 unsafe fn enter_kernel_main(id: usize, args: &KernelArgs, stack: VAddr) -> ! {
-    extern "C" fn call_kernel_main(id: u64, args: u64, _: u64, _: u64) -> ! {
+    extern "C" fn call_kernel_main(id: u64, args: u64) -> ! {
         kernel_main(id as usize, unsafe { &*(args as *const KernelArgs) })
     }
-    call_with_stack(
+    call_with_stack2(
         call_kernel_main,
         stack,
         id as u64,
         args as *const KernelArgs as u64,
-        0,
-        0,
     )
 }
 

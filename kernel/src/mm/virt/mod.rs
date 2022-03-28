@@ -28,6 +28,7 @@ pub enum MemoryMapError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PageFaultResult {
     NotMapped,
+    StackOverflow,
     Mapped(PAddr),
 }
 

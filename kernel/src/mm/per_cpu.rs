@@ -9,6 +9,7 @@ pub macro per_cpu ($($(pub $(($($vis:tt)*))?)? static mut ref $name:ident: $ty:t
         $(
             $(pub $(($($vis)*))*)* struct [<__PerCpu $name:camel>](());
             unsafe impl $crate::mm::PerCpu for [<__PerCpu $name:camel>] {
+                type This = Self;
                 type Target = $ty;
                 #[inline]
                 fn get(&self) -> *mut Self::Target {
@@ -27,6 +28,7 @@ pub macro per_cpu_lazy ($($(pub $(($($vis:tt)*))?)? static mut ref $name:ident: 
         $(
             $(pub $(($($vis)*))*)* struct [<__PerCpu $name:camel>](());
             unsafe impl $crate::mm::PerCpu for [<__PerCpu $name:camel>] {
+                type This = Self;
                 type Target = $ty;
                 #[inline]
                 fn get(&self) -> *mut Self::Target {
@@ -61,13 +63,14 @@ pub macro per_cpu_with_all {
 }
 
 pub unsafe trait PerCpu {
+    type This;
     type Target: 'static + ?Sized;
     fn get(&self) -> *mut Self::Target;
 
-    unsafe fn get_ref(&self) -> &'static Self::Target {
+    unsafe fn get_ref<'a>(&self) -> &'a Self::Target {
         &*self.get()
     }
-    unsafe fn get_mut(&self) -> &'static mut Self::Target {
+    unsafe fn get_mut<'a>(&self) -> &'a mut Self::Target {
         &mut *self.get()
     }
 

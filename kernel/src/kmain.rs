@@ -7,10 +7,8 @@ use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
 use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
-use chos_lib::mm::VAddr;
 use chos_lib::sync::Spinlock;
 
-use crate::arch::asm::call_with_stack;
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
 use crate::arch::kmain::ArchKernelArgs;
 use crate::arch::mm::virt::init_kernel_virt;
@@ -59,60 +57,51 @@ fn setup_logger() {
     }
 }
 
-unsafe fn do_enter_schedule(stack: VAddr) -> ! {
-    extern "C" fn call_schedule(_: u64, _: u64, _: u64, _: u64) -> ! {
-        enter_schedule();
-    }
-    call_with_stack(call_schedule, stack, 0, 0, 0, 0)
-}
-
 pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
-    {
-        barrier!(args.core_count);
+    barrier!(args.core_count);
 
-        if id == 0 {
-            setup_logger();
-            init_cpumask(args.core_count);
+    if id == 0 {
+        setup_logger();
+        init_cpumask(args.core_count);
 
-            debug!();
-            debug!("##############");
-            debug!("### KERNEL ###");
-            debug!("##############");
-            debug!();
-        }
-
-        // ANYTHING THAT NEEDS TO ACCESS LOWER HALF MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-
-        if id == 0 {
-            unsafe {
-                unmap_early_lower_memory(args.mem_info.total_size);
-                init_non_early_memory(args);
-            }
-
-            add_elf_symbols(
-                virt::STATIC_BASE.addr(),
-                &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
-            );
-        }
-
-        barrier!(args.core_count);
-
-        // ANYTHING THAT NEEDS TO ACCESS LOWER MEMORY NEEDS TO BE DONE BEFORE THIS POINT
-
-        unsafe { init_kernel_virt() };
-
-        if id == 0 {
-            unsafe { init_interrupts(args) };
-        }
-        barrier!(args.core_count);
-        unsafe { init_interrupts_cpu(args) };
-
-        if id == 0 {
-            init_timer(args);
-        }
-
-        barrier!(args.core_count);
+        debug!();
+        debug!("##############");
+        debug!("### KERNEL ###");
+        debug!("##############");
+        debug!();
     }
 
-    unsafe { do_enter_schedule(args.early_stacks[id].range.end().addr()) }
+    // ANYTHING THAT NEEDS TO ACCESS LOWER HALF MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+
+    if id == 0 {
+        unsafe {
+            unmap_early_lower_memory(args.mem_info.total_size);
+            init_non_early_memory(args);
+        }
+
+        add_elf_symbols(
+            virt::STATIC_BASE.addr(),
+            &Elf::new(&args.kernel_elf).expect("Should be a valid elf"),
+        );
+    }
+
+    barrier!(args.core_count);
+
+    // ANYTHING THAT NEEDS TO ACCESS LOWER MEMORY NEEDS TO BE DONE BEFORE THIS POINT
+
+    unsafe { init_kernel_virt() };
+
+    if id == 0 {
+        unsafe { init_interrupts(args) };
+    }
+    barrier!(args.core_count);
+    unsafe { init_interrupts_cpu(args) };
+
+    if id == 0 {
+        init_timer(args);
+    }
+
+    barrier!(args.core_count);
+
+    enter_schedule();
 }

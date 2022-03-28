@@ -1,52 +1,82 @@
 mod idle;
-mod ktask;
+pub mod ktask;
+pub mod sync;
 
 use alloc::borrow::Cow;
-use core::hint::black_box;
 use core::intrinsics::likely;
 use core::ptr::NonNull;
 use core::sync::atomic::AtomicBool;
 
-use chos_lib::arch::intr::wait_for_interrupt;
 use chos_lib::init::ConstInit;
 use chos_lib::log::debug;
-use chos_lib::mm::VAddr;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
 use intrusive_collections::LinkedListAtomicLink;
 
 use crate::arch::sched::ArchTask;
 use crate::mm::slab::DefaultPoolObjectAllocator;
+use crate::mm::virt::stack::Stack;
 use crate::mm::{per_cpu, PerCpu};
+
+pub struct TaskOps {
+    pub wake: fn(&Task),
+}
+
+pub struct TaskNode {
+    link: LinkedListAtomicLink,
+}
 
 pub struct Task {
     link: LinkedListAtomicLink,
     count: IArcCount,
-    kernel_stack: VAddr,
-    arch: ArchTask,
-    data: Option<NonNull<()>>,
     debug_name: Cow<'static, str>,
+    pub arch: ArchTask,
+    data: Option<NonNull<()>>,
+    ops: &'static TaskOps,
 }
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 
+per_cpu! {
+    static mut ref CURRENT_TASK: Option<TaskArc> = None;
+}
+fn current_task() -> TaskArc {
+    #[cfg(debug_assertions)]
+    return CURRENT_TASK.clone().expect("Not in schedule");
+    #[cfg(not(debug_assertions))]
+    return unsafe { CURRENT_TASK.unwrap_unchecked() };
+}
+
 impl Task {
-    fn new(
-        kernel_stack: VAddr,
-        data: Option<NonNull<()>>,
+    fn with_fn(
+        kernel_stack: Stack,
+        fun: fn() -> !,
         debug_name: impl Into<Cow<'static, str>>,
+        ops: &'static TaskOps,
+        data: Option<NonNull<()>>,
     ) -> Option<TaskArc> {
-        Some(TaskArc::new(Task {
-            link: LinkedListAtomicLink::new(),
-            count: IArcCount::INIT,
-            kernel_stack,
-            arch: ArchTask::new(),
-            data,
-            debug_name: debug_name.into(),
-        }))
+        Some(
+            TaskArc::try_new(Task {
+                link: LinkedListAtomicLink::new(),
+                count: IArcCount::INIT,
+                debug_name: debug_name.into(),
+                arch: ArchTask::with_fn(kernel_stack, fun),
+                data,
+                ops,
+            })
+            .ok()?,
+        )
     }
 
     pub fn debug_name(&self) -> Option<&str> {
         self.debug_name.as_ref().into()
+    }
+
+    pub fn enter_first_task(&self) -> ! {
+        ArchTask::enter_first_task(self)
+    }
+
+    pub fn wake(&self) {
+        (self.ops.wake)(self)
     }
 }
 
@@ -62,27 +92,27 @@ pub type TaskArc = IArc<Task, TaskPool>;
 
 chos_lib::intrusive_adapter!(TaskAdapter = TaskArc: Task { link: LinkedListAtomicLink });
 
-pub fn schedule() {
+fn find_next_task() -> TaskArc {
     const SCHEDULERS: [fn() -> Option<TaskArc>; 2] = [ktask::find_next_task, idle::find_next_task];
-    let next_task = SCHEDULERS
+    SCHEDULERS
         .iter()
         .find_map(|scheduler| scheduler())
-        .expect("Should always have a task to schedule");
-    debug!(
-        "Scheduling task name '{}'",
-        next_task.debug_name().unwrap_or("<unknown>")
-    );
-    drop(black_box(next_task))
+        .expect("Should always have a task to schedule")
+}
+
+pub fn schedule() {
+    todo!()
 }
 
 pub fn enter_schedule() -> ! {
     IN_SCHED.store(true, core::sync::atomic::Ordering::Relaxed);
     debug!("enter_schedule()");
-    schedule();
-    loop {
-        wait_for_interrupt();
-    }
-    // unreachable!();
+    let task = find_next_task();
+    CURRENT_TASK.with(|cur| {
+        debug_assert!(cur.is_none());
+        *cur = Some(task.clone());
+    });
+    task.enter_first_task();
 }
 
 pub fn schedule_tick() {

@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 
-use chos_lib::cpumask::Cpumask;
+pub use chos_lib::cpumask::Cpumask;
 use chos_lib::sync::SpinOnceCell;
 
 use crate::mm::this_cpu_info;
@@ -22,6 +22,10 @@ pub fn all() -> Cpumask {
     *ALL_CPUS.try_get().expect("Cpumask not initialized")
 }
 
-pub fn all_but_self() -> Cpumask {
-    all() - Cpumask::cpu(this_cpu_info().id as u8)
+pub fn this_cpu() -> Cpumask {
+    Cpumask::for_cpu(this_cpu_info().id as u8)
+}
+
+pub fn all_but_this_cpu() -> Cpumask {
+    all() - this_cpu()
 }

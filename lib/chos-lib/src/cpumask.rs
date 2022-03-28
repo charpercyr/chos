@@ -12,7 +12,7 @@ impl Cpumask {
         Self(0)
     }
 
-    pub const fn cpu(n: u8) -> Self {
+    pub const fn for_cpu(n: u8) -> Self {
         Self(1 << n)
     }
 
@@ -34,6 +34,10 @@ impl Cpumask {
 
     pub const fn raw(self) -> u64 {
         self.0
+    }
+
+    pub const fn contains(self, rhs: Self) -> bool {
+        (self.0 & rhs.0) == rhs.0
     }
 }
 
@@ -101,5 +105,19 @@ impl Iterator for CpumaskIter {
             self.0 &= !(1 << bit);
             bit as u8
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::prelude::v1::*;
+    #[test]
+    fn contains() {
+        let sup = Cpumask::from_raw(0b1110_0000);
+        assert!(sup.contains(Cpumask::from_raw(0b1100_0000)));
+        assert!(sup.contains(Cpumask::from_raw(0b1000_0000)));
+        assert!(!sup.contains(Cpumask::from_raw(0b1111_0000)));
+        assert!(!sup.contains(Cpumask::from_raw(0b0000_0001)));
     }
 }

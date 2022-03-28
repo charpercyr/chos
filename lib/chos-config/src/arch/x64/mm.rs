@@ -9,7 +9,10 @@ pub mod phys {
         PFrame::new_unchecked(PAddr::new(0x0400_0000))
     };
     #[cfg(not(debug_assertions))]
-    pub const KERNEL_DATA_BASE: PAddr = PAddr::new(0x0100_0000);
+    pub const KERNEL_DATA_BASE: PFrame<FrameSize4K> = unsafe {
+        use chos_lib::mm::PAddr;
+        PFrame::new_unchecked(PAddr::new(0x0100_0000))
+    };
 }
 
 pub mod virt {

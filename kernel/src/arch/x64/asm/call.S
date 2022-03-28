@@ -9,9 +9,9 @@
     r9 = arg3
 */
 
-.global call_with_stack
-.type call_with_stack, @function
-call_with_stack:
+.global __call_with_stack
+.type __call_with_stack, @function
+__call_with_stack:
     mov %rsi, %rsp
     push $0
     mov $0, %rbp
@@ -22,3 +22,4 @@ call_with_stack:
     mov %r9, %rcx
     call *%rax
     ud2
+.size __call_with_stack, . - __call_with_stack

@@ -69,7 +69,7 @@ impl Apic<'_> {
                 .with_enabled(ApicEnabled::Enabled)
                 .with_vector(vector),
         );
-        let mask = Cpumask::cpu(self.id());
+        let mask = Cpumask::for_cpu(self.id());
         self.regs
             .logical_destination
             .write(DestinationRegister::new().with_destination(mask.raw() as u8));

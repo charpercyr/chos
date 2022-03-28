@@ -2,6 +2,7 @@ use core::alloc::AllocError;
 
 use chos_config::arch::mm::virt;
 use chos_lib::init::ConstInit;
+use chos_lib::log::warn;
 use chos_lib::mm::{MapFlags, PAddr, PFrame, VAddr, VFrame, VFrameRange};
 use chos_lib::pool;
 use chos_lib::pool::PoolBox;
@@ -20,6 +21,12 @@ struct StackAlloc {
 }
 static STACK_ALLOC_ALLOCATOR: MMPoolObjectAllocator<StackAlloc, 0> = ConstInit::INIT;
 pool!(struct StackAllocPool: StackAlloc => &STACK_ALLOC_ALLOCATOR);
+
+impl StackAlloc {
+    fn is_guard_page(&self, addr: VAddr) -> bool {
+        addr.frame_offset().0 == self.base
+    }
+}
 
 type StackAllocBox = PoolBox<StackAlloc, StackAllocPool>;
 
@@ -52,10 +59,10 @@ fn map_stack_unlocked(
     page: &Page,
     map: impl FnOnce(&Page, VFrame, MapFlags) -> Result<(), AllocError>,
 ) -> Result<VFrame, AllocError> {
+    // Guard page is the first page, it is not mapped.
     let vbase = all_stacks.next_base;
-    // Add guard page
-    all_stacks.next_base = all_stacks.next_base.add((1 << page.order) + 1);
-    map(page, vbase, MapFlags::WRITE | MapFlags::GLOBAL)?;
+    all_stacks.next_base = all_stacks.next_base.add(1 << page.order + 1);
+    map(page, vbase.add(1), MapFlags::WRITE | MapFlags::GLOBAL)?;
     Ok(vbase)
 }
 
@@ -78,7 +85,7 @@ fn do_alloc_kernel_stack(
         base: vbase,
     }));
     Ok(Stack {
-        range: VFrameRange::new(vbase, vbase.add(range.frame_count())),
+        range: VFrameRange::new(vbase.add(1), vbase.add(range.frame_count() + 1)),
     })
 }
 
@@ -95,7 +102,7 @@ pub struct StackMemoryRegion;
 impl StackMemoryRegion {
     fn find_stack_for<R>(&self, vaddr: VAddr, f: impl FnOnce(&StackAlloc) -> R) -> Option<R> {
         let all_stacks = ALL_STACKS.lock();
-        let cursor = all_stacks.stack_tree.lower_bound(Bound::Included(&vaddr));
+        let cursor = all_stacks.stack_tree.upper_bound(Bound::Included(&vaddr));
         cursor.get().map(f)
     }
 }
@@ -128,11 +135,24 @@ impl MemoryRegion for StackMemoryRegion {
 
     fn handle_page_fault(&self, vaddr: VAddr, _: PageFaultReason) -> PageFaultResult {
         self.find_stack_for(vaddr, |st| {
-            st.page.as_ref().and_then(|page| {
-                map_page(page, st.base, MapFlags::EXEC | MapFlags::GLOBAL)
-                    .ok()
-                    .map(|_| PageFaultResult::Mapped(PAddr::null()))
-            })
+            if st.is_guard_page(vaddr) {
+                Some(PageFaultResult::StackOverflow)
+            } else {
+                st.page.as_ref().and_then(|page| {
+                    map_page(page, st.base.add(1), MapFlags::EXEC | MapFlags::GLOBAL)
+                        .map_err(|err| {
+                            warn!(
+                                "Could not map {:#x}-{:#x} to {:#x}",
+                                page.frame_range().start(),
+                                page.frame_range().end(),
+                                st.base.add(1),
+                            );
+                            err
+                        })
+                        .ok()
+                        .map(|_| PageFaultResult::Mapped(PAddr::null()))
+                })
+            }
         })
         .flatten()
         .unwrap_or(PageFaultResult::NotMapped)
