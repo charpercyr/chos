@@ -1,5 +1,6 @@
 use core::arch::asm;
 use core::mem::{size_of, MaybeUninit};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use chos_lib::arch::intr::IoPl;
 use chos_lib::arch::regs::{Flags, IntrRegs, ScratchRegs, CS};
@@ -30,28 +31,29 @@ unsafe fn enter_first_task(stack: VAddr) -> ! {
 }
 
 #[naked]
-unsafe extern "C" fn switch_task(new_stack: VAddr, old_stack_ptr: *mut VAddr) {
+unsafe extern "C" fn switch_task(new_stack: VAddr, old_state: *mut ArchTaskState) {
     // RDI = new_stack
     // RSI = old_stack
     asm!(
         "mov %rsp, %rax",
-        "pushq $0",   // SS
+        "pushq $0",  // SS
         "push %rax", // RSP
         "pushf",     // RFlags
-        "pushq $8",   // CS TODO Get it from a constant
+        "pushq $8",  // CS TODO Get it from a constant
         "leaq 0f(%rip), %rax",
         "push %rax", // RIP
-        "pushq $0", // Error
-        "pushq %rdi",
-        "pushq %rsi",
+        "pushq $0",  // Error
+        "push %rdi",
+        "push %rsi",
         "push %rdx",
         "push %rcx",
         "push %r8",
         "push %r9",
         "push %r10",
         "push %r11",
-        "pushq %rax",
+        "push %rax",
         "mov %rsp, (%rsi)",
+        "movq $1, 8(%rsi)",
         "mov %rdi, %rsp",
         "pop %rax",
         "pop %r11",
@@ -63,7 +65,7 @@ unsafe extern "C" fn switch_task(new_stack: VAddr, old_stack_ptr: *mut VAddr) {
         "pop %rsi",
         "pop %rdi",
         "add $8, %rsp", // Error
-        "iretq", // 
+        "iretq",
         "0:",
         "ret",
         options(att_syntax, noreturn),
@@ -81,8 +83,10 @@ unsafe extern "C" fn setup_task() -> ! {
     )
 }
 
+#[repr(C)]
 pub struct ArchTaskState {
-    pub rsp: VAddr,
+    rsp: VAddr,
+    sched_lock: AtomicU64,
 }
 
 impl ArchTaskState {
@@ -110,7 +114,10 @@ impl ArchTaskState {
                     ss: 0,
                 },
             });
-            Self { rsp: regs_addr }
+            Self {
+                rsp: regs_addr,
+                sched_lock: AtomicU64::new(1),
+            }
         }
     }
 
@@ -135,7 +142,12 @@ impl ArchTaskState {
         };
         let old_stack_ptr = {
             let mut old_state = old.state.lock();
-            (&mut old_state.arch.rsp) as *mut VAddr
+            assert!(old_state
+                .arch
+                .sched_lock
+                .compare_exchange(1, 0, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok());
+            (&mut old_state.arch) as *mut ArchTaskState
         };
         unsafe { switch_task(new_stack, old_stack_ptr) }
     }

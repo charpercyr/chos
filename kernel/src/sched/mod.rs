@@ -115,16 +115,17 @@ pub type TaskArc = IArc<Task, TaskPool>;
 chos_lib::intrusive_adapter!(TaskAdapter = TaskArc: Task { link: LinkedListAtomicLink });
 
 fn find_next_task() -> TaskArc {
-    const SCHEDULERS: [fn() -> Option<TaskArc>; 2] = [ktask::find_next_task, idle::find_next_task];
+    const SCHEDULERS: [fn() -> Option<TaskArc>; 1] = [ktask::find_next_task];
     SCHEDULERS
         .iter()
         .find_map(|scheduler| scheduler())
-        .expect("Should always have a task to schedule")
+        .unwrap_or_else(idle::task)
 }
 
 fn do_schedule(cur: TaskArc) {
     let next = find_next_task();
     if cur.get_ptr() != next.get_ptr() {
+        CURRENT_TASK.with(|cur| *cur = Some(next.clone()));
         ArchTaskState::switch_to(cur, next);
     }
 }
@@ -150,6 +151,30 @@ pub fn schedule_tick() {
     }
 }
 
+#[inline]
+pub fn disable_sched_save() -> bool {
+    if likely(in_sched()) {
+        SCHED_DISABLE.with(|v| *v += 1);
+        true
+    } else {
+        false
+    }
+}
+
+#[inline]
+pub fn restore_sched(in_sched: bool) {
+    if likely(in_sched) {
+        SCHED_DISABLE.with(|v| *v -= 1);
+    }
+}
+
+pub fn without_schedule<R>(f: impl FnOnce() -> R) -> R {
+    let in_sched = disable_sched_save();
+    let ret = f();
+    restore_sched(in_sched);
+    ret
+}
+
 static IN_SCHED: AtomicBool = AtomicBool::new(false);
 per_cpu! {
     static mut ref SCHED_DISABLE: u64 = 0;
@@ -162,13 +187,7 @@ fn in_sched() -> bool {
 #[no_mangle]
 #[inline]
 fn __lock_disable_sched_save() -> u64 {
-    if likely(in_sched()) {
-        SCHED_DISABLE.with(|v| *v += 1);
-        true
-    } else {
-        false
-    }
-    .into()
+    disable_sched_save().into()
 }
 
 #[no_mangle]
@@ -179,7 +198,5 @@ fn __lock_restore_sched(in_sched: u64) {
         1 => true,
         _ => panic!("Invalid value for in_sched"),
     };
-    if likely(in_sched) {
-        SCHED_DISABLE.with(|v| *v -= 1);
-    }
+    restore_sched(in_sched)
 }
