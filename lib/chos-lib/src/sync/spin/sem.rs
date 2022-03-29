@@ -1,7 +1,7 @@
 use core::hint::spin_loop;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::sync::sem::Sem;
+use crate::sync::sem::{Sem, TrySem};
 
 pub struct SpinSem {
     count: AtomicUsize,
@@ -21,27 +21,33 @@ impl Sem for SpinSem {
     }
 
     fn wait_count(&self, count: usize) {
-        loop {
-            let sem_count = self.count.load(Ordering::Relaxed);
-            if sem_count >= count {
-                if self
-                    .count
-                    .compare_exchange(
-                        sem_count,
-                        sem_count - count,
-                        Ordering::Acquire,
-                        Ordering::Relaxed,
-                    )
-                    .is_ok()
-                {
-                    return;
-                }
-            }
+        while !self.try_wait_count(count) {
             spin_loop()
         }
     }
 
     fn signal_count(&self, count: usize) {
         self.count.fetch_add(count, Ordering::Release);
+    }
+}
+
+impl TrySem for SpinSem {
+    fn try_wait_count(&self, count: usize) -> bool {
+        let sem_count = self.count.load(Ordering::Relaxed);
+        if sem_count >= count {
+            if self
+                .count
+                .compare_exchange(
+                    sem_count,
+                    sem_count - count,
+                    Ordering::Acquire,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                return true;
+            }
+        }
+        false
     }
 }

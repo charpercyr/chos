@@ -10,9 +10,10 @@ use core::sync::atomic::AtomicBool;
 use chos_lib::init::ConstInit;
 use chos_lib::log::debug;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
+use chos_lib::sync::Spinlock;
 use intrusive_collections::LinkedListAtomicLink;
 
-use crate::arch::sched::ArchTask;
+use crate::arch::sched::ArchTaskState;
 use crate::mm::slab::DefaultPoolObjectAllocator;
 use crate::mm::virt::stack::Stack;
 use crate::mm::{per_cpu, PerCpu};
@@ -25,11 +26,23 @@ pub struct TaskNode {
     link: LinkedListAtomicLink,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TaskRunningState {
+    Ready,
+    Blocked,
+    Zombie,
+}
+
+pub struct TaskState {
+    pub running_state: TaskRunningState,
+    pub arch: ArchTaskState,
+}
+
 pub struct Task {
     link: LinkedListAtomicLink,
     count: IArcCount,
     debug_name: Cow<'static, str>,
-    pub arch: ArchTask,
+    pub state: Spinlock<TaskState>,
     data: Option<NonNull<()>>,
     ops: &'static TaskOps,
 }
@@ -39,11 +52,11 @@ unsafe impl Sync for Task {}
 per_cpu! {
     static mut ref CURRENT_TASK: Option<TaskArc> = None;
 }
-fn current_task() -> TaskArc {
-    #[cfg(debug_assertions)]
-    return CURRENT_TASK.clone().expect("Not in schedule");
-    #[cfg(not(debug_assertions))]
-    return unsafe { CURRENT_TASK.unwrap_unchecked() };
+fn current_task_arc() -> TaskArc {
+    CURRENT_TASK.clone().expect("Not in schedule")
+}
+fn with_current_task_ref<R>(f: impl FnOnce(&Task) -> R) -> R {
+    CURRENT_TASK.with(move |task| f(task.as_deref().expect("Not in schedule")))
 }
 
 impl Task {
@@ -59,7 +72,10 @@ impl Task {
                 link: LinkedListAtomicLink::new(),
                 count: IArcCount::INIT,
                 debug_name: debug_name.into(),
-                arch: ArchTask::with_fn(kernel_stack, fun),
+                state: Spinlock::new(TaskState {
+                    running_state: TaskRunningState::Ready,
+                    arch: ArchTaskState::with_fn(kernel_stack, fun),
+                }),
                 data,
                 ops,
             })
@@ -71,13 +87,19 @@ impl Task {
         self.debug_name.as_ref().into()
     }
 
-    pub fn enter_first_task(&self) -> ! {
-        ArchTask::enter_first_task(self)
+    pub fn enter_first_task(this: TaskArc) -> ! {
+        ArchTaskState::enter_first_task(this)
     }
 
-    pub fn wake(&self) {
-        (self.ops.wake)(self)
+    fn mark_blocked_and_schedule(this: TaskArc) {
+        {
+            let mut state = this.state.lock();
+            state.running_state = TaskRunningState::Blocked;
+        }
+        schedule();
     }
+
+    fn wake(&self) {}
 }
 
 static TASK_POOL: DefaultPoolObjectAllocator<Task, 0> = ConstInit::INIT;
@@ -100,8 +122,15 @@ fn find_next_task() -> TaskArc {
         .expect("Should always have a task to schedule")
 }
 
+fn do_schedule(cur: TaskArc) {
+    let next = find_next_task();
+    if cur.get_ptr() != next.get_ptr() {
+        ArchTaskState::switch_to(cur, next);
+    }
+}
+
 pub fn schedule() {
-    todo!()
+    do_schedule(current_task_arc())
 }
 
 pub fn enter_schedule() -> ! {
@@ -112,7 +141,7 @@ pub fn enter_schedule() -> ! {
         debug_assert!(cur.is_none());
         *cur = Some(task.clone());
     });
-    task.enter_first_task();
+    Task::enter_first_task(task)
 }
 
 pub fn schedule_tick() {

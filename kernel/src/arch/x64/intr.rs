@@ -83,7 +83,7 @@ fn is_addr_in_kernel(addr: VAddr) -> bool {
 
 fn handle_intr_error(frame: StackFrame) {
     if is_addr_in_kernel(frame.intr.rip) {
-        panic!("Error in kernel: {:#?}", frame);
+        panic!("Error in kernel: {:#x?}", frame);
     } else {
         todo!("Handle user errors");
     }

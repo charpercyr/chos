@@ -1,20 +1,15 @@
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use chos_config::arch::mm::stack;
 use chos_lib::log::debug;
-use chos_lib::pool::PoolBox;
-use chos_lib::sync::Spinlock;
-use intrusive_collections::linked_list;
 use pin_project::pin_project;
 
-use super::{Task, TaskArc};
+use super::{Task, TaskArc, TaskOps};
 use crate::cpumask::{self, Cpumask};
 use crate::mm::per_cpu_lazy;
-use crate::mm::slab::object_pool;
 use crate::mm::virt::stack::alloc_kernel_stack;
 
 mod private {
@@ -59,18 +54,7 @@ impl<F: Future<Output: KTaskOutput> + Send + 'static> KTaskFn for KTaskFuture<F>
     }
 }
 
-struct KTask {
-    link: linked_list::AtomicLink,
-    name: Cow<'static, str>,
-    mask: Cpumask,
-    fun: Box<dyn KTaskFn>,
-}
-object_pool!(struct KTaskPool: KTask);
-type KTaskBox = PoolBox<KTask, KTaskPool>;
-chos_lib::intrusive_adapter!(KTaskAdapter = KTaskBox : KTask { link: linked_list::AtomicLink });
-
-static TASK_LIST: Spinlock<linked_list::LinkedList<KTaskAdapter>> =
-    Spinlock::new(linked_list::LinkedList::new(KTaskAdapter::new()));
+static KTASK_OPS: TaskOps = TaskOps { wake: |_| todo!() };
 
 per_cpu_lazy! {
     static mut ref KTASK_TASK: TaskArc = {
@@ -80,13 +64,14 @@ per_cpu_lazy! {
             stack,
             ktask_loop,
             "[ktask]",
+            &KTASK_OPS,
+            None,
         ).expect("KTask Task::new() should not fail")
     };
 }
 
 fn ktask_loop() -> ! {
-    loop {
-    }
+    todo!()
 }
 
 pub(super) fn find_next_task() -> Option<TaskArc> {
@@ -94,14 +79,7 @@ pub(super) fn find_next_task() -> Option<TaskArc> {
 }
 
 fn do_spawn(fun: impl KTaskFn, name: impl Into<Cow<'static, str>>, mask: Cpumask) {
-    let task = KTaskBox::new(KTask {
-        link: linked_list::AtomicLink::new(),
-        name: name.into(),
-        mask,
-        fun: Box::new(fun),
-    });
-    let mut task_list = TASK_LIST.lock();
-    task_list.push_back(task);
+    todo!()
 }
 
 pub fn spawn_mask<R: KTaskOutput>(

@@ -294,9 +294,9 @@ pub macro domain ($($name:ident = $value:expr),* $(,)?) {
 }
 
 pub macro todo_warn($($args:tt)*) {
-    chos_lib::log::warn!(concat!("TODO ", file!(), ":", line!(), " {}"), $($args)*)
+    chos_lib::log::warn!(concat!("TODO ", file!(), ":", line!(), " {}"), format_args!($($args)*))
 }
 
 pub macro unsafe_todo_warn($($args:tt)*) {
-    chos_lib::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), $($args)*)
+    chos_lib::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), format_args!($($args)*))
 }

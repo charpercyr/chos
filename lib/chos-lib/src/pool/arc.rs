@@ -20,11 +20,17 @@ pub struct IArcCount {
     count: AtomicUsize,
 }
 
+impl IArcCount {
+    pub const fn new() -> Self {
+        Self {
+            count: AtomicUsize::new(0),
+        }
+    }
+}
+
 impl ConstInit for IArcCount {
     #[allow(clippy::declare_interior_mutable_const)]
-    const INIT: Self = Self {
-        count: AtomicUsize::new(0),
-    };
+    const INIT: Self = Self::new();
 }
 
 impl fmt::Debug for IArcCount {
@@ -73,6 +79,10 @@ impl<T: IArcAdapter, P: Pool<T>> IArc<T, P> {
             alloc,
             value: PhantomData,
         }
+    }
+
+    pub fn get_ptr(&self) -> *const T {
+        self.ptr.as_ptr()
     }
 
     pub fn get_ref(&self) -> &T {

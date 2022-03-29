@@ -6,7 +6,7 @@ use chos_lib::arch::regs::{Flags, IntrRegs, ScratchRegs, CS};
 use chos_lib::mm::VAddr;
 
 use crate::mm::virt::stack::Stack;
-use crate::sched::Task;
+use crate::sched::TaskArc;
 
 const REG_DEFAULT_VALUE: u64 = 0xcafebeefdeadbabe;
 
@@ -30,6 +30,47 @@ unsafe fn enter_first_task(stack: VAddr) -> ! {
 }
 
 #[naked]
+unsafe extern "C" fn switch_task(new_stack: VAddr, old_stack_ptr: *mut VAddr) {
+    // RDI = new_stack
+    // RSI = old_stack
+    asm!(
+        "mov %rsp, %rax",
+        "pushq $0",   // SS
+        "push %rax", // RSP
+        "pushf",     // RFlags
+        "pushq $8",   // CS TODO Get it from a constant
+        "leaq 0f(%rip), %rax",
+        "push %rax", // RIP
+        "pushq $0", // Error
+        "pushq %rdi",
+        "pushq %rsi",
+        "push %rdx",
+        "push %rcx",
+        "push %r8",
+        "push %r9",
+        "push %r10",
+        "push %r11",
+        "pushq %rax",
+        "mov %rsp, (%rsi)",
+        "mov %rdi, %rsp",
+        "pop %rax",
+        "pop %r11",
+        "pop %r10",
+        "pop %r9",
+        "pop %r8",
+        "pop %rcx",
+        "pop %rdx",
+        "pop %rsi",
+        "pop %rdi",
+        "add $8, %rsp", // Error
+        "iretq", // 
+        "0:",
+        "ret",
+        options(att_syntax, noreturn),
+    )
+}
+
+#[naked]
 unsafe extern "C" fn setup_task() -> ! {
     asm!(
         "push $0",
@@ -40,13 +81,11 @@ unsafe extern "C" fn setup_task() -> ! {
     )
 }
 
-pub struct ArchTask {
+pub struct ArchTaskState {
     pub rsp: VAddr,
-    pub fsbase: u64,
-    pub gsbase: u64,
 }
 
-impl ArchTask {
+impl ArchTaskState {
     pub fn with_fn(stack: Stack, fun: fn() -> !) -> Self {
         unsafe {
             let base = stack.range.end().addr();
@@ -71,19 +110,33 @@ impl ArchTask {
                     ss: 0,
                 },
             });
-            Self {
-                rsp: regs_addr,
-                fsbase: 0,
-                gsbase: 0,
-            }
+            Self { rsp: regs_addr }
         }
     }
 
-    pub fn enter_first_task(task: &Task) -> ! {
-        unsafe { enter_first_task(task.arch.rsp) }
+    pub fn enter_first_task(task: TaskArc) -> ! {
+        unsafe {
+            enter_first_task({
+                let state = task.state.lock();
+                state.arch.rsp
+            })
+        }
     }
 
-    pub fn switch_to(_old: &Task, _new: &Task) {
-        todo!()
+    pub fn switch_to(old: TaskArc, new: TaskArc) {
+        assert_ne!(
+            old.get_ptr(),
+            new.get_ptr(),
+            "Cannot switch to the same task"
+        );
+        let new_stack = {
+            let new_state = new.state.lock();
+            new_state.arch.rsp
+        };
+        let old_stack_ptr = {
+            let mut old_state = old.state.lock();
+            (&mut old_state.arch.rsp) as *mut VAddr
+        };
+        unsafe { switch_task(new_stack, old_stack_ptr) }
     }
 }
