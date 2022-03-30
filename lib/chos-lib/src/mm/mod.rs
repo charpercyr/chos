@@ -506,7 +506,7 @@ pub fn print_mapping<'a>(m: &'a impl MapVisitor<'a, Entry: fmt::Debug>) {
             for _ in 0..lvl {
                 print!("|  ");
             }
-            println!("{:?}", e);
+            println!("{:x?}", e);
             if let Some(it) = m.children(e) {
                 do_print_mapping(m, it, lvl + 1);
             }

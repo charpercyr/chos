@@ -1,11 +1,12 @@
 use core::arch::asm;
 use core::mem::{size_of, MaybeUninit};
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use chos_lib::arch::intr::IoPl;
 use chos_lib::arch::regs::{Flags, IntrRegs, ScratchRegs, CS};
 use chos_lib::mm::VAddr;
 
+use crate::arch::intr::KERNEL_CS;
 use crate::mm::virt::stack::Stack;
 use crate::sched::TaskArc;
 
@@ -39,7 +40,7 @@ unsafe extern "C" fn switch_task(new_stack: VAddr, old_state: *mut ArchTaskState
         "pushq $0",  // SS
         "push %rax", // RSP
         "pushf",     // RFlags
-        "pushq $8",  // CS TODO Get it from a constant
+        "pushq ${KERNEL_CS}",
         "leaq 0f(%rip), %rax",
         "push %rax", // RIP
         "pushq $0",  // Error
@@ -68,6 +69,7 @@ unsafe extern "C" fn switch_task(new_stack: VAddr, old_state: *mut ArchTaskState
         "iretq",
         "0:",
         "ret",
+        KERNEL_CS = const KERNEL_CS as u64,
         options(att_syntax, noreturn),
     )
 }

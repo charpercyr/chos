@@ -77,13 +77,13 @@ pub fn hexdump(b: &[u8]) {
     let mut i = 0;
     while i < len {
         let mut j = 0;
-        chos_lib::log::info!("{:016p}]", &b[i]);
+        chos_lib::log::print!("[{:016p}]", &b[i]);
         while j < 16 && i < len {
-            chos_lib::log::info!(" {:02x}", b[i]);
+            chos_lib::log::print!(" {:02x}", unsafe { core::ptr::read_volatile(&b[i]) });
             i += 1;
             j += 1;
         }
-        chos_lib::log::info!();
+        chos_lib::log::println!();
     }
 }
 

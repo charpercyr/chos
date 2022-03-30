@@ -21,6 +21,8 @@ const TSS_SEGMENT: u16 = 0x18;
 const PAGE_FAULT_IST: u8 = 1;
 const DOUBLE_FAULT_IST: u8 = 2;
 
+pub const KERNEL_CS: u16 = 0x8; // Keep consistent with GDT
+
 per_cpu_lazy! {
     static mut ref TSS: Tss = {
         let mut tss = Tss::new();
@@ -74,7 +76,7 @@ macro_rules! ioapic_intr {
         }
     };
 }
-// Update if changing ioapic_max_intr
+// Update if changing IOAPIC_MAX_INTR
 ioapic_intr!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
 
 fn is_addr_in_kernel(addr: VAddr) -> bool {
@@ -176,7 +178,7 @@ static IDT: SpinLazy<Idt> = SpinLazy::new(|| {
         .set_handler(intr_double_fault)
         .set_stack_index(Some(DOUBLE_FAULT_IST));
 
-    // Update if changing ioapic_max_intr
+    // Update if changing IOAPIC_MAX_INTR
     idt[(IOAPIC_IDT_BASE + 0) as usize].set_handler(ioapic_intr_0);
     idt[(IOAPIC_IDT_BASE + 1) as usize].set_handler(ioapic_intr_1);
     idt[(IOAPIC_IDT_BASE + 2) as usize].set_handler(ioapic_intr_2);

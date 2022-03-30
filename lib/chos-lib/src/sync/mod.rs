@@ -1,4 +1,3 @@
-pub mod channel;
 pub mod fake;
 pub mod lazy;
 pub mod lock;

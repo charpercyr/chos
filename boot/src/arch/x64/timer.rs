@@ -4,10 +4,11 @@ use core::time::Duration;
 
 use chos_lib::arch::tables::{interrupt, StackFrame};
 use chos_lib::arch::x64::acpi::hpet::Hpet;
+use chos_lib::int::CeilDiv;
 use chos_lib::mm::VAddr;
 use chos_lib::sync::{Sem, SpinSem};
 
-static DONE: SpinSem = SpinSem::new(0);
+static DONE: SpinSem = SpinSem::zero();
 
 const IOAPIC_TIMER_ROUTE: u8 = 8;
 
@@ -43,15 +44,13 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
     let period = hpet.period() as u128;
     let mut tim0 = hpet.get_timer(0);
 
-    let comparator = (d.as_nanos() * 1_000_000 + period - 1) / period;
+    let comparator = (d.as_nanos() * 1_000_000).ceil_div(period);
     let comparator: u64 = comparator.try_into().unwrap();
 
     unsafe {
         tim0.set_comparator(comparator);
         tim0.set_int_route(IOAPIC_TIMER_ROUTE);
         tim0.enable();
-
-        drop(tim0);
 
         hpet.set_count(0);
 

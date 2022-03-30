@@ -1,13 +1,12 @@
 use chos_lib::arch::intr::wait_for_interrupt;
-use chos_lib::arch::regs::Rsp;
-use chos_lib::log::{debug, println};
+use chos_lib::log::debug;
 
-use super::{current_task_arc, schedule, Task, TaskArc, TaskOps, CURRENT_TASK};
+use super::{schedule, Task, TaskArc, TaskOps};
 use crate::mm::virt::stack::alloc_kernel_stack;
 use crate::mm::{per_cpu_lazy, PerCpu};
 
 #[cfg(debug_assertions)]
-const IDLE_STACK_ORDER: u8 = 2;
+const IDLE_STACK_ORDER: u8 = 1;
 #[cfg(not(debug_assertions))]
 const IDLE_STACK_ORDER: u8 = 0;
 

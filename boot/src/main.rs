@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(incomplete_features)]
+#![feature(asm_const)]
 #![feature(asm_sym)]
 #![feature(abi_x86_interrupt)]
 #![feature(decl_macro)]

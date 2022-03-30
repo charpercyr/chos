@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use core::ptr::write;
 
 use super::{FrameSize1G, FrameSize2M, FrameSize4K, PageEntry, PageTable, PageTableIter};
-use crate::log::error;
+use crate::log::{error};
 use crate::mm::*;
 
 const FLUSH_MAX_INVLPG_FRAMES: u64 = 11;
@@ -449,6 +449,7 @@ impl<'a, A: FrameAllocator<FrameSize4K> + ?Sized, const N: usize> AllocCleaner<'
                 .alloc
                 .alloc_frame()
                 .map_err(MapError::from_frame_alloc_error)?;
+            PageTable::initialize_empty(vframe.addr().as_mut());
             *entry = create_page_entry(resolve_page_paddr(base, vframe.addr()), flags);
             self.addrs[self.n] = MaybeUninit::new(vframe);
             self.n += 1;

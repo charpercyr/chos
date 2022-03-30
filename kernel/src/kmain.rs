@@ -1,12 +1,13 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::mem::MaybeUninit;
+use core::time::Duration;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
+use chos_lib::log::{debug, println, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
@@ -17,8 +18,9 @@ use crate::intr::{init_interrupts, init_interrupts_cpu};
 use crate::mm::this_cpu_info;
 use crate::mm::virt::stack::Stack;
 use crate::sched::enter_schedule;
+use crate::sched::ktask::ktask_from_fn;
 use crate::symbols::add_elf_symbols;
-use crate::timer::init_timer;
+use crate::timer::{init_timer, schedule_timer, ticks, Schedule};
 use crate::util::barrier;
 
 #[derive(Debug)]
@@ -102,6 +104,11 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     }
 
     barrier!(args.core_count);
+
+    schedule_timer(
+        Schedule::Periodic(Duration::from_secs(5)),
+        ktask_from_fn(|| println!("Hello @ {}", ticks()), "My fun timer"),
+    );
 
     enter_schedule();
 }

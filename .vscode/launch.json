@@ -15,10 +15,10 @@
             "valuesFormatting": "prettyPrinters",
             "gdbpath": "rust-gdb",
             "autorun": [
-                // "b boot_main",
+                "set auto-load off",
                 "add-symbol-file ./target/x86_64-chos/debug/chos.elf -o 0xffff808000000000",
                 "set print pretty on"
-            ]
+            ],
         },
         {
             "type": "lldb",

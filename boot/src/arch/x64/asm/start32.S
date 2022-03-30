@@ -1,7 +1,8 @@
 .set PRESENT, (1 << 0)
 .set WRITEABLE, (1 << 1)
-.set NOCACHE, (1 << 4) | (1 << 5)
+.set NOCACHE, (1 << 3) | (1 << 4)
 .set HUGEPAGE, (1 << 7)
+.set GLOBAL, (1 << 8)
 
 .section .inittext, "ax"
 .code32
@@ -43,26 +44,31 @@ load_gdt:
 enable_paging:
     // Map first 1GB
     xor %eax, %eax
-    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (0 << 30)), %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | GLOBAL | (0 << 30)), %eax
     mov %eax, (p3_table + 0x0)
+    movl $0, (p3_table + 0x4)
 
     xor %eax, %eax
-    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (1 << 30)), %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | GLOBAL | (1 << 30)), %eax
     mov %eax, (p3_table + 0x8)
+    movl $0, (p3_table + 0xc)
 
     xor %eax, %eax
-    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (2 << 30)), %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | GLOBAL | (2 << 30)), %eax
     mov %eax, (p3_table + 0x10)
+    movl $0, (p3_table + 0x14)
 
     xor %eax, %eax
-    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | (3 << 30)), %eax
+    or $(PRESENT | WRITEABLE | HUGEPAGE | NOCACHE | GLOBAL | (3 << 30)), %eax
     mov %eax, (p3_table + 0x18)
+    movl $0, (p3_table + 0x1c)
 
     mov $p3_table, %eax
-    or $(PRESENT | WRITEABLE | NOCACHE), %eax
+    or $(PRESENT | WRITEABLE | NOCACHE | GLOBAL), %eax
     mov %eax, p4_table
+    movl $0, (p4_table + 0x4)
 
-    mov $(p4_table ), %eax
+    mov $p4_table, %eax
     mov %eax, %cr3
 
     mov %cr4, %eax

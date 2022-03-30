@@ -7,8 +7,8 @@ pub use interrupt::*;
 pub use reg::*;
 
 use crate::cpumask::Cpumask;
-use crate::Volatile;
 use crate::mm::VAddr;
+use crate::Volatile;
 
 pub struct Apic<'a> {
     regs: &'a mut reg::ApicRegisters,
@@ -44,25 +44,25 @@ impl Apic<'_> {
     pub unsafe fn initialize_with_spurious_vector(&mut self, vector: u8) {
         self.regs
             .lvt_corrected_machine_check_interrupt
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(Interrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_error
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(ErrorInterrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_lint0
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(LocalInterrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_lint1
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(LocalInterrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_performance_monitoring_counters
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(Interrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_thermal_sensor
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(Interrupt::new().with_mask(InterruptMask::Disabled));
         self.regs
             .lvt_timer
-            .update(|lvt| lvt.set_mask(InterruptMask::Disabled));
+            .write(TimerInterrupt::new().with_mask(InterruptMask::Disabled));
 
         self.regs.spurious_interrupt_vector.write(
             SpuriousInterrupt::new()

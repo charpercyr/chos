@@ -18,6 +18,7 @@
 #![feature(new_uninit)]
 #![feature(ptr_metadata)]
 #![feature(thread_local)]
+#![feature(trait_alias)]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![allow(improper_ctypes)]
 #![warn(clippy::disallowed_method)]

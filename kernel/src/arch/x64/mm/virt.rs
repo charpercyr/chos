@@ -6,6 +6,7 @@ use chos_lib::mm::{
     FrameAllocator, FrameSize, LoggingMapper, MapFlags, MapperFlush, PAddr, PFrame, PFrameRange,
     RangeMapper, VAddr, VFrame,
 };
+use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{copy_early_kernel_table_to, early_paddr_of};
 use crate::mm::phys::{raw_alloc, AllocFlags, Page};
@@ -30,11 +31,11 @@ unsafe impl FrameAllocator<FrameSize4K> for MMFrameAllocator {
 }
 
 per_cpu! {
-    static mut ref _PAGE_TABLE: PageTable = PageTable::empty();
+    static mut ref PAGE_TABLE: PageTable = PageTable::empty();
 }
 
 per_cpu_lazy! {
-    static mut ref MAPPER: LoggingMapper<OffsetMapper<'static>> = unsafe { LoggingMapper::new(OffsetMapper::new(_PAGE_TABLE.get_mut(), virt::PHYSICAL_MAP_BASE.addr())) };
+    static mut ref MAPPER: LoggingMapper<OffsetMapper<'static>> = unsafe { LoggingMapper::new(OffsetMapper::new(PAGE_TABLE.get_mut(), virt::PHYSICAL_MAP_BASE.addr())) };
 }
 
 pub unsafe fn init_kernel_virt() {

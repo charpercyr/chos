@@ -88,7 +88,13 @@ impl Task {
     }
 
     pub fn enter_first_task(this: TaskArc) -> ! {
+        debug!("First task '{}'", this.debug_name);
         ArchTaskState::enter_first_task(this)
+    }
+
+    pub fn switch_to(cur: TaskArc, new: TaskArc) {
+        debug!("Switch from '{}' to '{}'", cur.debug_name, new.debug_name);
+        ArchTaskState::switch_to(cur, new);
     }
 
     fn mark_blocked_and_schedule(this: TaskArc) {
@@ -99,7 +105,16 @@ impl Task {
         schedule();
     }
 
-    fn wake(&self) {}
+    fn wake(this: TaskArc) {
+        {
+            let mut state = this.state.lock();
+            if state.running_state != TaskRunningState::Blocked {
+                return;
+            }
+            state.running_state = TaskRunningState::Ready;
+        }
+        (this.ops.wake)(&this);
+    }
 }
 
 static TASK_POOL: DefaultPoolObjectAllocator<Task, 0> = ConstInit::INIT;
@@ -123,10 +138,10 @@ fn find_next_task() -> TaskArc {
 }
 
 fn do_schedule(cur: TaskArc) {
-    let next = find_next_task();
-    if cur.get_ptr() != next.get_ptr() {
-        CURRENT_TASK.with(|cur| *cur = Some(next.clone()));
-        ArchTaskState::switch_to(cur, next);
+    let new = find_next_task();
+    if cur.get_ptr() != new.get_ptr() {
+        CURRENT_TASK.with(|cur| *cur = Some(new.clone()));
+        Task::switch_to(cur, new);
     }
 }
 

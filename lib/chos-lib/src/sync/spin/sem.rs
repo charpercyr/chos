@@ -8,7 +8,10 @@ pub struct SpinSem {
 }
 
 impl SpinSem {
-    pub const fn new(count: usize) -> Self {
+    pub const fn zero() -> Self {
+        Self::with_count(0)
+    }
+    pub const fn with_count(count: usize) -> Self {
         Self {
             count: AtomicUsize::new(count),
         }
@@ -16,10 +19,6 @@ impl SpinSem {
 }
 
 impl Sem for SpinSem {
-    fn with_count(count: usize) -> Self {
-        Self::new(count)
-    }
-
     fn wait_count(&self, count: usize) {
         while !self.try_wait_count(count) {
             spin_loop()

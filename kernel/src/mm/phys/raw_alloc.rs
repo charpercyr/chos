@@ -202,7 +202,7 @@ pub unsafe fn add_region(frame: PFrameRange, flags: RegionFlags) {
         remaining_pages -= 1 << order;
     }
 
-    REGIONS.push_front(UnsafeMut::from_raw(region));
+    REGIONS.push_back(UnsafeMut::from_raw(region));
 }
 
 pub unsafe fn add_regions(it: impl IntoIterator<Item = (PFrameRange, RegionFlags)>) {

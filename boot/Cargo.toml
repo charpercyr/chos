@@ -16,4 +16,4 @@ rustc-demangle = "0.1.18"
 static_assertions = "1.1.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-raw-cpuid = "9.0.0"
+raw-cpuid = "10.3.0"

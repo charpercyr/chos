@@ -36,9 +36,9 @@ extern "x86-interrupt" fn intr_page_fault(f: StackFrame, e: PageFaultError) {
                 offset,
             )
         } else {
-            unsafe_println!("PAGE FAULT @ 0x{:x} [?]", f.intr.rip);
+            unsafe_println!("PAGE FAULT @ {:#x} [?]", f.intr.rip);
         }
-        unsafe_println!("Tried to access 0x{:x} : {:?}", Cr2::read(), e);
+        unsafe_println!("Tried to access {:#x} : {:?}", Cr2::read(), e);
     }
     panic!();
 }
@@ -79,6 +79,8 @@ pub fn initalize(madt: &Madt) {
     idt.general_protection_fault
         .set_handler(intr_general_protection_fault);
     idt.invalid_opcode.set_handler(intr_invalid_opcode);
+    idt[INTERRUPT_SPURIOUS as usize].set_handler(intr_spurious);
+    unsafe { Idt::load(idt) };
 
     let ioapic = madt
         .entries()
@@ -100,11 +102,8 @@ pub fn initalize(madt: &Madt) {
     }
 
     unsafe {
-        idt[INTERRUPT_SPURIOUS as usize].set_handler(intr_spurious);
-        apic.initialize();
+        apic.initialize_with_spurious_vector(INTERRUPT_SPURIOUS);
     }
-
-    unsafe { Idt::load(&IDT) };
 
     enable_interrupts();
 }

@@ -6,6 +6,7 @@ use chos_lib::arch::hpet::{Hpet, TimerType};
 use chos_lib::arch::ioapic;
 use chos_lib::arch::tables::StackFrame;
 use chos_lib::int::CeilDiv;
+use chos_lib::log::debug;
 
 use super::intr::allocate_ioapic_interrupt;
 use crate::kmain::KernelArgs;
@@ -31,6 +32,8 @@ pub fn arch_init_timer(args: &KernelArgs) {
 
     unsafe {
         let comparator = (NS_PER_TICKS * 1_000_000).ceil_div(hpet.period() as u64);
+        
+        debug!("Setting timer comparator to {}", comparator);
 
         let mut tim0 = hpet.get_timer(0);
 

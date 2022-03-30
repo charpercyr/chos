@@ -136,8 +136,8 @@ cfg_if! {
             $crate::log::log_unsafe_impl!($crate::log::LogLevel::Debug, $($args)*)
         }
     } else {
-        pub macro debug ($($args:tt)*) {}
-        pub macro unsafe_debug ($($args:tt)*) {}
+        pub macro debug ($($args:tt)*) {{}}
+        pub macro unsafe_debug ($($args:tt)*) {{}}
     }
 }
 
@@ -150,8 +150,8 @@ cfg_if! {
             $crate::log::log_unsafe_impl!($crate::log::LogLevel::Info, $($args)*)
         }
     } else {
-        pub macro info ($($args:tt)*) {}
-        pub macro unsafe_info ($($args:tt)*) {}
+        pub macro info ($($args:tt)*) {{}}
+        pub macro unsafe_info ($($args:tt)*) {{}}
     }
 }
 
@@ -164,8 +164,8 @@ cfg_if! {
             $crate::log::log_unsafe_impl!($crate::log::LogLevel::Warn, $($args)*)
         }
     } else {
-        pub macro warn ($($args:tt)*) {}
-        pub macro unsafe_warn ($($args:tt)*) {}
+        pub macro warn ($($args:tt)*) {{}}
+        pub macro unsafe_warn ($($args:tt)*) {{}}
     }
 }
 
@@ -178,8 +178,8 @@ cfg_if! {
             $crate::log::log_unsafe_impl!($crate::log::LogLevel::Error, $($args)*)
         }
     } else {
-        pub macro error ($($args:tt)*) {}
-        pub macro unsafe_error ($($args:tt)*) {}
+        pub macro error ($($args:tt)*) {{}}
+        pub macro unsafe_error ($($args:tt)*) {{}}
     }
 }
 
@@ -192,8 +192,8 @@ cfg_if! {
             $crate::log::log_unsafe_impl!($crate::log::LogLevel::Critical, $($args)*)
         }
     } else {
-        pub macro critical ($($args:tt)*) {}
-        pub macro unsafe_critical ($($args:tt)*) {}
+        pub macro critical ($($args:tt)*) {{}}
+        pub macro unsafe_critical ($($args:tt)*) {{}}
     }
 }
 
@@ -294,9 +294,9 @@ pub macro domain ($($name:ident = $value:expr),* $(,)?) {
 }
 
 pub macro todo_warn($($args:tt)*) {
-    chos_lib::log::warn!(concat!("TODO ", file!(), ":", line!(), " {}"), format_args!($($args)*))
+    $crate::log::warn!(concat!("TODO ", file!(), ":", line!(), " {}"), format_args!($($args)*))
 }
 
 pub macro unsafe_todo_warn($($args:tt)*) {
-    chos_lib::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), format_args!($($args)*))
+    $crate::log::unsafe_warn!(concat!(file!(), ":", line!(), " TODO {}"), format_args!($($args)*))
 }

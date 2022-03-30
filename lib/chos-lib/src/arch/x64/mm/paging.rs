@@ -1,3 +1,5 @@
+use core::intrinsics::write_bytes;
+use core::mem::{MaybeUninit};
 use core::ops::{Index, IndexMut};
 use core::slice::{Iter, IterMut};
 
@@ -62,6 +64,13 @@ impl PageTable {
     pub const fn empty() -> Self {
         Self {
             entries: [PageEntry::zero(); PAGE_TABLE_SIZE],
+        }
+    }
+
+    pub fn initialize_empty(pgt: &mut MaybeUninit<Self>) -> &mut Self {
+        unsafe {
+            write_bytes(pgt, 0, 1);
+            pgt.assume_init_mut()
         }
     }
 

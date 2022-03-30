@@ -19,11 +19,13 @@ pub fn run_main(opts: &RunOpts, config: &[Project]) {
 
     let smp = format!("{}", opts.smp);
     let imgfile_str = imgfile.path().to_string_lossy();
+    let qemu = format!("qemu-system-{}", opts.build.arch);
     let mut args = vec![
+        &*qemu,
         "-m", &opts.mem,
         "-smp", &smp,
-        "-machine", "q35",
-        "-cpu", "Skylake-Client-v3",
+        "-machine", "q35,accel=kvm",
+        "-cpu", "host",
         "-device", "isa-debug-exit,iobase=0xf4,iosize=0x4",
         "-display", "none",
         "-serial", "stdio",
@@ -35,10 +37,10 @@ pub fn run_main(opts: &RunOpts, config: &[Project]) {
         args.push("-S");
     }
 
-    let qemu = cmd(format!("qemu-system-{}", opts.build.arch), args)
+    let qemu = cmd("sudo", args)
         .before_spawn(crate::display_cmd_hook)
         .unchecked()
-        .stderr_null()
+        // .stderr_null()
         .run()
         .unwrap();
     if qemu.status.code().unwrap() != KERNEL_EXIT_SUCCESS {

@@ -1,6 +1,6 @@
 
-pub mod queue;
-pub mod sem;
+mod queue;
+mod sem;
 
 pub use queue::*;
 pub use sem::*;
