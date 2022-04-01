@@ -2,6 +2,7 @@ use core::convert::TryInto;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
+use chos_lib::arch::port::Port;
 use chos_lib::arch::tables::{interrupt, StackFrame};
 use chos_lib::arch::x64::acpi::hpet::Hpet;
 use chos_lib::int::CeilDiv;
@@ -42,7 +43,7 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
         .map_err(|_| DelayInProgressError)?;
     let hpet = unsafe { HPET.as_mut() }.expect("Timer not initialized");
     let period = hpet.period() as u128;
-    let mut tim0 = hpet.get_timer(0);
+    let mut tim0 = hpet.get_timer_mut(0);
 
     let comparator = (d.as_nanos() * 1_000_000).ceil_div(period);
     let comparator: u64 = comparator.try_into().unwrap();
@@ -60,7 +61,7 @@ pub fn delay(d: Duration) -> Result<(), DelayInProgressError> {
     DONE.wait();
 
     unsafe {
-        let mut tim0 = hpet.get_timer(0);
+        let mut tim0 = hpet.get_timer_mut(0);
         tim0.disable();
         hpet.disable();
     };

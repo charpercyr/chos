@@ -20,16 +20,26 @@ pub fn run_main(opts: &RunOpts, config: &[Project]) {
     let smp = format!("{}", opts.smp);
     let imgfile_str = imgfile.path().to_string_lossy();
     let qemu = format!("qemu-system-{}", opts.build.arch);
+    let (machine, cpu) = match !opts.no_kvm {
+        true => ("q35,accel=kvm", "host"),
+        false => ("q35", "Skylake-Client"),
+    };
+    let (display, serial) = match opts.curses {
+        true => ("curses", "none"),
+        false => ("none", "stdio"),
+    };
     let mut args = vec![
         &*qemu,
         "-m", &opts.mem,
         "-smp", &smp,
-        "-machine", "q35,accel=kvm",
-        "-cpu", "host",
+        "-machine", machine,
+        "-cpu", cpu,
         "-device", "isa-debug-exit,iobase=0xf4,iosize=0x4",
-        "-display", "none",
-        "-serial", "stdio",
+        "-display", display,
+        "-serial", serial,
         &*imgfile_str,
+        "-D", "target/qemu.log",
+        "-d", "guest_errors",
     ];
 
     if opts.debug {

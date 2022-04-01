@@ -139,11 +139,11 @@ impl ArchTaskState {
             "Cannot switch to the same task"
         );
         let new_stack = {
-            let new_state = new.state.lock();
+            let new_state = new.state.lock_nodisable();
             new_state.arch.rsp
         };
         let old_stack_ptr = {
-            let mut old_state = old.state.lock();
+            let mut old_state = old.state.lock_nodisable();
             assert!(old_state
                 .arch
                 .sched_lock

@@ -1,21 +1,24 @@
 use core::mem::MaybeUninit;
 
 use chos_config::arch::mm::virt;
+use chos_config::timer::TICKS_HZ;
 use chos_lib::arch::acpi::Rsdt;
 use chos_lib::arch::hpet::{Hpet, TimerType};
 use chos_lib::arch::ioapic;
 use chos_lib::arch::tables::StackFrame;
 use chos_lib::int::CeilDiv;
-use chos_lib::log::debug;
+use chos_lib::log::{debug, println};
 
 use super::intr::allocate_ioapic_interrupt;
 use crate::kmain::KernelArgs;
 use crate::mm::this_cpu_info;
 use crate::timer::{on_tick, on_tick_main_cpu, NS_PER_TICKS};
 
+const PIT_TIMER_IOAPIC_INTR: u8 = 8;
+
 static mut HPET: MaybeUninit<Hpet> = MaybeUninit::uninit();
 
-fn timer_callback(_: StackFrame) {
+fn timer_intr_handler(_: StackFrame) {
     let id = this_cpu_info().id;
     if id == 0 {
         on_tick_main_cpu();
@@ -31,26 +34,34 @@ pub fn arch_init_timer(args: &KernelArgs) {
     let mut hpet = unsafe { Hpet::new(virt::DEVICE_BASE.addr() + hpet_tbl.address as u64) };
 
     unsafe {
-        let comparator = (NS_PER_TICKS * 1_000_000).ceil_div(hpet.period() as u64);
+        let period = hpet.period();
+        let comparator = (NS_PER_TICKS * 1_000_000).ceil_div(period as u64);
+
+        debug!(
+            "HPET Period is {}fs, setting comparator to {} ({}Hz)",
+            period, comparator, TICKS_HZ
+        );
+
+        hpet.disable();
+
+        let mut timer = hpet.get_timer_mut(0);
         
-        debug!("Setting timer comparator to {}", comparator);
+        println!("{:#?}", timer);
 
-        let mut tim0 = hpet.get_timer(0);
-
-        let mask = tim0.int_route_mask();
+        let mask = timer.int_route_mask() & !(1 << PIT_TIMER_IOAPIC_INTR);
         let intr = allocate_ioapic_interrupt(
             mask as u64,
-            timer_callback,
+            timer_intr_handler,
             ioapic::Destination::Logical((1 << args.core_count) - 1),
         )
         .expect("No interrupt free for timer");
 
-        tim0.set_int_route(intr);
-        tim0.set_type(TimerType::Periodic);
-        tim0.set_comparator(comparator);
-        tim0.enable();
+        timer.set_int_route(intr);
+        timer.set_type(TimerType::Periodic);
+        timer.enable();
+        timer.set_comparator(comparator);
 
-        drop(tim0);
+        println!("HPET: {:#?}", hpet);
 
         hpet.set_count(0);
         hpet.enable();

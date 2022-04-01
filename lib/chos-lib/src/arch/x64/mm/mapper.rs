@@ -383,8 +383,8 @@ fn create_page_entry(paddr: PAddr, flags: MapFlags) -> PageEntry {
         entry.set_user(true);
     }
     if flags.contains(MapFlags::NOCACHE) {
-        entry.set_no_cache(true);
-        entry.set_write_through(true);
+        // entry.set_no_cache(true);
+        // entry.set_write_through(true);
     }
     entry.set_present(true);
     entry

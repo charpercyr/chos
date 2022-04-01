@@ -30,7 +30,7 @@ struct Configuration {
     __: B62,
 }
 
-#[derive(BitfieldSpecifier, Copy, Clone, Debug)]
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq)]
 #[bits = 1]
 pub enum TimerType {
     OneShot = 0,
@@ -87,7 +87,6 @@ impl fmt::Debug for Registers {
     }
 }
 
-#[derive(Debug)]
 pub struct Hpet {
     registers: &'static mut Registers,
 }
@@ -137,13 +136,26 @@ impl Hpet {
         self.registers.main_counter_value.write(count)
     }
 
-    pub fn get_timer(&mut self, n: u8) -> Timer<'_> {
+    pub fn get_timer(&self, n: u8) -> Timer<'_> {
+        let n = n as usize;
+        let offset = 0x100 + 0x20 * n;
+        let base: *const u8 = (self.registers as *const Registers).cast();
+        unsafe {
+            let ptr: *const TimerRegisters = base.add(offset).cast();
+            Timer {
+                registers: &*ptr,
+                hpet: PhantomData,
+            }
+        }
+    }
+
+    pub fn get_timer_mut(&mut self, n: u8) -> TimerMut<'_> {
         let n = n as usize;
         let offset = 0x100 + 0x20 * n;
         let base: *mut u8 = (self.registers as *mut Registers).cast();
         unsafe {
             let ptr: *mut TimerRegisters = base.add(offset).cast();
-            Timer {
+            TimerMut {
                 registers: &mut *ptr,
                 hpet: PhantomData,
             }
@@ -151,12 +163,37 @@ impl Hpet {
     }
 }
 
+impl fmt::Debug for Hpet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        struct TimersDebug<'a>(&'a Hpet);
+        impl fmt::Debug for TimersDebug<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let mut dbg = f.debug_list();
+                for i in 0..self.0.timer_count() {
+                    dbg.entry(&self.0.get_timer(i));
+                }
+                dbg.finish()
+            }
+        }
+        let tim_dbg = TimersDebug(self);
+        f.debug_struct("Hpet")
+            .field("registers", self.registers)
+            .field("timers", &tim_dbg)
+            .finish()
+    }
+}
+
 pub struct Timer<'a> {
+    registers: &'a TimerRegisters,
+    hpet: PhantomData<&'a Hpet>,
+}
+
+pub struct TimerMut<'a> {
     registers: &'a mut TimerRegisters,
     hpet: PhantomData<&'a mut Hpet>,
 }
 
-impl Timer<'_> {
+impl TimerMut<'_> {
     pub fn int_route(&self) -> u8 {
         self.registers.configuration.read().int_route_cnf()
     }
@@ -199,6 +236,14 @@ impl Timer<'_> {
 impl fmt::Debug for Timer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Timer")
+            .field("registers", &self.registers)
+            .finish()
+    }
+}
+
+impl fmt::Debug for TimerMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TimerMut")
             .field("registers", &self.registers)
             .finish()
     }

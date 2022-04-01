@@ -1,4 +1,3 @@
-use alloc::collections::binary_heap::PeekMut;
 use alloc::collections::BinaryHeap;
 use core::mem::MaybeUninit;
 use core::ops;
@@ -7,13 +6,12 @@ use core::time::Duration;
 
 use chos_config::timer::TICKS_HZ;
 use chos_lib::arch::cache::CacheAligned;
-use chos_lib::int::ceil_divu128;
-use chos_lib::log::{unsafe_println};
+use chos_lib::int::ceil_divu64;
 use chos_lib::sync::Spinlock;
 
 use crate::arch::timer::arch_init_timer;
 use crate::kmain::KernelArgs;
-use crate::sched::ktask::{KTask, spawn_task};
+use crate::sched::ktask::KTask;
 use crate::sched::schedule_tick;
 
 pub const NS_PER_TICKS: u64 = 1_000_000_000 / TICKS_HZ;
@@ -49,28 +47,11 @@ impl PartialOrd for TimerCmp {
 static TIMERS: Spinlock<MaybeUninit<BinaryHeap<TimerCmp>>> = Spinlock::new(MaybeUninit::uninit());
 
 pub fn on_tick() {
-    let ticks = ticks();
-    if ticks % TICKS_HZ == 0 {
-        unsafe { unsafe_println!("TICKS @ {}", ticks) };
-    }
     schedule_tick()
 }
 
 pub fn on_tick_main_cpu() {
-    let ticks = TICKS.fetch_add(1, Ordering::Relaxed) + 1;
-    let mut timers = TIMERS.lock_nodisable();
-    let timers = unsafe { timers.assume_init_mut() };
-    while let Some(TimerCmp(mut timer)) = timers
-        .peek_mut()
-        .filter(|timer| ticks >= timer.0.deadline)
-        .map(PeekMut::pop)
-    {
-        spawn_task(timer.task);
-        // if let Schedule::Periodic(d) = timer.schedule {
-        //     timer.deadline += duration_to_ticks(d);
-        //     timers.push(TimerCmp(timer));
-        // }
-    }
+    let _ticks = TICKS.fetch_add(1, Ordering::Relaxed) + 1;
     on_tick();
 }
 
@@ -79,7 +60,7 @@ pub fn ticks() -> u64 {
 }
 
 const fn duration_to_ticks(d: Duration) -> u64 {
-    ceil_divu128(d.as_nanos(), NS_PER_TICKS as u128) as u64
+    ceil_divu64(d.as_nanos() as u64, NS_PER_TICKS)
 }
 
 #[derive(Debug)]
@@ -89,17 +70,7 @@ pub enum Schedule {
     OnShotAt(Instant),
 }
 
-// impl Schedule {
-//     pub fn periodic(d: Duration) -> Self {
-//         Self::Periodic(d)
-//     }
-//     pub fn
-// }
-
-pub fn schedule_timer(
-    schedule: Schedule,
-    task: KTask,
-) {
+pub fn schedule_timer(schedule: Schedule, task: KTask) {
     let deadline = match schedule {
         Schedule::OnShotIn(d) | Schedule::Periodic(d) => ticks() + duration_to_ticks(d),
         Schedule::OnShotAt(i) => i.ticks,

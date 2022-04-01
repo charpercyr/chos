@@ -6,7 +6,6 @@ use chos_lib::mm::{
     FrameAllocator, FrameSize, LoggingMapper, MapFlags, MapperFlush, PAddr, PFrame, PFrameRange,
     RangeMapper, VAddr, VFrame,
 };
-use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{copy_early_kernel_table_to, early_paddr_of};
 use crate::mm::phys::{raw_alloc, AllocFlags, Page};

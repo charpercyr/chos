@@ -39,6 +39,12 @@ pub struct RunOpts {
     /// Don't rebuild before deploying
     #[structopt(long)]
     pub no_build: bool,
+    /// Don't use KVM acceleration
+    #[structopt(long)]
+    pub no_kvm: bool,
+    /// Start QEMU with monitor set to 'curses' and serial to 'none'
+    #[structopt(long)]
+    pub curses: bool,
 }
 
 #[derive(StructOpt, Debug)]
