@@ -2,12 +2,12 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
-use core::ptr::null;
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 use chos_config::arch::mm::stack;
 use chos_lib::log::debug;
-use chos_lib::pool::{IArc, PoolBox};
+use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
+use chos_lib::sync::Spinlock;
 use intrusive_collections::linked_list;
 use pin_project::pin_project;
 
@@ -26,7 +26,7 @@ pub trait KTaskFn: 'static + Send {
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<()>;
 }
 
-pub trait KTaskOutput: private::Sealed {}
+pub trait KTaskOutput: 'static + Send + Sync + private::Sealed {}
 impl private::Sealed for () {}
 impl KTaskOutput for () {}
 impl private::Sealed for ! {}
@@ -69,47 +69,70 @@ per_cpu_lazy! {
 
 struct KTaskImpl {
     link: linked_list::AtomicLink,
-    fun: Pin<Box<dyn KTaskFn>>,
+    count: IArcCount,
+    fun: Spinlock<Pin<Box<dyn KTaskFn>>>,
     name: Cow<'static, str>,
     mask: Cpumask,
 }
+impl IArcAdapter for KTaskImpl {
+    fn count(&self) -> &IArcCount {
+        &self.count
+    }
+}
 object_pool!(struct KTaskImplPool : KTaskImpl);
-type KTaskImplBox = PoolBox<KTaskImpl, KTaskImplPool>;
+type KTaskImplArc = IArc<KTaskImpl, KTaskImplPool>;
 
-chos_lib::intrusive_adapter!(KTaskAdapter = KTaskImplBox : KTaskImpl { link: linked_list::AtomicLink });
+chos_lib::intrusive_adapter!(KTaskAdapter = KTaskImplArc : KTaskImpl { link: linked_list::AtomicLink });
 
 static KTASK_QUEUE: SchedQueue<KTaskAdapter> = SchedQueue::new(KTaskAdapter::NEW);
 
-static KTASK_WAKER_VTABLE: RawWakerVTable =
-    RawWakerVTable::new(waker_clone, waker_wake, waker_wake_by_ref, waker_drop);
+static KTASK_WAKER_VTABLE: RawWakerVTable = {
+    unsafe fn waker_clone(waker: *const ()) -> RawWaker {
+        let waker_data = KTaskImplArc::from_raw(waker.cast());
+        let new_waker_data = waker_data.clone();
+        drop(KTaskImplArc::into_raw(waker_data));
+        let new_ptr = KTaskImplArc::into_raw(new_waker_data);
+        RawWaker::new(new_ptr.cast(), &KTASK_WAKER_VTABLE)
+    }
 
-unsafe fn waker_clone(_waker: *const ()) -> RawWaker {
-    todo!()
-}
+    unsafe fn waker_wake(waker: *const ()) {
+        let waker_data = KTaskImplArc::from_raw(waker.cast());
+        KTASK_QUEUE.push(waker_data);
+    }
 
-unsafe fn waker_wake(_waker: *const ()) {
-    todo!()
-}
+    unsafe fn waker_wake_by_ref(waker: *const ()) {
+        let waker_data = KTaskImplArc::from_raw(waker.cast());
+        KTASK_QUEUE.push(waker_data.clone());
+        drop(KTaskImplArc::into_raw(waker_data));
+    }
 
-unsafe fn waker_wake_by_ref(_waker: *const ()) {
-    todo!()
-}
-
-unsafe fn waker_drop(_waker: *const ()) {
-    todo!()
-}
+    unsafe fn waker_drop(waker: *const ()) {
+        let waker_data = KTaskImplArc::from_raw(waker.cast());
+        drop(waker_data);
+    }
+    RawWakerVTable::new(waker_clone, waker_wake, waker_wake_by_ref, waker_drop)
+};
 
 fn ktask_loop() -> ! {
-    let waker = unsafe { Waker::from_raw(RawWaker::new(null(), &KTASK_WAKER_VTABLE)) };
     let this_cpu_mask = cpumask::this_cpu();
     loop {
-        if let Some(mut task) =
-            KTASK_QUEUE.find_pop_wait(|ktask| ktask.mask.contains(this_cpu_mask))
-        {
+        if let Some(task) = KTASK_QUEUE.find_pop_wait(|ktask| ktask.mask.contains(this_cpu_mask)) {
+            let task_clone_ptr = KTaskImplArc::into_raw(task.clone());
+            let waker = unsafe {
+                Waker::from_raw(RawWaker::new(task_clone_ptr.cast(), &KTASK_WAKER_VTABLE))
+            };
             let mut ctx: Context = Context::from_waker(&waker);
-            match task.fun.as_mut().poll(&mut ctx) {
-                Poll::Pending => todo!(),
-                Poll::Ready(_) => (),
+            debug!("KTask run '{}'", task.name);
+            if let Some(mut fun) = task.fun.try_lock_noirq() {
+                match fun.as_mut().poll(&mut ctx) {
+                    Poll::Pending => (), // Go to next task,
+                    Poll::Ready(_) => {
+                        drop(waker);
+                        assert!(task.is_unique(), "This might bite me in the ass later.");
+                    }
+                }
+            } else {
+                panic!("KTask should never be locked except from this function");
             }
         }
     }
@@ -131,7 +154,7 @@ pub(super) fn find_next_task() -> Option<TaskArc> {
     })
 }
 
-fn do_spawn(task: KTaskImplBox) {
+fn do_spawn(task: KTaskImplArc) {
     KTASK_QUEUE.push(task);
 }
 
@@ -139,17 +162,18 @@ fn create_ktask(
     fun: impl KTaskFn,
     name: impl Into<Cow<'static, str>>,
     mask: Cpumask,
-) -> KTaskImplBox {
-    KTaskImplBox::new(KTaskImpl {
+) -> KTaskImplArc {
+    KTaskImplArc::new(KTaskImpl {
         link: linked_list::AtomicLink::new(),
-        fun: Box::pin(fun),
+        count: IArcCount::new(),
+        fun: Spinlock::new(Box::pin(fun)),
         name: name.into(),
         mask,
     })
 }
 
 #[repr(transparent)]
-pub struct KTask(KTaskImplBox);
+pub struct KTask(KTaskImplArc);
 
 pub fn ktask_from_fn_mask<R: KTaskOutput>(
     fun: impl FnOnce() -> R + Send + 'static,

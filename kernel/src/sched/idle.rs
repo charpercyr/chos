@@ -30,8 +30,8 @@ per_cpu_lazy! {
 
 fn idle_loop() -> ! {
     loop {
-        wait_for_interrupt();
         schedule();
+        wait_for_interrupt();
     }
 }
 

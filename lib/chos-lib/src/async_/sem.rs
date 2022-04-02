@@ -17,6 +17,9 @@ pub struct AsyncSem {
 }
 
 impl AsyncSem {
+    pub const fn zero() -> Self {
+        Self::new(0)
+    }
     pub const fn new(count: usize) -> Self {
         Self {
             inner: Spinlock::new(AsyncSemInner {

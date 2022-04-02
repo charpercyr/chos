@@ -90,6 +90,7 @@ dependencies = [
  "intrusive-collections",
  "modular-bitfield",
  "paste",
+ "pin-project",
  "rand",
  "siphasher",
  "static_assertions",

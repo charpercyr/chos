@@ -17,6 +17,7 @@
 #![feature(never_type)]
 #![feature(new_uninit)]
 #![feature(ptr_metadata)]
+#![feature(poll_ready)]
 #![feature(thread_local)]
 #![feature(trait_alias)]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]

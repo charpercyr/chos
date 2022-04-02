@@ -7,14 +7,15 @@ use chos_lib::arch::hpet::{Hpet, TimerType};
 use chos_lib::arch::ioapic;
 use chos_lib::arch::tables::StackFrame;
 use chos_lib::int::CeilDiv;
-use chos_lib::log::{debug, println};
+use chos_lib::log::debug;
 
 use super::intr::allocate_ioapic_interrupt;
 use crate::kmain::KernelArgs;
 use crate::mm::this_cpu_info;
 use crate::timer::{on_tick, on_tick_main_cpu, NS_PER_TICKS};
 
-const PIT_TIMER_IOAPIC_INTR: u8 = 8;
+const PIT_TIMER_IOAPIC_INTR: u8 = 2;
+const APIC_INTR_MASK: u32 = !(1 << PIT_TIMER_IOAPIC_INTR);
 
 static mut HPET: MaybeUninit<Hpet> = MaybeUninit::uninit();
 
@@ -45,10 +46,8 @@ pub fn arch_init_timer(args: &KernelArgs) {
         hpet.disable();
 
         let mut timer = hpet.get_timer_mut(0);
-        
-        println!("{:#?}", timer);
 
-        let mask = timer.int_route_mask() & !(1 << PIT_TIMER_IOAPIC_INTR);
+        let mask = timer.int_route_mask() & APIC_INTR_MASK;
         let intr = allocate_ioapic_interrupt(
             mask as u64,
             timer_intr_handler,
@@ -60,8 +59,6 @@ pub fn arch_init_timer(args: &KernelArgs) {
         timer.set_type(TimerType::Periodic);
         timer.enable();
         timer.set_comparator(comparator);
-
-        println!("HPET: {:#?}", hpet);
 
         hpet.set_count(0);
         hpet.enable();

@@ -18,9 +18,9 @@ use crate::intr::{init_interrupts, init_interrupts_cpu};
 use crate::mm::this_cpu_info;
 use crate::mm::virt::stack::Stack;
 use crate::sched::enter_schedule;
-use crate::sched::ktask::ktask_from_fn;
+use crate::sched::ktask::spawn_task;
 use crate::symbols::add_elf_symbols;
-use crate::timer::{init_timer, schedule_timer, ticks, Schedule};
+use crate::timer::{init_timer, periodic_ktask};
 use crate::util::barrier;
 
 #[derive(Debug)]
@@ -100,15 +100,22 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     unsafe { init_interrupts_cpu(args) };
 
     if id == 0 {
+        let mut count = 0usize;
         init_timer(args);
+        spawn_task(periodic_ktask(
+            move |token| {
+                count += 1;
+                if count == 5 {
+                    token.cancel();
+                }
+                println!("Ouch");
+            },
+            Duration::from_secs(1),
+            "my-task",
+        ));
     }
 
     barrier!(args.core_count);
-
-    schedule_timer(
-        Schedule::Periodic(Duration::from_secs(5)),
-        ktask_from_fn(|| println!("Hello @ {}", ticks()), "My fun timer"),
-    );
 
     enter_schedule();
 }
