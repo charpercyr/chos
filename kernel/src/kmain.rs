@@ -1,13 +1,12 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::mem::MaybeUninit;
-use core::time::Duration;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::serial::Serial;
 use chos_lib::boot::KernelMemInfo;
 use chos_lib::elf::Elf;
-use chos_lib::log::{debug, println, LogHandler, TermColorLogHandler};
+use chos_lib::log::{debug, LogHandler, TermColorLogHandler};
 use chos_lib::sync::Spinlock;
 
 use crate::arch::early::{init_non_early_memory, unmap_early_lower_memory};
@@ -18,9 +17,9 @@ use crate::intr::{init_interrupts, init_interrupts_cpu};
 use crate::mm::this_cpu_info;
 use crate::mm::virt::stack::Stack;
 use crate::sched::enter_schedule;
-use crate::sched::ktask::spawn_task;
+use crate::sched::ktask::init_ktask_stack;
 use crate::symbols::add_elf_symbols;
-use crate::timer::{init_timer, periodic_ktask};
+use crate::timer::init_timer;
 use crate::util::barrier;
 
 #[derive(Debug)]
@@ -63,6 +62,7 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     barrier!(args.core_count);
 
     if id == 0 {
+        assert_eq!(args.early_stacks.len(), args.core_count);
         setup_logger();
         init_cpumask(args.core_count);
 
@@ -100,20 +100,10 @@ pub fn kernel_main(id: usize, args: &KernelArgs) -> ! {
     unsafe { init_interrupts_cpu(args) };
 
     if id == 0 {
-        let mut count = 0usize;
         init_timer(args);
-        spawn_task(periodic_ktask(
-            move |token| {
-                count += 1;
-                if count == 5 {
-                    token.cancel();
-                }
-                println!("Ouch");
-            },
-            Duration::from_secs(1),
-            "my-task",
-        ));
     }
+
+    init_ktask_stack(args.early_stacks[id]);
 
     barrier!(args.core_count);
 

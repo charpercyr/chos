@@ -48,7 +48,6 @@ impl SchedSem {
 }
 
 impl Sem for SchedSem {
-
     fn wait_count(&self, count: usize) {
         loop {
             if self.inner.try_wait_count_tries(count, TRIES) {

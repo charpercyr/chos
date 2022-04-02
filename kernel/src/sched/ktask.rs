@@ -4,7 +4,6 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
-use chos_config::arch::mm::stack;
 use chos_lib::log::debug;
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
 use chos_lib::sync::Spinlock;
@@ -15,8 +14,8 @@ use super::sync::SchedQueue;
 use super::{Task, TaskArc, TaskOps, TaskRunningState};
 use crate::cpumask::{self, Cpumask};
 use crate::mm::slab::object_pool;
-use crate::mm::virt::stack::alloc_kernel_stack;
-use crate::mm::{per_cpu_lazy, PerCpu};
+use crate::mm::virt::stack::Stack;
+use crate::mm::{per_cpu, per_cpu_lazy, PerCpu};
 
 mod private {
     pub trait Sealed {}
@@ -53,9 +52,13 @@ impl<F: Future<Output: KTaskOutput> + Send + 'static> KTaskFn for KTaskFuture<F>
 
 static KTASK_OPS: TaskOps = TaskOps { wake: |_| {} };
 
+per_cpu! {
+    static mut ref KTASK_STACK: Option<Stack> = None;
+}
+
 per_cpu_lazy! {
     static mut ref KTASK_TASK: TaskArc = {
-        let stack = alloc_kernel_stack(stack::KERNEL_STACK_PAGE_ORDER).expect("Stack alloc should not fail");
+        let stack = KTASK_STACK.copy().expect("KTask stack not set");
         debug!("Using {:#x}-{:#x} for ktask stack", stack.range.start(), stack.range.end());
         Task::with_fn(
             stack,
@@ -170,6 +173,15 @@ fn create_ktask(
         name: name.into(),
         mask,
     })
+}
+
+pub fn init_ktask_stack(stack: Stack) {
+    KTASK_STACK.with(|ktask_stack| {
+        if ktask_stack.is_some() {
+            panic!("KTask stack already set");
+        }
+        *ktask_stack = Some(stack);
+    });
 }
 
 #[repr(transparent)]

@@ -34,7 +34,6 @@ mod early;
 mod fs;
 mod intr;
 mod kmain;
-mod log;
 mod mm;
 mod panic;
 mod sched;

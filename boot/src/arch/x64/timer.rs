@@ -2,7 +2,6 @@ use core::convert::TryInto;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
-use chos_lib::arch::port::Port;
 use chos_lib::arch::tables::{interrupt, StackFrame};
 use chos_lib::arch::x64::acpi::hpet::Hpet;
 use chos_lib::int::CeilDiv;

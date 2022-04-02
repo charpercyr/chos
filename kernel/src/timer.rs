@@ -2,7 +2,6 @@ use alloc::borrow::Cow;
 use alloc::collections::binary_heap::PeekMut;
 use alloc::collections::BinaryHeap;
 use alloc::sync::Arc;
-use chos_lib::log::debug;
 use core::future::Future;
 use core::mem::MaybeUninit;
 use core::ops;
