@@ -57,6 +57,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chos-bin"
+version = "0.1.0"
+dependencies = [
+ "chos",
+ "chos-fs-initrd",
+]
+
+[[package]]
 name = "chos-boot"
 version = "0.1.0"
 dependencies = [
@@ -76,6 +84,14 @@ version = "0.1.0"
 dependencies = [
  "chos-lib",
  "paste",
+]
+
+[[package]]
+name = "chos-fs-initrd"
+version = "0.1.0"
+dependencies = [
+ "chos",
+ "chos-lib",
 ]
 
 [[package]]

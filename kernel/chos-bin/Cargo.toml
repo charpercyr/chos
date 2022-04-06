@@ -1,0 +1,28 @@
+[package]
+name = "chos-bin"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["dylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chos = { path = ".." }
+chos-fs-initrd = { path = "../../drivers/fs/initrd" }
+
+
+[package.metadata.chos]
+type = "kernel"
+deploy = ["chos_bin.elf", "/chos/chos.elf"]
+
+[package.metadata.chos.x86_64]
+target = "file:../../arch/x86_64-chos.json"
+linker-script = "../arch/x86_64/linker.ld"
+
+[package.metadata.chos.debug]
+flags = ["--features=chos/log-debug"]
+
+[package.metadata.chos.release]
+flags = ["--features=chos/log-info"]

@@ -5,7 +5,7 @@ use core::ptr::write_bytes;
 
 use chos_config::arch::mm::virt;
 use chos_lib::arch::mm::FrameSize4K;
-use chos_lib::arch::regs::{FS, GS};
+use chos_lib::arch::regs::FS;
 use chos_lib::elf::{Elf, ProgramEntryType};
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::debug;
@@ -22,28 +22,31 @@ struct TlsIndex {
     offset: u64,
 }
 
+#[repr(C)]
 #[derive(Debug)]
 struct TlsData {
+    kernel_tls_end: VAddr,
+    kernel_tls_size: u64,
     id: u64,
     phys_tls_base: PAddr,
-    kernel_tls_base: VAddr,
     pages: u64,
 }
 static mut TLS_DATA: MaybeUninit<&'static [TlsData]> = MaybeUninit::uninit();
 
-pub fn per_cpu_base() -> VAddr {
-    GS::read()
+pub fn per_cpu_data() -> VAddr {
+    FS::read()
 }
 
 pub fn per_cpu_base_for(id: usize) -> VAddr {
-    unsafe { TLS_DATA.assume_init_ref()[id].kernel_tls_base }
+    let tls_data = unsafe { &TLS_DATA.assume_init_ref()[id] };
+    tls_data.kernel_tls_end
 }
 
 #[no_mangle]
 unsafe extern "C" fn __tls_get_addr(idx: &TlsIndex) -> *mut () {
-    let tls_data = per_cpu_base().as_ref::<TlsData>();
+    let tls_data = per_cpu_data().as_ref::<TlsData>();
     let addr = match idx.module {
-        0 => (tls_data.kernel_tls_base + idx.offset).as_mut_ptr(),
+        0 => (tls_data.kernel_tls_end - tls_data.kernel_tls_size + idx.offset).as_mut_ptr(),
         _ => unimplemented!(
             "Module Per Cpu data not implemented: __tls_get_addr({:?})",
             idx
@@ -118,16 +121,21 @@ pub unsafe fn init_per_cpu_data(
     let mut tls_data = Box::new_uninit_slice(core_count as usize);
     for i in 0..core_count {
         tls_data[i as usize] = MaybeUninit::new(TlsData {
+            kernel_tls_end: vbase.add((i as u64) * total_pages).addr() + total_pages * FrameSize4K::PAGE_SIZE,
+            kernel_tls_size: total_pages * FrameSize4K::PAGE_SIZE,
             id: i as u64,
             pages: total_pages,
             phys_tls_base: pbases[i].addr(),
-            kernel_tls_base: vbase.add((i as u64) * total_pages).addr(),
         });
     }
     let tls_data = tls_data.assume_init();
 
     for entry in tls_data.iter() {
-        debug!("TLS Base [{}] -> {:#x}", entry.id, entry.kernel_tls_base);
+        debug!(
+            "TLS [{}] -> {:#x}",
+            entry.id,
+            entry.kernel_tls_end,
+        );
     }
     TLS_DATA = MaybeUninit::new(Box::leak(tls_data));
     init_per_cpu_data_for_cpu(0);
@@ -143,14 +151,13 @@ pub unsafe fn init_per_cpu_data_for_cpu(core_id: usize) {
     let tls_data = *TLS_DATA.assume_init_ref();
     // Check that we have per-cpu data
     if tls_data.len() != 0 {
-        GS::write((&TLS_DATA.assume_init_ref()[core_id]).into())
+        FS::write((&TLS_DATA.assume_init_ref()[core_id]).into())
     }
     CPU_INFO.with_static(|info| {
         *info = CpuInfo { id: core_id };
-        FS::write(info.into());
     });
 }
 
 pub fn arch_this_cpu_info() -> &'static CpuInfo {
-    unsafe { FS::read().as_ref() }
+    unsafe { CPU_INFO.get_ref() }
 }

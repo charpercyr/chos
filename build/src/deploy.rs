@@ -1,12 +1,12 @@
-use crate::util::display_cmd_hook;
-use crate::{build_main, DeployOpts, Project};
-
 use std::path::{Path, PathBuf};
-use std::str::{FromStr};
+use std::str::FromStr;
 
 use duct::cmd;
-
 use tempfile::Builder;
+
+use crate::config::WorkspaceConfig;
+use crate::util::display_cmd_hook;
+use crate::{build_main, DeployOpts, Project};
 
 fn check_config(config: &[Project]) {
     for proj in config {
@@ -35,14 +35,22 @@ impl Loopdev {
         let file = file.as_ref();
         let mount = mount.as_ref();
 
-        let loopdev = cmd!("losetup", "-f").before_spawn(display_cmd_hook).read()?;
+        let loopdev = cmd!("losetup", "-f")
+            .before_spawn(display_cmd_hook)
+            .read()?;
         let looppart = format!("{}p1", loopdev);
 
         let err_guard = crate::ErrorGuard::new(|| remove_loop(&loopdev));
 
-        cmd!("sudo", "losetup", "-P", &loopdev, file).before_spawn(display_cmd_hook).run()?;
-        cmd!("sudo", "mkfs.ext2", &looppart).before_spawn(display_cmd_hook).run()?;
-        cmd!("sudo", "mount", &looppart, mount).before_spawn(display_cmd_hook).run()?;
+        cmd!("sudo", "losetup", "-P", &loopdev, file)
+            .before_spawn(display_cmd_hook)
+            .run()?;
+        cmd!("sudo", "mkfs.ext2", &looppart)
+            .before_spawn(display_cmd_hook)
+            .run()?;
+        cmd!("sudo", "mount", &looppart, mount)
+            .before_spawn(display_cmd_hook)
+            .run()?;
 
         err_guard.defuse();
 
@@ -59,12 +67,19 @@ impl Loopdev {
 
 impl Drop for Loopdev {
     fn drop(&mut self) {
-        cmd!("sudo", "umount", &self.mount).before_spawn(display_cmd_hook).run().unwrap();
+        cmd!("sudo", "umount", &self.mount)
+            .before_spawn(display_cmd_hook)
+            .run()
+            .unwrap();
         remove_loop(&self.loopdev);
     }
 }
 
-fn copy_file(mount: impl AsRef<Path>, from: impl AsRef<Path>, to: impl AsRef<Path>) -> crate::Result<()> {
+fn copy_file(
+    mount: impl AsRef<Path>,
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> crate::Result<()> {
     let mount = mount.as_ref();
     let from = from.as_ref();
     let to = to.as_ref();
@@ -75,8 +90,12 @@ fn copy_file(mount: impl AsRef<Path>, from: impl AsRef<Path>, to: impl AsRef<Pat
 
     let to_dir = to_path.parent().unwrap();
 
-    cmd!("sudo", "mkdir", "-p", to_dir).run()?;
-    cmd!("sudo", "cp", from, to_path).run()?;
+    cmd!("sudo", "mkdir", "-p", to_dir)
+        .before_spawn(display_cmd_hook)
+        .run()?;
+    cmd!("sudo", "cp", from, to_path)
+        .before_spawn(display_cmd_hook)
+        .run()?;
 
     Ok(())
 }
@@ -120,43 +139,32 @@ pub fn deploy(
     .run()?;
 
     for proj in config {
-        let target_name = proj
-            .flags
-            .target
-            .as_ref()
-            .unwrap()
-            .file_stem()
-            .unwrap()
-            .to_string_lossy();
-        let mut bin_name = proj.cargo_name.clone();
-        bin_name += ".elf";
+        let target_name = proj.target.name();
+
+        let &(ref deploy_from, ref deploy_to) = proj.flags.deploy.as_ref().unwrap();
         let binary_path: PathBuf = [
             "./target",
             &target_name,
             if release { "release" } else { "debug" },
-            &bin_name,
+            &*deploy_from.to_string_lossy(),
         ]
         .iter()
         .collect();
 
-        copy_file(
-            mount.path(),
-            binary_path,
-            proj.flags.deploy.as_ref().unwrap(),
-        )?;
+        copy_file(mount.path(), binary_path, deploy_to)?;
 
         for (from, to) in &proj.flags.copy {
-            copy_file(mount.path(), from, to)?;
+            copy_file(mount.path(), proj.path.join(from), to)?;
         }
     }
 
-    cmd!("sync").run()?;
+    cmd!("sync").before_spawn(display_cmd_hook).run()?;
 
     Ok(())
 }
 
-pub fn deploy_main(opts: &DeployOpts, config: &[Project]) {
-    build_main(&opts.build, config);
+pub fn deploy_main(opts: &DeployOpts, workspace: &WorkspaceConfig, config: &[Project]) {
+    build_main(&opts.build, workspace, config);
     deploy(
         &opts.output,
         config,

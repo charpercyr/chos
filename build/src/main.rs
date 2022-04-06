@@ -1,4 +1,6 @@
 #![feature(backtrace)]
+#![feature(once_cell)]
+#![feature(path_file_prefix)]
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("Only works on Linux");
@@ -18,11 +20,8 @@ use deploy::*;
 mod config;
 use config::*;
 
-mod lint;
-use lint::*;
-
-mod project;
-use project::*;
+mod driver;
+use driver::*;
 
 mod opts;
 use opts::*;
@@ -30,106 +29,104 @@ use opts::*;
 mod run;
 use run::*;
 
-mod testing;
-use testing::*;
-
 mod util;
-use util::*;
-
-use std::error::Error;
+use std::lazy::SyncLazy;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use cargo_toml::Manifest;
-
 use structopt::StructOpt;
+use util::*;
 
-pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
+static ROOT_CONFIG: SyncLazy<PathBuf> =
+    SyncLazy::new(|| PathBuf::from_str("./Cargo.toml").unwrap());
 
-fn load_project(
-    opts: &BuildOpts,
-    builder: &mut ProjectBuilder,
-    path: impl AsRef<Path>,
-) -> Result<()> {
-    let dir = path.as_ref().parent().unwrap_or(Path::new("/"));
-    let config = read_project_config(path.as_ref())?;
-    builder.merge_flags(dir, &config.project.common);
-    if opts.release {
-        builder.merge_flags(dir, &config.project.release);
-    } else {
-        builder.merge_flags(dir, &config.project.debug);
-    }
-    for include in &config.meta.include {
-        let include = include
-            .to_string_lossy()
-            .as_ref()
-            .replace("${ARCH}", &opts.arch);
-        load_project(
-            opts,
-            builder,
-            [dir, Path::new(&include)].iter().collect::<PathBuf>(),
-        )?;
-    }
-    Ok(())
+const DEBUG_STR: &'static str = "debug";
+const RELEASE_STR: &'static str = "release";
+
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn expand_glob(path: &Path) -> impl Iterator<Item = PathBuf> {
+    // TODO support globs
+    vec![path.to_path_buf()].into_iter()
 }
 
-fn get_projects(opts: &BuildOpts) -> Result<Vec<Project>> {
-    let config = read_root_config(ROOT_CONFIG_PATH).unwrap();
-    config
+fn find_all_projects(workspace: &config::WorkspaceRoot, target_match: TargetMatch) -> Vec<Project> {
+    workspace
+        .chos
         .projects
         .iter()
-        .map(|(name, proj)| {
-            let cargo_toml = Manifest::from_path(
-                [&proj.path, Path::new("Cargo.toml")]
-                    .iter()
-                    .collect::<PathBuf>(),
-            )?;
-            let cargo_name = &cargo_toml
-                .package
-                .as_ref()
-                .ok_or("Package should contain a name")?
-                .name;
-            let mut proj_builder = ProjectBuilder::new(name.clone(), cargo_name, proj.path.clone());
-            proj_builder.merge_flags(".", &config.flags.common);
-            if opts.release {
-                proj_builder.merge_flags(".", &config.flags.release);
-            } else {
-                proj_builder.merge_flags(".", &config.flags.debug);
-            }
-            load_project(
-                &opts,
-                &mut proj_builder,
-                [&proj.path, Path::new(PROJECT_CONFIG_NAME)]
-                    .iter()
-                    .collect::<PathBuf>(),
-            )?;
-            Ok(proj_builder.finish()?)
+        .map(|p| expand_glob(Path::new(p)))
+        .flatten()
+        .filter_map(move |proj| {
+            let mut path = PathBuf::new();
+            path.push(proj.clone());
+            path.push("Cargo.toml");
+            let manifest = Manifest::<config::ProjectRoot>::from_path_with_metadata(&path)
+                .expect("Invalid configuration");
+            let package = manifest.package?;
+            let name = package.name.clone();
+            let config = package.metadata?.chos?;
+            let flags = workspace
+                .chos
+                .flags
+                .get_flags(target_match)
+                .merge(&config.flags.get_flags(target_match));
+            let target =
+                Target::from_base_str(&proj, flags.target.as_ref().expect("Target must be set"));
+            Some(Project {
+                name,
+                typ: config.typ,
+                path: proj,
+                flags,
+                target,
+            })
         })
         .collect()
 }
 
+fn target_from_opts(opts: &opts::BuildOpts) -> config::TargetMatch<'_> {
+    config::TargetMatch {
+        arch: &opts.arch,
+        profile: if opts.release { RELEASE_STR } else { DEBUG_STR },
+    }
+}
+
+#[derive(Clone)]
+pub struct Project {
+    pub typ: ProjectType,
+    pub name: String,
+    pub path: PathBuf,
+    pub flags: config::Flags,
+    pub target: Target,
+}
+
 fn main() {
-    let opts = Opts::from_args();
+    let manifest: Manifest<config::WorkspaceRoot> =
+        Manifest::from_path_with_metadata(&*ROOT_CONFIG).unwrap();
+    let workspace = manifest
+        .workspace
+        .expect("Root project should be a workspace")
+        .metadata
+        .expect("Root project should have chos config");
+    let opts = opts::Opts::from_args();
     match opts {
-        Opts::Build(opts) => {
-            let config = get_projects(&opts).unwrap();
-            build_main(&opts, &config);
-        }
-        Opts::Deploy(opts) => {
-            let config = get_projects(&opts.build).unwrap();
-            deploy_main(&opts, &config);
-        }
-        Opts::Run(opts) => {
-            let config = get_projects(&opts.build).unwrap();
-            run_main(&opts, &config);
-        },
-        Opts::Test(opts) => {
-            let config = get_projects(&opts.build).unwrap();
-            test_main(&opts, &config)
-        },
-        Opts::Lint(opts) => {
-            let config = get_projects(&opts.build).unwrap();
-            lint_main(&opts, &config);
-        },
-        Opts::Clean => clean_main(),
+        opts::Opts::Build(opts) => drop(build_main(
+            &opts,
+            &workspace.chos,
+            &find_all_projects(&workspace, target_from_opts(&opts)),
+        )),
+        opts::Opts::Deploy(opts) => deploy_main(
+            &opts,
+            &workspace.chos,
+            &find_all_projects(&workspace, target_from_opts(&opts.build)),
+        ),
+        opts::Opts::Run(opts) => run_main(
+            &opts,
+            &workspace.chos,
+            &find_all_projects(&workspace, target_from_opts(&opts.build)),
+        ),
+        opts::Opts::Driver(opts) => driver_main(&opts),
+        opts::Opts::Clean => clean_main(),
     }
 }

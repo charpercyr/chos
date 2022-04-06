@@ -65,6 +65,25 @@ pub struct LintOpts {
 }
 
 #[derive(StructOpt, Debug)]
+pub struct NewDriverOpts {
+    /// Driver category (e.g. fs, net, misc, ...)
+    pub category: String,
+    /// Driver name
+    pub name: String,
+    /// Compile statically into the kernel (excludes '--initrd')
+    #[structopt(long = "static")]
+    pub static_: bool,
+    #[structopt(long)]
+    /// Add to initrd (excludes '--static')
+    pub initrd: bool,
+}
+
+#[derive(StructOpt, Debug)]
+pub enum DriverOpts {
+    New(NewDriverOpts),
+}
+
+#[derive(StructOpt, Debug)]
 pub enum Opts {
     /// Build project
     #[structopt(visible_alias = "b")]
@@ -75,11 +94,8 @@ pub enum Opts {
     /// Build and run project
     #[structopt(visible_alias = "r")]
     Run(RunOpts),
-    /// Test project
-    #[structopt(visible_alias = "t")]
-    Test(TestOpts),
-    #[structopt(visible_alias = "l")]
-    Lint(LintOpts),
+    /// Driver projects management
+    Driver(DriverOpts),
     /// Clean project
     #[structopt(visible_alias = "c")]
     Clean,

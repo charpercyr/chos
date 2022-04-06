@@ -3,8 +3,25 @@
 members = [
     "boot",
     "kernel",
+    "kernel/chos-bin",
     "lib/*",
+    "drivers/*/*",
 ]
 exclude = [
     "build",
+    "target",
 ]
+
+[workspace.metadata.chos]
+projects = [
+    "boot",
+    "kernel/chos-bin",
+]
+flags = [
+    "-Zbuild-std=core,alloc",
+    "-Zbuild-std-features=compiler-builtins-mem"
+]
+initrd-drivers = []
+
+[workspace.metadata.chos.static-drivers]
+initrd = "chos-fs-initrd"

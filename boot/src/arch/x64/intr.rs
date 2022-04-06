@@ -40,7 +40,7 @@ extern "x86-interrupt" fn intr_page_fault(f: StackFrame, e: PageFaultError) {
         }
         unsafe_println!("Tried to access {:#x} : {:?}", Cr2::read(), e);
     }
-    panic!();
+    panic!("{:#x?}", f);
 }
 
 #[interrupt]

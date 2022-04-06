@@ -8,8 +8,10 @@
     "os": "none",
 
     "executables": true,
+    "position-independent-executables": true,
     "dynamic-linking": true,
     "only-cdylib": false,
+
     "linker-flavor": "ld.lld",
     "linker": "rust-lld",
     "features": "-mmx,-sse,+soft-float",

@@ -1,5 +1,5 @@
 
-use crate::{Project, RunOpts, build::build_main};
+use crate::{Project, RunOpts, build::build_main, config::WorkspaceConfig};
 
 use duct::cmd;
 
@@ -7,12 +7,12 @@ use tempfile::Builder;
 
 const KERNEL_EXIT_SUCCESS: i32 = 33;
 
-pub fn run_main(opts: &RunOpts, config: &[Project]) {
+pub fn run_main(opts: &RunOpts, workspace: &WorkspaceConfig, config: &[Project]) {
     if opts.build.arch != "x86_64" {
         panic!("Run not supported for {}", opts.build.arch);
     }
     if !opts.no_build {
-        build_main(&opts.build, config);
+        build_main(&opts.build, workspace, config);
     }
     let imgfile = Builder::new().prefix("chos").suffix(".img").tempfile().unwrap();
     crate::deploy(imgfile.path(), config, opts.build.release, crate::DEPLOY_DEFAULT_SIZE).unwrap();
