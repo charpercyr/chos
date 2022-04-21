@@ -4,6 +4,8 @@ use core::ops::{Deref, DerefMut};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+use pin_project::pin_project;
+
 use super::sem::AsyncSemWaitFut;
 use super::AsyncSem;
 
@@ -42,18 +44,21 @@ impl<T> AsyncLock<T> {
     }
 }
 
+#[pin_project]
 #[must_use = "Future do nothing unless awaited"]
 pub struct AsyncLockFut<'lock, T: ?Sized> {
     lock: &'lock AsyncLock<T>,
+    #[pin]
     fut: AsyncSemWaitFut<'lock>,
 }
 
 impl<'lock, T: ?Sized> Future for AsyncLockFut<'lock, T> {
     type Output = AsyncLockGuard<'lock, T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        unsafe { Pin::new_unchecked(&mut this.fut).poll(cx) }
-            .map(|_| AsyncLockGuard { lock: this.lock })
+        let this = self.project();
+        let fut = this.fut;
+        let lock = this.lock;
+        fut.poll(cx).map(move |_| AsyncLockGuard { lock })
     }
 }
 

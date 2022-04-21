@@ -6,6 +6,7 @@
 #![feature(associated_type_defaults)]
 #![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
+#![feature(coerce_unsized)]
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
 #![feature(decl_macro)]
@@ -17,6 +18,7 @@
 #![feature(negative_impls)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
+#![feature(unsize)]
 #![feature(untagged_unions)]
 #![cfg_attr(
     any(target_arch = "x86", target_arch = "x86_64"),
@@ -26,7 +28,6 @@
 pub mod access;
 pub mod arch;
 pub mod array;
-pub mod async_;
 pub mod boot;
 mod config;
 pub mod cpumask;

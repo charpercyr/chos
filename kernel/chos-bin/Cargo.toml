@@ -10,12 +10,13 @@ crate-type = ["dylib"]
 
 [dependencies]
 chos = { path = ".." }
-chos-fs-initrd = { path = "../../drivers/fs/initrd" }
-
+chos-fs-ramfs = { path = "../../drivers/fs/ramfs" }
 
 [package.metadata.chos]
 type = "kernel"
-deploy = ["chos_bin.elf", "/chos/chos.elf"]
+deploy = ["libchos_bin.so", "disk:/chos/libchos_bin.so"]
+initrd = "/chos/initrd.tar"
+copy = [["../config.txt", "initrd:/config.txt"]]
 
 [package.metadata.chos.x86_64]
 target = "file:../../arch/x86_64-chos.json"

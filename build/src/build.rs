@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use duct::cmd;
@@ -8,7 +7,7 @@ use duct::cmd;
 use crate::config::{ProjectType, WorkspaceConfig};
 use crate::opts::*;
 use crate::util::display_cmd_hook;
-use crate::{driver, Project};
+use crate::Project;
 
 const DRIVERS_ROOT: &'static str = "drivers";
 
@@ -42,7 +41,7 @@ fn find_all_drivers() -> impl Iterator<Item = PathBuf> {
 
 fn get_args_for_project(
     opts: &BuildOpts,
-    workspace: &WorkspaceConfig,
+    _workspace: &WorkspaceConfig,
     proj: &Project,
 ) -> (Vec<String>, Vec<String>) {
     let mut cargo_args = Vec::new();
@@ -67,9 +66,9 @@ fn get_args_for_project(
     (cargo_args, rustc_args)
 }
 
-fn build_drivers(opts: &BuildOpts, workspace: &WorkspaceConfig, kernel: &Project) ->  Vec<PathBuf> {
+fn build_drivers(opts: &BuildOpts, workspace: &WorkspaceConfig, kernel: &Project) -> Vec<PathBuf> {
     let mut static_drivers = HashSet::new();
-    static_drivers.insert(workspace.static_drivers.initrd.clone());
+    static_drivers.insert(workspace.static_drivers.ramfs.clone());
     static_drivers.extend(workspace.static_drivers.others.iter().cloned());
     let mut initrd_drivers: HashSet<_> = workspace.initrd_drivers.iter().cloned().collect();
 
@@ -95,13 +94,19 @@ fn build_drivers(opts: &BuildOpts, workspace: &WorkspaceConfig, kernel: &Project
         } else if initrd_drivers.remove(name) {
             lib_type = "dylib";
             initrd_paths.push(
-                Path::new(&format!("target/{}/{}.elf", kernel.target.name(), name)).to_path_buf(),
+                Path::new(&format!(
+                    "target/{}/{}/lib{}.so",
+                    kernel.target.name(),
+                    if opts.release { "release" } else { "debug" },
+                    name.replace("-", "_")
+                ))
+                .to_path_buf(),
             );
         } else {
             lib_type = "dylib";
         }
 
-        let mut cargo_args = kernel_cargo_args.clone();
+        let cargo_args = kernel_cargo_args.clone();
 
         let mut rustc_args = kernel_rustc_args.clone();
         rustc_args.push("--crate-type".into());
@@ -132,10 +137,9 @@ pub fn build_main(
 ) -> Vec<PathBuf> {
     let mut driver_paths = None;
     for proj in projects {
-        let (mut cargo_args, mut rustc_args) = get_args_for_project(opts, workspace, proj);
+        let (cargo_args, rustc_args) = get_args_for_project(opts, workspace, proj);
         if proj.typ == ProjectType::Kernel {
-            let drv_driver_paths = build_drivers(opts, workspace, proj);
-            driver_paths = Some(drv_driver_paths);
+            driver_paths = Some(build_drivers(opts, workspace, proj));
         }
 
         cargo_build(&proj.name, cargo_args, rustc_args)

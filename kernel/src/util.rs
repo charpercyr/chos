@@ -5,3 +5,11 @@ pub macro barrier($n:expr) {{
         .get_or_init(|| chos_lib::sync::SpinBarrier::new($n))
         .wait();
 }}
+
+pub macro do_once($body:expr) {{
+    use core::sync::atomic::{AtomicBool, Ordering};
+    static ONCE: AtomicBool = AtomicBool::new(false);
+    if ONCE.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
+        $body;
+    }
+}}

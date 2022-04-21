@@ -30,6 +30,7 @@ mod run;
 use run::*;
 
 mod util;
+use std::fmt;
 use std::lazy::SyncLazy;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -45,6 +46,27 @@ const DEBUG_STR: &'static str = "debug";
 const RELEASE_STR: &'static str = "release";
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+#[derive(Debug)]
+pub struct ErrorMessage(String);
+impl From<String> for ErrorMessage {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+impl From<&str> for ErrorMessage {
+    fn from(s: &str) -> Self {
+        Self(s.into())
+    }
+}
+
+impl fmt::Display for ErrorMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for ErrorMessage {}
 
 fn expand_glob(path: &Path) -> impl Iterator<Item = PathBuf> {
     // TODO support globs

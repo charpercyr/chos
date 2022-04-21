@@ -170,6 +170,19 @@ where
     }
 }
 
+unsafe impl<A: Adapter<LinkOps: HashTableOps> + Send, B: BucketSize, S: BuildHasher + Send> Send
+    for HashTable<A, B, S>
+where
+    <A::PointerOps as PointerOps>::Pointer: Send,
+{
+}
+unsafe impl<A: Adapter<LinkOps: HashTableOps> + Sync, B: BucketSize, S: BuildHasher + Sync> Sync
+    for HashTable<A, B, S>
+where
+    <A::PointerOps as PointerOps>::Pointer: Sync,
+{
+}
+
 impl<A: Adapter<LinkOps: HashTableOps> + ConstInit, B: BucketSize, S: BuildHasher + ConstInit>
     ConstInit for HashTable<A, B, S>
 {

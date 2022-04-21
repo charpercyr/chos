@@ -1,0 +1,5 @@
+mod libchos_bus_pci.so
+mod libchos_block_ahci.so
+mod libchos_fs_ext2.so
+mount path=/root fs=ext2
+init /root/usr/bin/init

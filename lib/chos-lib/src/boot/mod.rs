@@ -20,7 +20,7 @@ pub struct KernelMemInfo {
 pub struct KernelBootInfo {
     pub core_count: usize,
     pub elf: NonNull<[u8]>,
-    pub initrd: Option<NonNull<[u8]>>,
+    pub initrd: NonNull<[u8]>,
     pub early_log: &'static dyn LogHandler,
     pub mem_info: KernelMemInfo,
     pub command_line: Option<&'static str>,

@@ -1,5 +1,5 @@
 pub mod raw_alloc;
-use core::alloc::AllocError;
+use core::alloc::{AllocError, Layout};
 use core::ptr::NonNull;
 
 use chos_lib::arch::mm::PAGE_SIZE;
@@ -108,7 +108,7 @@ unsafe impl Pool<Page> for PagePoolImpl {
         slab.alloc().map(|p| p.cast())
     }
 
-    unsafe fn deallocate(&self, ptr: NonNull<Page>) {
+    unsafe fn deallocate(&self, ptr: NonNull<Page>, _: Layout) {
         let &Page {
             order,
             frame: paddr,

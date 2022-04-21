@@ -31,7 +31,7 @@ flags = ["--features=chos-lib/log-info"]
 [package.metadata.chos.x86_64]
 target = "file:../arch/x86_64-chos.json"
 linker-script = "./arch/x86_64/linker.ld"
-deploy = ["chos-boot.elf", "/boot/boot.elf"]
+deploy = ["chos-boot.elf", "disk:/boot/boot.elf"]
 copy = [
-    ["./arch/x86_64/grub.cfg", "/boot/grub/grub.cfg"]
+    ["./arch/x86_64/grub.cfg", "disk:/boot/grub/grub.cfg"]
 ]

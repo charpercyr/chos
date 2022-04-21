@@ -11,7 +11,7 @@ pub struct WorkspaceRoot {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct StaticDriver {
-    pub initrd: String,
+    pub ramfs: String,
     #[serde(default)]
     pub others: Vec<String>,
 }
@@ -52,9 +52,10 @@ pub struct ProjectConfig {
 pub struct Flags {
     pub target: Option<String>,
     pub linker_script: Option<PathBuf>,
-    pub deploy: Option<(PathBuf, PathBuf)>,
+    pub deploy: Option<(PathBuf, String)>,
+    pub initrd: Option<PathBuf>,
     #[serde(default)]
-    pub copy: Vec<(PathBuf, PathBuf)>,
+    pub copy: Vec<(PathBuf, String)>,
     #[serde(default)]
     pub flags: Vec<String>,
     #[serde(default)]
@@ -93,6 +94,7 @@ impl Flags {
         defined_once(&mut self.target, &rhs.target, "target");
         defined_once(&mut self.linker_script, &rhs.linker_script, "linker-script");
         defined_once(&mut self.deploy, &rhs.deploy, "deploy");
+        defined_once(&mut self.initrd, &rhs.initrd, "initrd");
         self.copy.extend(rhs.copy.iter().cloned());
         self.flags.extend(rhs.flags.iter().cloned());
         self.rustc_flags.extend(rhs.rustc_flags.iter().cloned());

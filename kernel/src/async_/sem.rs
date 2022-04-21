@@ -1,15 +1,90 @@
 use core::future::Future;
 use core::marker::PhantomPinned;
 use core::pin::Pin;
+use core::ptr::NonNull;
 use core::task::{Context, Poll, Waker};
 
+use chos_lib::sync::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, UnsafeMut};
 
-use crate::sync::Spinlock;
+pub(super) struct WaiterList {
+    waiters: linked_list::LinkedList<WaiterAdapter>,
+}
+
+impl WaiterList {
+    pub const fn new() -> Self {
+        Self {
+            waiters: linked_list::LinkedList::new(WaiterAdapter::NEW),
+        }
+    }
+
+    pub fn add_to_waitlist(&mut self, waiter: Pin<&mut Waiter>, waker: Waker) {
+        let waiter = unsafe { waiter.get_unchecked_mut() };
+        waiter.waker = Some(waker);
+        waiter.list = Some(NonNull::from(&*self));
+        self.waiters
+            .push_back(unsafe { UnsafeMut::from_raw(waiter) });
+    }
+
+    pub fn wake_count(&mut self, mut count: usize) {
+        let mut cur = self.waiters.front_mut();
+        while !cur.is_null() && count > 0 {
+            if cur.get().unwrap().count <= count {
+                let mut waiter = cur.remove().unwrap();
+                count -= waiter.count;
+                if let Some(waker) = waiter.waker.take() {
+                    waker.wake();
+                }
+                assert!(waiter.list.is_some());
+                waiter.list = None;
+            } else {
+                cur.move_next();
+            }
+        }
+    }
+}
+
+pub struct Waiter {
+    list: Option<NonNull<WaiterList>>,
+    link: linked_list::AtomicLink,
+    waker: Option<Waker>,
+    count: usize,
+    pinned: PhantomPinned,
+}
+unsafe impl Send for Waiter {}
+unsafe impl Sync for Waiter {}
+
+impl Waiter {
+    pub const fn new(count: usize) -> Self {
+        Self {
+            list: None,
+            link: linked_list::AtomicLink::new(),
+            waker: None,
+            count,
+            pinned: PhantomPinned,
+        }
+    }
+}
+
+impl Drop for Waiter {
+    fn drop(&mut self) {
+        if self.link.is_linked() {
+            let mut list = self.list.unwrap();
+            unsafe {
+                list.as_mut()
+                    .waiters
+                    .cursor_mut_from_ptr(self)
+                    .remove()
+                    .unwrap();
+                assert!(!self.link.is_linked())
+            }
+        }
+    }
+}
 
 struct AsyncSemInner {
     count: usize,
-    waiters: linked_list::LinkedList<WaiterAdapter>,
+    waiters: WaiterList,
 }
 
 pub struct AsyncSem {
@@ -24,7 +99,7 @@ impl AsyncSem {
         Self {
             inner: Spinlock::new(AsyncSemInner {
                 count,
-                waiters: linked_list::LinkedList::new(WaiterAdapter::NEW),
+                waiters: WaiterList::new(),
             }),
         }
     }
@@ -32,11 +107,7 @@ impl AsyncSem {
     pub fn wait_count(&self, count: usize) -> AsyncSemWaitFut<'_> {
         AsyncSemWaitFut {
             sem: self,
-            waiter: Waiter {
-                count,
-                link: linked_list::AtomicLink::new(),
-                waker: None,
-            },
+            waiter: Waiter::new(count),
             pinned: PhantomPinned,
         }
     }
@@ -60,32 +131,14 @@ impl AsyncSem {
     }
 
     pub fn signal_count(&self, count: usize) {
-        let mut woke_count = count;
         let mut inner = self.inner.lock_noirq();
-        let mut cursor = inner.waiters.front_mut();
-        while !cursor.is_null() && woke_count > 0 {
-            let waiter = cursor.get().unwrap();
-            if waiter.count <= count {
-                let mut waiter = cursor.remove().unwrap();
-                woke_count -= waiter.count;
-                let waker = waiter.waker.take().unwrap();
-                waker.wake();
-            } else {
-                cursor.move_next();
-            }
-        }
         inner.count += count;
+        inner.waiters.wake_count(count);
     }
 
     pub fn signal(&self) {
         self.signal_count(1)
     }
-}
-
-struct Waiter {
-    link: linked_list::AtomicLink,
-    waker: Option<Waker>,
-    count: usize,
 }
 
 #[must_use = "Future do nothing unless awaited"]
@@ -107,23 +160,11 @@ impl Future for AsyncSemWaitFut<'_> {
             Poll::Ready(())
         } else {
             let this = unsafe { self.get_unchecked_mut() };
-            this.waiter.waker = Some(cx.waker().clone());
-            unsafe {
-                inner
-                    .waiters
-                    .push_back(UnsafeMut::from_raw(&mut this.waiter))
-            }
+            inner.waiters.add_to_waitlist(
+                unsafe { Pin::new_unchecked(&mut this.waiter) },
+                cx.waker().clone(),
+            );
             Poll::Pending
-        }
-    }
-}
-
-impl Drop for AsyncSemWaitFut<'_> {
-    fn drop(&mut self) {
-        let mut inner = self.sem.inner.lock_noirq();
-        if self.waiter.link.is_linked() {
-            unsafe { inner.waiters.cursor_mut_from_ptr(&self.waiter).remove() };
-            debug_assert!(!self.waiter.link.is_linked());
         }
     }
 }
@@ -135,16 +176,6 @@ mod tests {
     use core::task::{RawWaker, RawWakerVTable};
 
     use super::*;
-
-    static FAKE_VTABLE: RawWakerVTable = RawWakerVTable::new(
-        |_| RawWaker::new(null(), &FAKE_VTABLE),
-        |_| (),
-        |_| (),
-        |_| (),
-    );
-    fn fake_raw_waker() -> RawWaker {
-        RawWaker::new(null(), &FAKE_VTABLE)
-    }
 
     #[tokio::test]
     async fn signal_1() {

@@ -4,9 +4,12 @@ use std::str::FromStr;
 use duct::cmd;
 use tempfile::Builder;
 
-use crate::config::WorkspaceConfig;
+use crate::config::{ProjectType, WorkspaceConfig};
 use crate::util::display_cmd_hook;
-use crate::{build_main, DeployOpts, Project};
+use crate::{build_main, DeployOpts, ErrorMessage, Project};
+
+const DISK_PREFIX: &'static str = "disk:";
+const INITRD_PREFIX: &'static str = "initrd:";
 
 fn check_config(config: &[Project]) {
     for proj in config {
@@ -82,11 +85,13 @@ fn copy_file(
 ) -> crate::Result<()> {
     let mount = mount.as_ref();
     let from = from.as_ref();
-    let to = to.as_ref();
+    let mut to = to.as_ref();
 
-    let mut to_path = mount.to_owned().to_string_lossy().into_owned();
-    to_path += &*to.to_string_lossy();
-    let to_path = Path::new(&to_path);
+    if to.starts_with("/") {
+        to = to.strip_prefix("/")?;
+    }
+
+    let to_path = mount.join(to);
 
     let to_dir = to_path.parent().unwrap();
 
@@ -100,11 +105,37 @@ fn copy_file(
     Ok(())
 }
 
+fn deploy_initrd(
+    disk_dir: &Path,
+    initrd_dir: &Path,
+    initrd_drivers: &[PathBuf],
+    initrd_tar: &Path,
+) -> crate::Result<()> {
+    for driver in initrd_drivers {
+        let filename = driver.file_name().expect("Should have a file name");
+        copy_file(initrd_dir, driver, filename)?;
+    }
+    cmd!(
+        "sudo",
+        "tar",
+        "--strip-components=1",
+        "-C",
+        initrd_dir,
+        "-cvf",
+        disk_dir.join(initrd_tar),
+        ".",
+    )
+    .before_spawn(display_cmd_hook)
+    .run()?;
+    Ok(())
+}
+
 pub fn deploy(
     file: impl AsRef<Path>,
     config: &[Project],
     release: bool,
     image_size: usize,
+    initrd_drivers: Vec<PathBuf>,
 ) -> crate::Result<()> {
     check_config(config);
     let file = file.as_ref();
@@ -124,9 +155,10 @@ pub fn deploy(
         .before_spawn(display_cmd_hook)
         .run()?;
 
-    let mount = Builder::new().prefix("chos").tempdir()?;
-    let loopdev = Loopdev::new(file, mount.path())?;
-    let mount_path = mount.path().to_string_lossy();
+    let disk_mount = Builder::new().prefix("chos-disk").tempdir()?;
+    let initrd_dir = Builder::new().prefix("chos-initrd").tempdir()?;
+    let loopdev = Loopdev::new(file, disk_mount.path())?;
+    let mount_path = disk_mount.path().to_string_lossy();
 
     cmd!(
         "sudo",
@@ -151,10 +183,54 @@ pub fn deploy(
         .iter()
         .collect();
 
-        copy_file(mount.path(), binary_path, deploy_to)?;
+        if deploy_to.starts_with(DISK_PREFIX) {
+            copy_file(
+                disk_mount.path(),
+                binary_path,
+                &deploy_to[DISK_PREFIX.len()..],
+            )?;
+        } else if deploy_to.starts_with(INITRD_PREFIX) {
+            copy_file(
+                initrd_dir.path(),
+                binary_path,
+                &deploy_to[INITRD_PREFIX.len()..],
+            )?;
+        } else {
+            return Err(ErrorMessage::from(format!("Invalid path '{}'", deploy_to)).into());
+        }
 
         for (from, to) in &proj.flags.copy {
-            copy_file(mount.path(), proj.path.join(from), to)?;
+            if to.starts_with(DISK_PREFIX) {
+                copy_file(
+                    disk_mount.path(),
+                    proj.path.join(from),
+                    &to[DISK_PREFIX.len()..],
+                )?;
+            } else if to.starts_with(INITRD_PREFIX) {
+                copy_file(
+                    initrd_dir.path(),
+                    proj.path.join(from),
+                    &to[INITRD_PREFIX.len()..],
+                )?;
+            } else {
+                return Err(ErrorMessage::from(format!("Invalid path '{}'", to)).into());
+            }
+        }
+        if proj.typ == ProjectType::Kernel {
+            let mut initrd_tar = proj
+                .flags
+                .initrd
+                .as_deref()
+                .ok_or(ErrorMessage::from("Initrd must be set for kernel"))?;
+            if initrd_tar.starts_with("/") {
+                initrd_tar = initrd_tar.strip_prefix("/")?;
+            }
+            deploy_initrd(
+                disk_mount.path(),
+                initrd_dir.path(),
+                &initrd_drivers,
+                initrd_tar,
+            )?;
         }
     }
 
@@ -164,12 +240,13 @@ pub fn deploy(
 }
 
 pub fn deploy_main(opts: &DeployOpts, workspace: &WorkspaceConfig, config: &[Project]) {
-    build_main(&opts.build, workspace, config);
+    let initrd_drivers = build_main(&opts.build, workspace, config);
     deploy(
         &opts.output,
         config,
         opts.build.release,
         opts.image_size.unwrap_or(crate::DEPLOY_DEFAULT_SIZE),
+        initrd_drivers,
     )
     .unwrap();
 }

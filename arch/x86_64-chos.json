@@ -15,8 +15,8 @@
     "linker-flavor": "ld.lld",
     "linker": "rust-lld",
     "features": "-mmx,-sse,+soft-float",
-    "dll-prefix": "",
-    "dll-suffix": ".elf",
+    "dll-prefix": "lib",
+    "dll-suffix": ".so",
     "exe-suffix": ".elf",
 
     "frame-pointer": "always",

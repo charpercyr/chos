@@ -44,7 +44,7 @@ struct EarlyData {
 unsafe fn populate_kernel_args(info: &KernelBootInfo, stacks: &'static [Stack]) -> KernelArgs {
     KernelArgs {
         kernel_elf: info.elf.as_ref().into(),
-        initrd: info.initrd.map(|ird| ird.as_ref().into()),
+        initrd: info.initrd.as_ref().into(),
         core_count: info.core_count,
         mem_info: info.mem_info,
         command_line: info.command_line.map(Into::into),

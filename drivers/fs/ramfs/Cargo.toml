@@ -1,5 +1,5 @@
 [package]
-name = "chos-fs-initrd"
+name = "chos-fs-ramfs"
 version = "0.1.0"
 edition = "2021"
 

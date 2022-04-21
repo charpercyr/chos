@@ -2,8 +2,8 @@ use core::alloc::{AllocError, Layout};
 use core::fmt;
 use core::future::Future;
 use core::hash::Hash;
-use core::marker::PhantomData;
-use core::ops::{Deref, DerefMut};
+use core::marker::{PhantomData, Unsize};
+use core::ops::{CoerceUnsized, Deref, DerefMut};
 use core::pin::Pin;
 use core::ptr::NonNull;
 use core::task::{Context, Poll};
@@ -13,14 +13,17 @@ use intrusive_collections::{ExclusivePointerOps, PointerOps};
 use super::{handle_alloc_error, ConstPool, Pool};
 use crate::intrusive::DefaultPointerOps;
 
-pub struct PoolBox<T, P: Pool<T>> {
+pub struct PoolBox<T: ?Sized, P: Pool<T>> {
     ptr: NonNull<T>,
     alloc: P,
     value: PhantomData<T>,
 }
 
-impl<T, P: Pool<T>> PoolBox<T, P> {
-    pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError> {
+impl<T: ?Sized, P: Pool<T>> PoolBox<T, P> {
+    pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError>
+    where
+        T: Sized,
+    {
         let ptr = unsafe { alloc.allocate()? };
         unsafe { core::ptr::write(ptr.as_ptr(), value) };
         Ok(Self {
@@ -30,15 +33,24 @@ impl<T, P: Pool<T>> PoolBox<T, P> {
         })
     }
 
-    pub fn new_in(value: T, alloc: P) -> Self {
+    pub fn new_in(value: T, alloc: P) -> Self
+    where
+        T: Sized,
+    {
         Self::try_new_in(value, alloc).unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
     }
 
-    pub fn try_pin_in(value: T, alloc: P) -> Result<Pin<Self>, AllocError> {
+    pub fn try_pin_in(value: T, alloc: P) -> Result<Pin<Self>, AllocError>
+    where
+        T: Sized,
+    {
         Self::try_new_in(value, alloc).map(|b| unsafe { Pin::new_unchecked(b) })
     }
 
-    pub fn pin_in(value: T, alloc: P) -> Pin<Self> {
+    pub fn pin_in(value: T, alloc: P) -> Pin<Self>
+    where
+        T: Sized,
+    {
         unsafe { Pin::new_unchecked(Self::new_in(value, alloc)) }
     }
 
@@ -74,10 +86,14 @@ impl<T, P: Pool<T>> PoolBox<T, P> {
         self.ptr.as_ptr()
     }
 
-    pub fn into_inner(self) -> T {
+    pub fn into_inner(self) -> T
+    where
+        T: Sized,
+    {
         unsafe {
+            let layout = Layout::for_value(self.get_ref());
             let value = core::ptr::read(self.ptr.as_ptr());
-            self.alloc.deallocate(self.ptr);
+            self.alloc.deallocate(self.ptr, layout);
             value
         }
     }
@@ -96,20 +112,20 @@ impl<T, P: Pool<T>> PoolBox<T, P> {
     }
 }
 
-impl<T, P: ConstPool<T>> PoolBox<T, P> {
-    pub fn try_new(value: T) -> Result<Self, AllocError> {
+impl<T: ?Sized, P: ConstPool<T>> PoolBox<T, P> {
+    pub fn try_new(value: T) -> Result<Self, AllocError> where T: Sized {
         Self::try_new_in(value, P::INIT)
     }
 
-    pub fn try_pin(value: T) -> Result<Pin<Self>, AllocError> {
+    pub fn try_pin(value: T) -> Result<Pin<Self>, AllocError> where T: Sized {
         Self::try_new(value).map(|b| unsafe { Pin::new_unchecked(b) })
     }
 
-    pub fn new(value: T) -> Self {
+    pub fn new(value: T) -> Self where T: Sized {
         Self::new_in(value, P::INIT)
     }
 
-    pub fn pin(value: T) -> Pin<Self> {
+    pub fn pin(value: T) -> Pin<Self> where T: Sized {
         unsafe { Pin::new_unchecked(Self::new(value)) }
     }
 
@@ -132,76 +148,85 @@ impl<T, P: ConstPool<T>> PoolBox<T, P> {
     }
 }
 
-impl<T, P: Pool<T>> Drop for PoolBox<T, P> {
+impl<T: ?Sized, P: Pool<T>> Drop for PoolBox<T, P> {
     fn drop(&mut self) {
+        let layout = Layout::for_value(self.get_ref());
         unsafe {
             core::ptr::drop_in_place(self.ptr.as_ptr());
-            self.alloc.deallocate(self.ptr);
+            self.alloc.deallocate(self.ptr, layout);
         }
     }
 }
 
-impl<T, P: Pool<T>> Deref for PoolBox<T, P> {
+impl<T: ?Sized, P: Pool<T>> Deref for PoolBox<T, P> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get_ref()
     }
 }
 
-impl<T, P: Pool<T>> DerefMut for PoolBox<T, P> {
+impl<T: ?Sized, P: Pool<T>> DerefMut for PoolBox<T, P> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_mut()
     }
 }
 
-impl<T: Clone, P: Pool<T> + Clone> Clone for PoolBox<T, P> {
+impl<T: Clone + ?Sized, P: Pool<T> + Clone> Clone for PoolBox<T, P> {
     fn clone(&self) -> Self {
         Self::new_in(self.get_ref().clone(), self.alloc.clone())
     }
 }
 
-impl<T: PartialEq, P: Pool<T>> PartialEq for PoolBox<T, P> {
+impl<T: PartialEq + ?Sized, P: Pool<T>> PartialEq for PoolBox<T, P> {
     fn eq(&self, other: &Self) -> bool {
         <T as PartialEq>::eq(self, other)
     }
 }
-impl<T: PartialEq, P: Pool<T>> PartialEq<T> for PoolBox<T, P> {
+impl<T: PartialEq + ?Sized, P: Pool<T>> PartialEq<T> for PoolBox<T, P> {
     fn eq(&self, other: &T) -> bool {
         <T as PartialEq>::eq(self, other)
     }
 }
-impl<T: Eq, P: Pool<T>> Eq for PoolBox<T, P> {}
+impl<T: Eq + ?Sized, P: Pool<T>> Eq for PoolBox<T, P> {}
 
-impl<T: PartialOrd, P: Pool<T>> PartialOrd for PoolBox<T, P> {
+impl<T: PartialOrd + ?Sized, P: Pool<T>> PartialOrd for PoolBox<T, P> {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         <T as PartialOrd>::partial_cmp(self, other)
     }
 }
-impl<T: PartialOrd, P: Pool<T>> PartialOrd<T> for PoolBox<T, P> {
+impl<T: PartialOrd + ?Sized, P: Pool<T>> PartialOrd<T> for PoolBox<T, P> {
     fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
         <T as PartialOrd>::partial_cmp(self, other)
     }
 }
-impl<T: Ord, P: Pool<T>> Ord for PoolBox<T, P> {
+impl<T: Ord + ?Sized, P: Pool<T>> Ord for PoolBox<T, P> {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         <T as Ord>::cmp(self, other)
     }
 }
 
-impl<T: Hash, P: Pool<T>> Hash for PoolBox<T, P> {
+impl<T: Hash + ?Sized, P: Pool<T>> Hash for PoolBox<T, P> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         T::hash(&*self, state)
     }
 }
 
-impl<T, P: Pool<T> + Unpin> Unpin for PoolBox<T, P> {}
+impl<T: ?Sized, P: Pool<T> + Unpin> Unpin for PoolBox<T, P> {}
 unsafe impl<T: Send, P: Pool<T> + Send> Send for PoolBox<T, P> {}
 unsafe impl<T: Sync, P: Pool<T> + Sync> Sync for PoolBox<T, P> {}
+
+impl<T, U, P> CoerceUnsized<PoolBox<U, P>> for PoolBox<T, P>
+where
+    T: Unsize<U> + ?Sized,
+    U: ?Sized,
+    P: Pool<T> + Pool<U>,
+{
+}
 
 macro_rules! fmt {
     ($($fmt:ident),* $(,)?) => {
         $(
-            impl<T: fmt::$fmt, P: Pool<T>> fmt::$fmt for PoolBox<T, P> {
+            impl<T: fmt::$fmt + ?Sized, P: Pool<T>> fmt::$fmt for PoolBox<T, P> {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                     fmt::$fmt::fmt(self.get_ref(), f)
                 }
@@ -211,13 +236,13 @@ macro_rules! fmt {
 }
 fmt!(Debug, Display, Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp,);
 
-impl<T, P: Pool<T>> fmt::Pointer for PoolBox<T, P> {
+impl<T: ?Sized, P: Pool<T>> fmt::Pointer for PoolBox<T, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.ptr, f)
     }
 }
 
-unsafe impl<T, P: ConstPool<T>> PointerOps for DefaultPointerOps<PoolBox<T, P>> {
+unsafe impl<T: ?Sized, P: ConstPool<T>> PointerOps for DefaultPointerOps<PoolBox<T, P>> {
     type Value = T;
     type Pointer = PoolBox<T, P>;
 
@@ -229,9 +254,9 @@ unsafe impl<T, P: ConstPool<T>> PointerOps for DefaultPointerOps<PoolBox<T, P>> 
         PoolBox::into_raw(ptr)
     }
 }
-unsafe impl<T, P: ConstPool<T>> ExclusivePointerOps for DefaultPointerOps<PoolBox<T, P>> {}
+unsafe impl<T: ?Sized, P: ConstPool<T>> ExclusivePointerOps for DefaultPointerOps<PoolBox<T, P>> {}
 
-impl<T: Future + Unpin, P: Pool<T> + Unpin> Future for PoolBox<T, P> {
+impl<T: Future + Unpin + ?Sized, P: Pool<T> + Unpin> Future for PoolBox<T, P> {
     type Output = T::Output;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         T::poll(Pin::new(&mut *self), cx)

@@ -21,7 +21,11 @@ flags = [
     "-Zbuild-std=core,alloc",
     "-Zbuild-std-features=compiler-builtins-mem"
 ]
-initrd-drivers = []
+initrd-drivers = [
+    "chos-fs-ext2",
+    "chos-bus-pci",
+    "chos-block-ahci",
+]
 
 [workspace.metadata.chos.static-drivers]
-initrd = "chos-fs-initrd"
+ramfs = "chos-fs-ramfs"

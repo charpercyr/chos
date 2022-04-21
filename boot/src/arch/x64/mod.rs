@@ -117,7 +117,8 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 initrd.start_address() as *const u8,
                 (initrd.end_address() - initrd.start_address()) as usize,
             )
-        });
+        })
+        .expect("No initrd");
 
     let memory_map = mbh.memory_map_tag().expect("Should have a memory map");
     debug!("Memory map");
@@ -155,7 +156,7 @@ pub extern "C" fn boot_main(mbp: usize) -> ! {
                 multiboot_header: mbp,
             },
             command_line,
-            initrd: initrd.map(NonNull::from),
+            initrd: initrd.into(),
         },
         page_table: unsafe {
             (VAddr::null() + PageTable::get_current_page_table().addr()).as_mut_ptr()
