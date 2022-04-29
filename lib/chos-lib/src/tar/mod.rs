@@ -1,8 +1,8 @@
+#[cfg(feature = "alloc")]
+use alloc::borrow::Cow;
 use core::marker::PhantomData;
 use core::slice;
-use core::str::from_utf8;
 
-use self::util::{read_ascii_octal_trim, trim_nulls};
 use crate::int::CeilDiv;
 
 pub mod raw;
@@ -45,8 +45,13 @@ impl<'a> TarEntry<'a> {
         &self.contents
     }
 
-    pub fn name(&self) -> &'a str {
-        from_utf8(trim_nulls(&self.header.name)).expect("Invalid name")
+    pub fn name(&self) -> (&str, Option<&str>) {
+        self.header.name()
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn name_merged(&self) -> Cow<'_, str> {
+        self.header.name_merged()
     }
 }
 
@@ -68,8 +73,8 @@ impl<'a> Iterator for TarIter<'a> {
         if self.cur < self.end {
             unsafe {
                 let header = self.header();
-                let size = read_ascii_octal_trim(&header.size).expect("Invalid TAR entry size");
-                if size == 0 && header.name[0] == 0 {
+                let size = header.size();
+                if size == 0 && header.name().0.len() == 0 {
                     return None;
                 }
                 let contents_ptr = self.cur.add(512);

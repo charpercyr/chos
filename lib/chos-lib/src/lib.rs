@@ -24,6 +24,7 @@
     any(target_arch = "x86", target_arch = "x86_64"),
     feature(abi_x86_interrupt)
 )]
+#![cfg_attr(feature = "alloc", feature(new_uninit))]
 
 pub mod access;
 pub mod arch;
@@ -41,6 +42,7 @@ mod macros;
 pub mod mm;
 pub mod pool;
 pub mod ptr;
+pub mod queue;
 pub mod str;
 pub mod stride;
 pub mod sync;

@@ -8,19 +8,19 @@ use chos_lib::sync::Spinlock;
 
 use crate::sched::ktask::spawn_future;
 
-struct Inner<T> {
+struct Channel<T> {
     value: Option<T>,
     waker: Option<Waker>,
 }
-type InnerPtr<T> = Arc<Spinlock<Inner<T>>>;
+type ChannelPtr<T> = Arc<Spinlock<Channel<T>>>;
 
 pub struct Sender<T> {
-    inner: InnerPtr<T>,
+    channel: ChannelPtr<T>,
 }
 
 impl<T> Sender<T> {
     pub fn send(self, value: T) {
-        let mut data = self.inner.lock();
+        let mut data = self.channel.lock();
         assert!(data.value.is_none(), "BUG: send() called twice?");
         data.value = Some(value);
         if let Some(waker) = data.waker.take() {
@@ -56,14 +56,14 @@ impl<T> Sender<T> {
 }
 
 pub struct Receiver<T> {
-    inner: InnerPtr<T>,
+    channel: ChannelPtr<T>,
 }
 
 impl<T> Future for Receiver<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<T> {
-        let mut data = self.inner.lock();
+        let mut data = self.channel.lock();
         if let Some(value) = data.value.take() {
             Poll::Ready(value)
         } else {
@@ -74,15 +74,15 @@ impl<T> Future for Receiver<T> {
 }
 
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
-    let inner = Arc::new(Spinlock::new(Inner {
+    let channel = Arc::new(Spinlock::new(Channel {
         value: None,
         waker: None,
     }));
     (
         Sender {
-            inner: inner.clone(),
+            channel: channel.clone(),
         },
-        Receiver { inner },
+        Receiver { channel },
     )
 }
 

@@ -1,3 +1,7 @@
+#[cfg(feature = "alloc")]
+use alloc::collections::VecDeque;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -65,3 +69,26 @@ const_init_tuple!(A, B, C, D, E, F, G);
 const_init_tuple!(A, B, C, D, E, F, G, H);
 const_init_tuple!(A, B, C, D, E, F, G, H, I);
 const_init_tuple!(A, B, C, D, E, F, G, H, I, J);
+
+pub trait Init: Sized {
+    fn new() -> Self;
+}
+
+impl<C: ConstInit> Init for C {
+    fn new() -> Self {
+        Self::INIT
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T> Init for Vec<T> {
+    fn new() -> Self {
+        Self::new()
+    }
+}
+#[cfg(feature = "alloc")]
+impl<T> Init for VecDeque<T> {
+    fn new() -> Self {
+        Self::new()
+    }
+}

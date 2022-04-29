@@ -22,8 +22,15 @@ impl WaiterList {
         let waiter = unsafe { waiter.get_unchecked_mut() };
         waiter.waker = Some(waker);
         waiter.list = Some(NonNull::from(&*self));
+        if waiter.link.is_linked() {
+            unsafe { self.waiters.cursor_mut_from_ptr(waiter).remove() };
+        }
         self.waiters
             .push_back(unsafe { UnsafeMut::from_raw(waiter) });
+    }
+
+    pub fn wake_one(&mut self) {
+        self.wake_count(1)
     }
 
     pub fn wake_count(&mut self, mut count: usize) {
@@ -40,6 +47,17 @@ impl WaiterList {
             } else {
                 cur.move_next();
             }
+        }
+    }
+
+    pub fn wake_all(&mut self) {
+        let mut cur = self.waiters.front_mut();
+        while let Some(mut waiter) = cur.remove() {
+            if let Some(waker) = waiter.waker.take() {
+                waker.wake();
+            }
+            assert!(waiter.list.is_some());
+            waiter.list = None;
         }
     }
 }
@@ -63,6 +81,10 @@ impl Waiter {
             count,
             pinned: PhantomPinned,
         }
+    }
+
+    pub const fn one() -> Self {
+        Self::new(1)
     }
 }
 

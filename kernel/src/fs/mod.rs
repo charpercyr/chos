@@ -83,6 +83,12 @@ pub trait Inode: Send + Sync {
     fn open(&self, result: Sender<Arc<dyn Resource>>);
 }
 
+impl dyn Inode {
+    pub async fn async_open(&self) -> Result<Arc<dyn Resource>> {
+        call_with_sender!((Inode::open)(self)).await
+    }
+}
+
 static FILESYSTEMS: SpinRWLock<HashTable<FilesystemAdapter, sizes::O4>> =
     SpinRWLock::new(HashTable::new(FilesystemAdapter::NEW));
 
