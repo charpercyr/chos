@@ -13,6 +13,8 @@ pub struct AsyncLock<T: ?Sized> {
     sem: AsyncSem,
     value: UnsafeCell<T>,
 }
+unsafe impl<T: ?Sized + Send> Send for AsyncLock<T> {}
+unsafe impl<T: ?Sized + Send> Sync for AsyncLock<T> {}
 
 impl<T: ?Sized> AsyncLock<T> {
     pub fn as_mut(&mut self) -> &mut T {

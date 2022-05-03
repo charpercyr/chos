@@ -4,6 +4,7 @@ members = [
     "boot",
     "kernel",
     "kernel/chos-bin",
+    "kernel/chos-macros",
     "lib/*",
     "drivers/*/*",
 ]

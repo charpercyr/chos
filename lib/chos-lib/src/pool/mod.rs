@@ -67,7 +67,7 @@ pub trait ConstPoolExt<T>: ConstPool<T> {
 impl<T, P: ConstPool<T>> ConstPoolExt<T> for P {}
 
 #[cfg(feature = "alloc")]
-unsafe impl<T> ConstPool<T> for Global {}
+unsafe impl<T: ?Sized> ConstPool<T> for Global {}
 
 #[macro_export]
 macro_rules! pool {

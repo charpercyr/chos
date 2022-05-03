@@ -289,3 +289,9 @@ impl<T: DoubleEndedIterator, P: Pool<T>> DoubleEndedIterator for PoolBox<T, P> {
         T::nth_back(&mut *self, n)
     }
 }
+
+impl<T, P: ConstPool<T>> From<T> for PoolBox<T, P> {
+    fn from(v: T) -> Self {
+        Self::new(v)
+    }
+}

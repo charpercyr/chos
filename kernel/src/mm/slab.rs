@@ -20,7 +20,6 @@ use super::phys::MMSlabAllocator;
 pub trait Slab: Sized {
     const SIZE: usize;
 
-    fn frame_containing(addr: VAddr) -> VAddr;
     fn vaddr(&self) -> VAddr;
 }
 
@@ -29,6 +28,8 @@ pub unsafe trait SlabAllocator {
 
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError>;
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab);
+
+    fn frame_containing(&mut self, addr: VAddr) -> Option<VAddr>;
 }
 
 struct SlabMeta {
@@ -210,8 +211,8 @@ impl<F: SlabAllocator> RawObjectAllocator<F> {
     pub unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         assert_eq!(ptr.as_ref().len(), self.meta.layout.size());
         let vaddr = VAddr::new_unchecked(ptr.as_ptr() as *mut u8 as u64);
-        let vaddr = <F::Slab as Slab>::frame_containing(vaddr);
-        let slab: &mut SlabHeader<F> = &mut *vaddr.as_mut_ptr();
+        let frame = self.frame_alloc.frame_containing(vaddr).expect("Trying to get page from wrong slab");
+        let slab: &mut SlabHeader<F> = frame.as_mut();
         let was_full = slab.is_full(&self.meta);
         slab.dealloc(ptr, &self.meta);
         if was_full {

@@ -2,13 +2,13 @@ pub mod raw_alloc;
 use core::alloc::{AllocError, Layout};
 use core::ptr::NonNull;
 
-use chos_lib::arch::mm::PAGE_SIZE;
+use chos_lib::arch::mm::{FrameSize4K, PAGE_SIZE};
 use chos_lib::init::ConstInit;
 use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame};
 use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
 use chos_lib::sync::spin::lock::RawSpinLock;
 use chos_lib::sync::Spinlock;
-use intrusive_collections::{rbtree, KeyAdapter};
+use intrusive_collections::{rbtree, Bound, KeyAdapter};
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
@@ -19,6 +19,7 @@ pub struct Page {
     count: IArcCount,
     rb_link: rbtree::AtomicLink,
     pub frame: PFrame,
+    pub vframe: Option<VFrame>,
     pub order: u8,
 }
 
@@ -52,7 +53,7 @@ impl<'a> KeyAdapter<'a> for PageListArcAdapter {
 }
 
 struct PageSlab {
-    vaddr: VFrame,
+    vframe: VFrame,
 }
 
 impl PageSlab {
@@ -62,12 +63,8 @@ impl PageSlab {
 impl Slab for PageSlab {
     const SIZE: usize = PAGE_SIZE << Self::ORDER;
 
-    fn frame_containing(addr: VAddr) -> VAddr {
-        unsafe { VAddr::new_unchecked(((addr.as_u64() as usize) / Self::SIZE * Self::SIZE) as u64) }
-    }
-
     fn vaddr(&self) -> VAddr {
-        self.vaddr.addr()
+        self.vframe.addr()
     }
 }
 
@@ -81,12 +78,15 @@ unsafe impl SlabAllocator for PageSlabAllocator {
             raw_alloc::dealloc_pages_unlocked(paddr, PageSlab::ORDER);
             AllocError
         })?;
-        Ok(PageSlab { vaddr })
+        Ok(PageSlab { vframe: vaddr })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
         let paddr =
-            paddr_of(frame.vaddr.addr(), MemoryRegionType::Alloc).expect("Should be mapped");
+            paddr_of(frame.vframe.addr(), MemoryRegionType::Alloc).expect("Should be mapped");
         raw_alloc::dealloc_pages_unlocked(PFrame::new_unchecked(paddr), PageSlab::ORDER)
+    }
+    fn frame_containing(&mut self, addr: VAddr) -> Option<VAddr> {
+        VFrame::<FrameSize4K>::new_align_down(addr).addr().into() // OK since the order is 0
     }
 }
 
@@ -132,6 +132,7 @@ pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> 
         count: IArcCount::INIT,
         rb_link: rbtree::AtomicLink::new(),
         frame: paddr,
+        vframe: None,
         order,
     })
     .map_err(|e| {
@@ -141,38 +142,44 @@ pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> 
 }
 
 pub struct MMSlab<const O: u8> {
-    page: PageBox,
-    vaddr: VAddr,
+    page: PageArc,
 }
 
 impl<const O: u8> Slab for MMSlab<O> {
     const SIZE: usize = PAGE_SIZE << O;
-    fn frame_containing(addr: VAddr) -> VAddr {
-        unsafe { VAddr::new_unchecked(addr.as_u64() / (Self::SIZE as u64) * (Self::SIZE as u64)) }
-    }
     fn vaddr(&self) -> VAddr {
-        self.vaddr
+        self.page.vframe.unwrap().addr()
     }
 }
 
-pub struct MMSlabAllocator<const O: u8>;
+pub struct MMSlabAllocator<const O: u8> {
+    all_pages: rbtree::RBTree<PageListArcAdapter>,
+}
 
 impl<const O: u8> ConstInit for MMSlabAllocator<O> {
-    const INIT: Self = Self;
+    const INIT: Self = Self {
+        all_pages: rbtree::RBTree::new(PageListArcAdapter::NEW),
+    };
 }
 
 unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
     type Slab = MMSlab<O>;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
-        let page = alloc_pages(O, AllocFlags::empty())?;
-        let vaddr = map_page(&page, MemoryRegionType::Normal).map_err(|_| AllocError)?;
-        Ok(MMSlab {
-            page,
-            vaddr: vaddr.addr(),
-        })
+        let mut page = alloc_pages(O, AllocFlags::empty())?;
+        let vframe = map_page(&page, MemoryRegionType::Normal).map_err(|_| AllocError)?;
+        page.vframe = Some(vframe);
+        let page: PageArc = page.into();
+        self.all_pages.insert(page.clone());
+        Ok(MMSlab { page })
     }
     unsafe fn dealloc_slab(&mut self, frame: Self::Slab) {
         drop(frame)
+    }
+
+    fn frame_containing(&mut self, addr: VAddr) -> Option<VAddr> {
+        let pframe = PFrame::new_align_down(paddr_of(addr, MemoryRegionType::Normal)?);
+        let cur = self.all_pages.lower_bound(Bound::Included(&pframe));
+        cur.get().map(|page| page.vframe.unwrap().addr())
     }
 }
 

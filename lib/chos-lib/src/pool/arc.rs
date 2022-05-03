@@ -6,7 +6,7 @@ use core::alloc::{AllocError, Layout};
 use core::convert::TryFrom;
 use core::fmt;
 use core::marker::{PhantomData, Unpin, Unsize};
-use core::ops::{Deref, CoerceUnsized};
+use core::ops::{CoerceUnsized, Deref};
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -50,7 +50,10 @@ pub struct IArc<T: IArcAdapter + ?Sized, P: Pool<T>> {
 }
 
 impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
-    pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError> where T: Sized {
+    pub fn try_new_in(value: T, alloc: P) -> Result<Self, AllocError>
+    where
+        T: Sized,
+    {
         value.count().count.fetch_add(1, Ordering::Relaxed);
         let ptr = unsafe { alloc.allocate()? };
         unsafe { core::ptr::write(ptr.as_ptr(), value) };
@@ -61,7 +64,10 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
         })
     }
 
-    pub fn new_in(value: T, alloc: P) -> Self where T: Sized {
+    pub fn new_in(value: T, alloc: P) -> Self
+    where
+        T: Sized,
+    {
         let r = Self::try_new_in(value, alloc);
         r.unwrap_or_else(|_| handle_alloc_error(Layout::new::<T>()))
     }
@@ -162,12 +168,18 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
 }
 
 impl<T: IArcAdapter + ?Sized, P: ConstPool<T>> IArc<T, P> {
-    pub fn new(value: T) -> Self where T: Sized {
+    pub fn new(value: T) -> Self
+    where
+        T: Sized,
+    {
         Self::try_new_in(value, P::INIT)
             .unwrap_or_else(|_| super::handle_alloc_error(Layout::new::<T>()))
     }
 
-    pub fn try_new(value: T) -> Result<Self, AllocError> where T: Sized {
+    pub fn try_new(value: T) -> Result<Self, AllocError>
+    where
+        T: Sized,
+    {
         Self::try_new_in(value, P::INIT)
     }
 
@@ -256,7 +268,8 @@ where
     T: IArcAdapter + Unsize<U> + ?Sized,
     U: IArcAdapter + ?Sized,
     P: Pool<T> + Pool<U>,
-{}
+{
+}
 
 macro_rules! fmt {
     ($($fmt:ident),* $(,)?) => {
@@ -302,6 +315,12 @@ unsafe impl<T: IArcAdapter + ?Sized, P: ConstPool<T>> TryExclusivePointerOps
     }
 }
 
+impl<T: IArcAdapter, P: ConstPool<T>> From<T> for IArc<T, P> {
+    fn from(v: T) -> Self {
+        IArc::new(v)
+    }
+}
+
 impl<T: IArcAdapter + ?Sized, P: Pool<T>> From<PoolBox<T, P>> for IArc<T, P> {
     fn from(b: PoolBox<T, P>) -> Self {
         Self::from_pool_box(b)
@@ -312,5 +331,13 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> TryFrom<IArc<T, P>> for PoolBox<T, P> 
     type Error = IArc<T, P>;
     fn try_from(value: IArc<T, P>) -> Result<Self, Self::Error> {
         IArc::into_pool_box(value)
+    }
+}
+
+pub macro iarc_adapter($name:path : $field:ident) {
+    impl $crate::pool::arc::IArcAdapter for $name {
+        fn count(&self) -> &$crate::pool::arc::IArcCount {
+            &self.$field
+        }
     }
 }

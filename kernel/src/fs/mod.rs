@@ -1,37 +1,41 @@
 pub mod buf;
+pub mod path;
 
-use alloc::boxed::Box;
 use alloc::sync::Arc;
-use core::ptr::NonNull;
 
 use chos_lib::intrusive::hash_table::{sizes, AtomicLink, HashTable};
 use chos_lib::log::debug;
+use chos_lib::pool::{iarc_adapter, IArc, IArcCount};
 use chos_lib::sync::SpinRWLock;
 use intrusive_collections::{intrusive_adapter, KeyAdapter};
 
 use crate::async_::oneshot::{self, call_with_sender};
 use crate::driver::block::BlockDevice;
+use crate::mm::slab::object_pool;
 use crate::module::Module;
-use crate::resource::Resource;
+use crate::resource::ResourceArc;
+use crate::util::{Private, private_impl};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(usize)]
 pub enum Error {
     AllocError,
     InvalidArgument,
+    NotSupported,
 }
 pub type Result<T> = core::result::Result<T, Error>;
 pub type Receiver<T> = oneshot::Receiver<Result<T>>;
 pub type Sender<T> = oneshot::Sender<Result<T>>;
 
 pub struct FilesystemOps {
-    pub mount: fn(&Filesystem, Option<Arc<dyn BlockDevice>>, Sender<Box<dyn Superblock>>),
+    pub mount: fn(&Filesystem, Option<Arc<dyn BlockDevice>>, Sender<SuperblockArc>),
 }
 
 pub struct Filesystem {
     link: AtomicLink,
     pub name: &'static str,
-    pub ops: &'static FilesystemOps,
-    pub user: Option<NonNull<()>>,
+    ops: &'static FilesystemOps,
+    private: Option<Private>,
 }
 intrusive_adapter!(FilesystemAdapter = &'static Filesystem: Filesystem { link: AtomicLink });
 
@@ -51,42 +55,105 @@ impl Filesystem {
             link: AtomicLink::new(),
             name,
             ops,
-            user: None,
+            private: None,
         }
     }
 
-    pub const fn with_user(self, user: NonNull<()>) -> Self {
+    pub const fn with_private(
+        name: &'static str,
+        ops: &'static FilesystemOps,
+        private: Private,
+    ) -> Self {
         Self {
-            user: Some(user),
-            ..self
+            link: AtomicLink::new(),
+            name,
+            ops,
+            private: Some(private),
         }
     }
 
-    pub async fn mount(&self, blkdev: Option<Arc<dyn BlockDevice>>) -> Result<Box<dyn Superblock>> {
-        let (sender, recv) = oneshot::channel();
-        (self.ops.mount)(self, blkdev, sender);
-        recv.await
+    pub fn user<T: 'static>(&self) -> Option<&T> {
+        self.private.as_ref()?.downcast_ref()
     }
-}
 
-pub trait Superblock: Send + Sync {
-    fn root(&self, result: Sender<Arc<dyn Inode>>);
-}
-
-impl dyn Superblock {
-    pub async fn async_root(&self) -> Result<Arc<dyn Inode>> {
-        call_with_sender!((Superblock::root)(self)).await
+    pub fn mount(&self, blkdev: Option<Arc<dyn BlockDevice>>, result: Sender<SuperblockArc>) {
+        (self.ops.mount)(self, blkdev, result)
     }
+    
+    private_impl!(private);
 }
 
-pub trait Inode: Send + Sync {
-    fn open(&self, result: Sender<Arc<dyn Resource>>);
+pub struct SuperblockOps {
+    pub root: fn(&SuperblockArc, Sender<InodeArc>),
 }
 
-impl dyn Inode {
-    pub async fn async_open(&self) -> Result<Arc<dyn Resource>> {
-        call_with_sender!((Inode::open)(self)).await
+pub struct Superblock {
+    count: IArcCount,
+    ops: &'static SuperblockOps,
+    private: Option<Private>,
+}
+iarc_adapter!(Superblock: count);
+object_pool!(pub struct SuperblockPool : Superblock);
+pub type SuperblockArc = IArc<Superblock, SuperblockPool>;
+unsafe impl Send for Superblock {}
+unsafe impl Sync for Superblock {}
+
+impl Superblock {
+    pub fn with_private(
+        ops: &'static SuperblockOps,
+        private: Private,
+    ) -> SuperblockArc {
+        Self {
+            count: IArcCount::new(),
+            ops,
+            private: Some(private),
+        }
+        .into()
     }
+
+    pub fn root(self: &SuperblockArc, result: Sender<InodeArc>) {
+        (self.ops.root)(self, result)
+    }
+
+    pub async fn async_root(self: &SuperblockArc) -> Result<InodeArc> {
+        call_with_sender!((Self::root)(self)).await
+    }
+
+    private_impl!(private);
+}
+
+pub struct InodeOps {
+    pub open: fn(&InodeArc, Sender<ResourceArc>),
+}
+
+pub struct Inode {
+    count: IArcCount,
+    ops: &'static InodeOps,
+    private: Option<Private>,
+}
+iarc_adapter!(Inode: count);
+object_pool!(pub struct InodePool : Inode);
+pub type InodeArc = IArc<Inode, InodePool>;
+
+impl Inode {
+    pub fn with_private(ops: &'static InodeOps, private: Private) -> InodeArc {
+        Self {
+            count: IArcCount::new(),
+            ops,
+            private: Some(private),
+        }
+        .into()
+    }
+
+    pub fn open(self: &InodeArc, result: Sender<ResourceArc>) {
+        (self.ops.open)(self, result)
+    }
+
+    pub async fn async_open(self: &InodeArc) -> Result<ResourceArc> {
+        call_with_sender!((Self::open)(self)).await
+    }
+
+    private_impl!(private);
 }
 
 static FILESYSTEMS: SpinRWLock<HashTable<FilesystemAdapter, sizes::O4>> =

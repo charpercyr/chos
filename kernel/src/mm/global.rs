@@ -28,7 +28,7 @@ macro_rules! kalloc_sizes {
                 $size,
                 {
                     static ALLOC: Spinlock<RawObjectAllocator<MMSlabAllocator<$order>>> = Spinlock::new(RawObjectAllocator::new(
-                        MMSlabAllocator::<$order>,
+                        <MMSlabAllocator::<$order> as chos_lib::init::ConstInit>::INIT,
                         unsafe { Layout::from_size_align_unchecked($size, align_of::<usize>()) },
                     ));
                     &ALLOC
@@ -79,29 +79,39 @@ unsafe impl GlobalAlloc for KAlloc {
         if layout.size() == 0 {
             return layout.align() as _;
         }
-        domain_debug!(
-            domain::GLOBAL_ALLOC,
-            "alloc(size={}, align={})",
-            layout.size(),
-            layout.align()
-        );
         assert!(
             layout.align() <= align_of::<usize>(),
             "Invalid alignment, use specialized slab allocator"
         );
         for &(s, alloc) in &KALLOC_SIZES {
             if s >= layout.size() {
-                return alloc.alloc();
+                let ptr = alloc.alloc();
+                domain_debug!(
+                    domain::GLOBAL_ALLOC,
+                    "alloc(size={}, align={}) = {:p}",
+                    layout.size(),
+                    layout.align(),
+                    ptr,
+                );
+                return ptr;
             }
         }
         let order = ceil_log2u64(layout.size() as u64) - PAGE_SHIFT;
-        raw_alloc::alloc_pages(order as u8, AllocFlags::empty())
+        let ptr = raw_alloc::alloc_pages(order as u8, AllocFlags::empty())
             .map(|paddr| {
                 let vaddr = map_pframe(paddr, crate::mm::virt::MemoryRegionType::Normal)
                     .unwrap_or(VFrame::null());
                 vaddr.addr().as_mut_ptr()
             })
-            .unwrap_or(null_mut())
+            .unwrap_or(null_mut());
+        domain_debug!(
+            domain::GLOBAL_ALLOC,
+            "alloc(size={}, align={}) = {:p}",
+            layout.size(),
+            layout.align(),
+            ptr,
+        );
+        ptr
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if layout.size() == 0 {

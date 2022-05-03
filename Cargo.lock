@@ -47,6 +47,7 @@ dependencies = [
  "cfg-if",
  "chos-config",
  "chos-lib",
+ "chos-macros",
  "cstr_core",
  "futures",
  "intrusive-collections",
@@ -144,6 +145,15 @@ dependencies = [
 
 [[package]]
 name = "chos-lib-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "chos-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
