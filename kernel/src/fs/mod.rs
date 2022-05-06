@@ -3,9 +3,10 @@ pub mod path;
 
 use alloc::sync::Arc;
 
+use bitflags::bitflags;
 use chos_lib::intrusive::hash_table::{sizes, AtomicLink, HashTable};
 use chos_lib::log::debug;
-use chos_lib::pool::{iarc_adapter, IArc, IArcCount};
+use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
 use chos_lib::sync::SpinRWLock;
 use intrusive_collections::{intrusive_adapter, KeyAdapter};
 
@@ -14,7 +15,7 @@ use crate::driver::block::BlockDevice;
 use crate::mm::slab::object_pool;
 use crate::module::Module;
 use crate::resource::ResourceArc;
-use crate::util::{Private, private_impl};
+use crate::util::{private_impl, Private};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(usize)]
@@ -59,7 +60,7 @@ impl Filesystem {
         }
     }
 
-    pub const fn with_private(
+    pub const fn new_with_private(
         name: &'static str,
         ops: &'static FilesystemOps,
         private: Private,
@@ -79,7 +80,7 @@ impl Filesystem {
     pub fn mount(&self, blkdev: Option<Arc<dyn BlockDevice>>, result: Sender<SuperblockArc>) {
         (self.ops.mount)(self, blkdev, result)
     }
-    
+
     private_impl!(private);
 }
 
@@ -88,27 +89,31 @@ pub struct SuperblockOps {
 }
 
 pub struct Superblock {
-    count: IArcCount,
+    count: IArcCountWeak,
     ops: &'static SuperblockOps,
     private: Option<Private>,
 }
-iarc_adapter!(Superblock: count);
+iarc_adapter_weak!(Superblock: count);
 object_pool!(pub struct SuperblockPool : Superblock);
 pub type SuperblockArc = IArc<Superblock, SuperblockPool>;
+pub type SuperblockWeak = IWeak<Superblock, SuperblockPool>;
 unsafe impl Send for Superblock {}
 unsafe impl Sync for Superblock {}
 
 impl Superblock {
-    pub fn with_private(
-        ops: &'static SuperblockOps,
-        private: Private,
-    ) -> SuperblockArc {
+    pub const fn new(ops: &'static SuperblockOps) -> Self {
         Self {
-            count: IArcCount::new(),
+            count: IArcCountWeak::new(),
             ops,
-            private: Some(private),
+            private: None,
         }
-        .into()
+    }
+
+    pub fn with_private(self, private: Private) -> Self {
+        Self {
+            private: Some(private),
+            ..self
+        }
     }
 
     pub fn root(self: &SuperblockArc, result: Sender<InodeArc>) {
@@ -126,23 +131,121 @@ pub struct InodeOps {
     pub open: fn(&InodeArc, Sender<ResourceArc>),
 }
 
+bitflags! {
+    pub struct InodeMode : u32 {
+        const OTH_EX =  0b000_000_000_001;
+        const OTH_WR =  0b000_000_000_010;
+        const OTH_RD =  0b000_000_000_100;
+
+        const GRP_EX =  0b000_000_001_000;
+        const GRP_WR =  0b000_000_010_000;
+        const GRP_RD =  0b000_000_100_000;
+
+        const OWN_EX =  0b000_001_000_000;
+        const OWN_WR =  0b000_010_000_000;
+        const OWN_RD =  0b000_100_000_000;
+
+        const STICKY =  0b001_000_000_000;
+        const SET_GID = 0b010_000_000_000;
+        const SET_UID = 0b100_000_000_000;
+    }
+}
+
+impl InodeMode {
+    pub const OWN_RW: Self = Self {
+        bits: Self::OWN_RD.bits() | Self::OWN_WR.bits(),
+    };
+    pub const OWN_RX: Self = Self {
+        bits: Self::OWN_RD.bits() | Self::OWN_EX.bits(),
+    };
+    pub const OWN_RWX: Self = Self {
+        bits: Self::OWN_RD.bits() | Self::OWN_WR.bits() | Self::OWN_EX.bits(),
+    };
+
+    pub const GRP_RW: Self = Self {
+        bits: Self::GRP_RD.bits() | Self::GRP_WR.bits(),
+    };
+    pub const GRP_RX: Self = Self {
+        bits: Self::GRP_RD.bits() | Self::GRP_EX.bits(),
+    };
+    const GRP_RWX: Self = Self {
+        bits: Self::GRP_RD.bits() | Self::GRP_WR.bits() | Self::GRP_EX.bits(),
+    };
+
+    pub const OTH_RW: Self = Self {
+        bits: Self::OTH_RD.bits() | Self::OTH_WR.bits(),
+    };
+    pub const OTH_RX: Self = Self {
+        bits: Self::OTH_RD.bits() | Self::OTH_EX.bits(),
+    };
+    pub const OTH_RWX: Self = Self {
+        bits: Self::OTH_RD.bits() | Self::OTH_WR.bits() | Self::OTH_EX.bits(),
+    };
+
+    pub const DEFAULT_FILE: Self = Self {
+        bits: Self::OWN_RW.bits() | Self::GRP_RD.bits() | Self::OTH_RD.bits(),
+    };
+    pub const DEFAULT_DIR: Self = Self {
+        bits: Self::OWN_RWX.bits() | Self::GRP_RX.bits() | Self::OTH_RX.bits(),
+    };
+    pub const DEFAULT_EXE: Self = Self {
+        bits: Self::OWN_RWX.bits() | Self::GRP_RX.bits() | Self::OTH_RX.bits(),
+    };
+}
+
+pub struct InodeAttributes {
+    pub mode: InodeMode,
+    pub uid: u32,
+    pub gid: u32,
+}
+
+impl InodeAttributes {
+    pub const fn empty() -> Self {
+        Self::root(InodeMode::empty())
+    }
+
+    pub const fn root(mode: InodeMode) -> Self {
+        Self {
+            mode,
+            uid: 0,
+            gid: 0,
+        }
+    }
+}
+
 pub struct Inode {
-    count: IArcCount,
+    count: IArcCountWeak,
     ops: &'static InodeOps,
+    pub attrs: InodeAttributes,
     private: Option<Private>,
 }
-iarc_adapter!(Inode: count);
+iarc_adapter_weak!(Inode: count);
 object_pool!(pub struct InodePool : Inode);
 pub type InodeArc = IArc<Inode, InodePool>;
+pub type InodeWeak = IWeak<Inode, InodePool>;
 
 impl Inode {
-    pub fn with_private(ops: &'static InodeOps, private: Private) -> InodeArc {
+    pub const fn new(ops: &'static InodeOps) -> Self {
         Self {
-            count: IArcCount::new(),
+            count: IArcCountWeak::new(),
             ops,
-            private: Some(private),
+            attrs: InodeAttributes::empty(),
+            private: None,
         }
-        .into()
+    }
+    
+    pub fn with_attributes(self, attrs: InodeAttributes) -> Self {
+        Self {
+            attrs,
+            ..self
+        }
+    }
+
+    pub fn with_private(self, private: Private) -> Self {
+        Self {
+            private: Some(private),
+            ..self
+        }
     }
 
     pub fn open(self: &InodeArc, result: Sender<ResourceArc>) {

@@ -5,7 +5,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 use chos_lib::log::debug;
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
+use chos_lib::pool::{iarc_adapter, IArc, IArcCount};
 use chos_lib::sync::Spinlock;
 use intrusive_collections::linked_list;
 use pin_project::pin_project;
@@ -77,11 +77,7 @@ struct KTaskImpl {
     name: Cow<'static, str>,
     mask: Cpumask,
 }
-impl IArcAdapter for KTaskImpl {
-    fn count(&self) -> &IArcCount {
-        &self.count
-    }
-}
+iarc_adapter!(KTaskImpl: count);
 object_pool!(struct KTaskImplPool : KTaskImpl);
 type KTaskImplArc = IArc<KTaskImpl, KTaskImplPool>;
 

@@ -1,6 +1,5 @@
-#[cfg(feature = "alloc")]
-use alloc::borrow::Cow;
 use core::marker::PhantomData;
+use core::ops::Deref;
 use core::slice;
 
 use crate::int::CeilDiv;
@@ -44,14 +43,12 @@ impl<'a> TarEntry<'a> {
     pub fn contents(&self) -> &'a [u8] {
         &self.contents
     }
+}
 
-    pub fn name(&self) -> (&str, Option<&str>) {
-        self.header.name()
-    }
-
-    #[cfg(feature = "alloc")]
-    pub fn name_merged(&self) -> Cow<'_, str> {
-        self.header.name_merged()
+impl Deref for TarEntry<'_> {
+    type Target = raw::FileHeader;
+    fn deref(&self) -> &Self::Target {
+        self.header
     }
 }
 
@@ -70,20 +67,20 @@ impl<'a> TarIter<'a> {
 impl<'a> Iterator for TarIter<'a> {
     type Item = TarEntry<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cur < self.end {
+        while self.cur < self.end {
             unsafe {
                 let header = self.header();
                 let size = header.size();
-                if size == 0 && header.name().0.len() == 0 {
-                    return None;
+                if size != 0 || header.name().0.len() != 0 {
+                    let contents_ptr = self.cur.add(512);
+                    let contents = slice::from_raw_parts(contents_ptr, size as usize);
+                    self.cur = contents_ptr.add(size.align_up(512) as usize);
+                    return Some(TarEntry { contents, header });
+                } else {
+                    self.cur = self.cur.add(512);
                 }
-                let contents_ptr = self.cur.add(512);
-                let contents = slice::from_raw_parts(contents_ptr, size as usize);
-                self.cur = contents_ptr.add(size.align_up(512) as usize);
-                Some(TarEntry { contents, header })
             }
-        } else {
-            None
         }
+        None
     }
 }

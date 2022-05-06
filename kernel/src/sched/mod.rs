@@ -9,7 +9,7 @@ use core::sync::atomic::AtomicBool;
 
 use chos_lib::init::ConstInit;
 use chos_lib::log::debug;
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount};
+use chos_lib::pool::{iarc_adapter, IArc, IArcCount};
 use chos_lib::sync::Spinlock;
 use intrusive_collections::LinkedListAtomicLink;
 
@@ -119,12 +119,7 @@ impl Task {
 
 static TASK_POOL: DefaultPoolObjectAllocator<Task, 0> = ConstInit::INIT;
 chos_lib::pool!(pub struct TaskPool: Task => &TASK_POOL);
-
-impl IArcAdapter for Task {
-    fn count(&self) -> &IArcCount {
-        &self.count
-    }
-}
+iarc_adapter!(Task: count);
 pub type TaskArc = IArc<Task, TaskPool>;
 
 chos_lib::intrusive_adapter!(TaskAdapter = TaskArc: Task { link: LinkedListAtomicLink });

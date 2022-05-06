@@ -9,12 +9,21 @@ use static_assertions::const_assert_eq;
 
 use super::util::*;
 
-const USTAR_SIG: &'static [u8; 6] = b"ustar\0";
+const USTAR_SIG: &'static [u8; 6] = b"ustar ";
 
 pub enum FileLink {
     Normal,
     Link,
     Symlink,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryType {
+    File,
+    Link,
+    Symlink,
+    Dir,
+    Unknown(u8),
 }
 
 #[repr(C)]
@@ -40,14 +49,22 @@ const_assert_eq!(size_of::<FileHeader>(), 500);
 
 impl FileHeader {
     pub fn name(&self) -> (&str, Option<&str>) {
-        if &self.ustar_sig == USTAR_SIG {
-            (
-                from_utf8(trim_nulls(&self.name_pre)).expect("Invalid header"),
-                Some(from_utf8(trim_nulls(&self.name_pre)).expect("Invalid header")),
-            )
+        if self.is_ustar() {
+            let name_pre = from_utf8(trim_nulls(&self.name_pre)).expect("Invalid header");
+            if name_pre.is_empty() {
+                (
+                    from_utf8(trim_nulls(&self.name)).expect("Invalid header"),
+                    None,
+                )
+            } else {
+                (
+                    name_pre,
+                    Some(from_utf8(trim_nulls(&self.name_pre)).expect("Invalid header")),
+                )
+            }
         } else {
             (
-                from_utf8(trim_nulls(&self.name_pre)).expect("Invalid header"),
+                from_utf8(trim_nulls(&self.name)).expect("Invalid header"),
                 None,
             )
         }
@@ -63,5 +80,41 @@ impl FileHeader {
 
     pub fn size(&self) -> u64 {
         read_ascii_octal_trim(&self.size).expect("Invalid header")
+    }
+
+    pub fn typ(&self) -> EntryType {
+        match self.typ {
+            0 | b'0' => EntryType::File,
+            b'1' => EntryType::Link,
+            b'2' => EntryType::Symlink,
+            b'5' => EntryType::Dir,
+            t => EntryType::Unknown(t),
+        }
+    }
+
+    pub fn uid(&self) -> u32 {
+        read_ascii_octal_trim(&self.uid).expect("Invalid header") as u32
+    }
+
+    pub fn user_name(&self) -> Option<&str> {
+        self.is_ustar()
+            .then(|| from_utf8(trim_nulls(&self.user_name)).expect("Invalid header"))
+    }
+
+    pub fn gid(&self) -> u32 {
+        read_ascii_octal_trim(&self.gid).expect("Invalid header") as u32
+    }
+
+    pub fn group_name(&self) -> Option<&str> {
+        self.is_ustar()
+            .then(|| from_utf8(trim_nulls(&self.group_name)).expect("Invalid header"))
+    }
+
+    pub fn mode(&self) -> u32 {
+        read_ascii_octal_trim(&self.mode).expect("Invalid header") as u32
+    }
+
+    fn is_ustar(&self) -> bool {
+        &self.ustar_sig == USTAR_SIG
     }
 }

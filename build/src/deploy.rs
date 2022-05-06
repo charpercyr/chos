@@ -118,7 +118,8 @@ fn deploy_initrd(
     cmd!(
         "sudo",
         "tar",
-        "--strip-components=1",
+        "--owner=root",
+        "--group=root",
         "-C",
         initrd_dir,
         "-cvf",

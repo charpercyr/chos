@@ -1,6 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use core::borrow::{Borrow, BorrowMut};
+use core::fmt;
 use core::intrinsics::transmute;
 use core::ops::{Deref, DerefMut};
 
@@ -29,12 +30,58 @@ impl Path {
         &mut self.path
     }
 
+    pub fn components(&self) -> Components<'_> {
+        Components {
+            path: self.as_str(),
+        }
+    }
+
     pub fn is_absolute(&self) -> bool {
         self.path.starts_with(SEPARATOR)
     }
 
     pub fn is_relative(&self) -> bool {
         !self.is_absolute()
+    }
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.path, f)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Component<'a> {
+    RootDir,
+    CurDir,
+    ParentDir,
+    Normal(&'a str),
+}
+
+#[derive(Copy, Clone)]
+pub struct Components<'a> {
+    path: &'a str,
+}
+
+impl<'a> Iterator for Components<'a> {
+    type Item = Component<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.path.is_empty() {
+            return None;
+        }
+        let mut sep_idx = self.path.find(SEPARATOR).unwrap_or(self.path.len());
+        let component = match &self.path[..sep_idx] {
+            "" => Component::RootDir,
+            "." => Component::CurDir,
+            ".." => Component::ParentDir,
+            normal => Component::Normal(normal),
+        };
+        while (&self.path[sep_idx..]).starts_with(SEPARATOR) {
+            sep_idx += SEPARATOR.len_utf8();
+        }
+        self.path = &self.path[sep_idx..];
+        Some(component)
     }
 }
 

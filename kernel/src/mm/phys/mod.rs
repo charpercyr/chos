@@ -5,7 +5,7 @@ use core::ptr::NonNull;
 use chos_lib::arch::mm::{FrameSize4K, PAGE_SIZE};
 use chos_lib::init::ConstInit;
 use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame};
-use chos_lib::pool::{IArc, IArcAdapter, IArcCount, Pool, PoolBox};
+use chos_lib::pool::{iarc_adapter, IArc, IArcCount, Pool, PoolBox};
 use chos_lib::sync::spin::lock::RawSpinLock;
 use chos_lib::sync::Spinlock;
 use intrusive_collections::{rbtree, Bound, KeyAdapter};
@@ -22,13 +22,7 @@ pub struct Page {
     pub vframe: Option<VFrame>,
     pub order: u8,
 }
-
-impl IArcAdapter for Page {
-    #[inline]
-    fn count(&self) -> &IArcCount {
-        &self.count
-    }
-}
+iarc_adapter!(Page: count);
 
 impl Page {
     pub fn frame_range(&self) -> PFrameRange {

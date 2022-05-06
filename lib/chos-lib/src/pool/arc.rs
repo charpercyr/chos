@@ -7,8 +7,8 @@ use core::convert::TryFrom;
 use core::fmt;
 use core::marker::{PhantomData, Unpin, Unsize};
 use core::ops::{CoerceUnsized, Deref};
-use core::ptr::NonNull;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::ptr::{drop_in_place, NonNull};
+use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
 use intrusive_collections::{PointerOps, TryExclusivePointerOps};
 
@@ -16,14 +16,71 @@ use super::{handle_alloc_error, ConstPool, Pool, PoolBox};
 use crate::init::ConstInit;
 use crate::intrusive::DefaultPointerOps;
 
+mod private {
+    pub trait Sealed {}
+}
+
+#[derive(Clone, Copy, Debug)]
+#[must_use = "Must call ReleaseAction::apply or ReleaseAction::ignore"]
+pub enum ReleaseAction {
+    Nothing,
+    Drop,
+    Free,
+    DropAndFree,
+}
+
+impl ReleaseAction {
+    fn combine(a: Self, b: Self) -> Self {
+        use ReleaseAction::*;
+        match (a, b) {
+            (Nothing, Nothing) => Nothing,
+            (Nothing, Drop) | (Drop, Nothing) | (Drop, Drop) => Drop,
+            (Nothing, Free) | (Free, Nothing) | (Free, Free) => Free,
+            (Drop, Free) | (Free, Drop) | (_, DropAndFree) | (DropAndFree, _) => DropAndFree,
+        }
+    }
+
+    unsafe fn apply<T: ?Sized>(self, ptr: NonNull<T>, alloc: &impl Pool<T>) {
+        use ReleaseAction::*;
+        match self {
+            Drop | DropAndFree => {
+                drop_in_place(ptr.as_ptr());
+            }
+            _ => (),
+        }
+        match self {
+            Free | DropAndFree => alloc.deallocate(ptr, Layout::for_value_raw(ptr.as_ptr())),
+            _ => (),
+        }
+    }
+
+    fn ignore(self) {}
+}
+
+pub trait Count: private::Sealed {
+    fn acquire_strong(&self);
+    fn release_strong(&self) -> ReleaseAction;
+    fn strong_count(&self) -> usize;
+}
+
+pub trait WeakCount: Count {
+    unsafe fn init_count(this: *const Self, strong: usize, weak: usize);
+    unsafe fn upgrade(this: *const Self) -> bool;
+    unsafe fn acquire_weak(this: *const Self);
+    unsafe fn release_weak(this: *const Self) -> ReleaseAction;
+
+    unsafe fn strong_count(this: *const Self) -> usize;
+    unsafe fn weak_count(this: *const Self) -> usize;
+}
+
 pub struct IArcCount {
-    count: AtomicUsize,
+    strong: AtomicUsize,
 }
 
 impl IArcCount {
     pub const fn new() -> Self {
         Self {
-            count: AtomicUsize::new(0),
+            strong: AtomicUsize::new(0),
         }
     }
 }
@@ -39,8 +96,125 @@ impl fmt::Debug for IArcCount {
     }
 }
 
+impl private::Sealed for IArcCount {}
+impl Count for IArcCount {
+    fn acquire_strong(&self) {
+        self.strong.fetch_add(1, Ordering::Acquire);
+    }
+    fn release_strong(&self) -> ReleaseAction {
+        if self.strong.fetch_sub(1, Ordering::Release) == 1 {
+            ReleaseAction::DropAndFree
+        } else {
+            ReleaseAction::Nothing
+        }
+    }
+    fn strong_count(&self) -> usize {
+        self.strong.load(Ordering::Relaxed)
+    }
+}
+
+pub struct IArcCountWeak {
+    strong: AtomicUsize,
+    weak: AtomicUsize,
+}
+
+impl IArcCountWeak {
+    pub const fn new() -> Self {
+        Self {
+            strong: AtomicUsize::new(0),
+            weak: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl ConstInit for IArcCountWeak {
+    #[allow(clippy::declare_interior_mutable_const)]
+    const INIT: Self = Self::new();
+}
+
+impl fmt::Debug for IArcCountWeak {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IArcCountWeak").finish()
+    }
+}
+
+impl private::Sealed for IArcCountWeak {}
+impl Count for IArcCountWeak {
+    fn acquire_strong(&self) {
+        if self.strong.fetch_add(1, Ordering::Acquire) == 0 {
+            unsafe { Self::acquire_weak(self) }
+        }
+    }
+
+    fn release_strong(&self) -> ReleaseAction {
+        if self.strong.fetch_sub(1, Ordering::Release) == 1 {
+            let wa = unsafe { Self::release_weak(self) };
+            ReleaseAction::combine(wa, ReleaseAction::Drop)
+        } else {
+            ReleaseAction::Nothing
+        }
+    }
+
+    fn strong_count(&self) -> usize {
+        self.strong.load(Ordering::Relaxed)
+    }
+}
+
+impl WeakCount for IArcCountWeak {
+    unsafe fn init_count(this: *const Self, strong: usize, weak: usize) {
+        (*this).strong.store(strong, Ordering::Relaxed);
+        (*this).weak.store(weak, Ordering::Relaxed);
+    }
+
+    unsafe fn upgrade(this: *const Self) -> bool {
+        let strong = &(*this).strong;
+        loop {
+            let str_count = strong.load(Ordering::Relaxed);
+            if str_count == 0 {
+                return false;
+            }
+            if strong
+                .compare_exchange_weak(
+                    str_count,
+                    str_count + 1,
+                    Ordering::Acquire,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+
+    unsafe fn acquire_weak(this: *const Self) {
+        let weak = &(*this).weak;
+        weak.fetch_add(1, Ordering::Relaxed);
+    }
+
+    unsafe fn release_weak(this: *const Self) -> ReleaseAction {
+        let weak = &(*this).weak;
+        if weak.fetch_sub(1, Ordering::Relaxed) == 1 {
+            ReleaseAction::Free
+        } else {
+            ReleaseAction::Nothing
+        }
+    }
+
+    unsafe fn strong_count(this: *const Self) -> usize {
+        let strong = &(*this).strong;
+        strong.load(Ordering::Relaxed)
+    }
+
+    unsafe fn weak_count(this: *const Self) -> usize {
+        let weak = &(*this).weak;
+        weak.load(Ordering::Relaxed)
+    }
+}
+
 pub trait IArcAdapter {
-    fn count(&self) -> &IArcCount;
+    type Count: Count = IArcCount;
+    unsafe fn count(this: *const Self) -> *const Self::Count;
 }
 
 pub struct IArc<T: IArcAdapter + ?Sized, P: Pool<T>> {
@@ -54,7 +228,7 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
     where
         T: Sized,
     {
-        value.count().count.fetch_add(1, Ordering::Relaxed);
+        Self::count(&value).acquire_strong();
         let ptr = unsafe { alloc.allocate()? };
         unsafe { core::ptr::write(ptr.as_ptr(), value) };
         Ok(Self {
@@ -104,16 +278,12 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
         this.ptr.as_mut()
     }
 
-    pub fn count(&self) -> usize {
-        self.get_count().load(Ordering::Relaxed)
+    pub fn strong_count(&self) -> usize {
+        Self::count(self).strong_count()
     }
 
     pub fn is_unique(&self) -> bool {
-        self.count() == 1
-    }
-
-    fn get_count(&self) -> &AtomicUsize {
-        unsafe { &self.ptr.as_ref().count().count }
+        self.strong_count() == 1
     }
 
     #[cfg(feature = "alloc")]
@@ -121,8 +291,7 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
     where
         P: Allocator,
     {
-        let count = b.count();
-        count.count.fetch_add(1, Ordering::Relaxed);
+        Self::count(&b).acquire_strong();
         let (ptr, alloc) = Box::into_raw_with_allocator(b);
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr) },
@@ -133,8 +302,7 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
 
     pub fn from_pool_box(b: PoolBox<T, P>) -> Self {
         let (ptr, alloc) = PoolBox::leak_with_allocator(b);
-        let count = ptr.count();
-        count.count.fetch_add(1, Ordering::Relaxed);
+        Self::count(ptr).acquire_strong();
         Self {
             ptr: ptr.into(),
             alloc,
@@ -148,7 +316,7 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
         P: Allocator,
     {
         if this.is_unique() {
-            this.get_count().fetch_sub(1, Ordering::Relaxed);
+            Self::count(&this).release_strong().ignore();
             let (ptr, alloc) = Self::into_raw_with_allocator(this);
             unsafe { Ok(Box::from_raw_in(ptr as _, alloc)) }
         } else {
@@ -158,12 +326,16 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> IArc<T, P> {
 
     pub fn into_pool_box(this: Self) -> Result<PoolBox<T, P>, Self> {
         if this.is_unique() {
-            this.get_count().fetch_sub(1, Ordering::Relaxed);
+            Self::count(&this).release_strong().ignore();
             let (ptr, alloc) = Self::into_raw_with_allocator(this);
             unsafe { Ok(PoolBox::from_raw_in(ptr as _, alloc)) }
         } else {
             Err(this)
         }
+    }
+
+    fn count(value: &T) -> &T::Count {
+        unsafe { &*IArcAdapter::count(value) }
     }
 }
 
@@ -197,25 +369,67 @@ impl<T: IArcAdapter + ?Sized, P: ConstPool<T>> IArc<T, P> {
         }
     }
 }
+impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> IArc<T, P> {
+    pub fn try_new_cyclic(f: impl FnOnce(&IWeak<T, P>) -> T) -> Result<Self, AllocError>
+    where
+        T: Sized,
+    {
+        let alloc = P::INIT;
+        unsafe {
+            let ptr = alloc.allocate()?;
+            let ptr_count = IArcAdapter::count(ptr.as_ptr());
+            WeakCount::init_count(ptr_count, 0, 1);
+            let weak = IWeak {
+                ptr,
+                alloc,
+                value: PhantomData,
+            };
+            let value = f(&weak);
+            let value_count = IArcAdapter::count(&value);
+            assert_eq!(WeakCount::strong_count(ptr_count), 0);
+            WeakCount::init_count(value_count, 0, WeakCount::weak_count(ptr_count));
+            core::ptr::write(ptr.as_ptr(), value);
+            Count::acquire_strong(&*ptr_count);
+            Ok(IArc {
+                ptr,
+                alloc,
+                value: PhantomData,
+            })
+        }
+    }
+
+    pub fn new_cyclic(f: impl FnOnce(&IWeak<T, P>) -> T) -> IArc<T, P>
+    where
+        T: Sized,
+    {
+        Self::try_new_cyclic(f).expect("Allocation error")
+    }
+
+    pub fn weak_count(&self) -> usize {
+        unsafe { WeakCount::weak_count(IArcAdapter::count(&**self)) }
+    }
+
+    pub fn downgrade(this: &Self) -> IWeak<T, P> {
+        unsafe { WeakCount::acquire_weak(IArcAdapter::count(&**this)) };
+        IWeak {
+            ptr: this.ptr,
+            alloc: this.alloc,
+            value: PhantomData,
+        }
+    }
+}
 
 impl<T: IArcAdapter + ?Sized, P: Pool<T>> Drop for IArc<T, P> {
     fn drop(&mut self) {
-        if self.get_count().fetch_sub(1, Ordering::Release) != 1 {
-            return;
-        }
-        let layout = Layout::for_value(self.get_ref());
-
-        self.get_count().load(Ordering::Acquire);
-        unsafe {
-            core::ptr::drop_in_place(self.ptr.as_ptr());
-            self.alloc.deallocate(self.ptr, layout);
-        }
+        let act = Self::count(self).release_strong();
+        fence(Ordering::Acquire);
+        unsafe { act.apply(self.ptr, &self.alloc) }
     }
 }
 
 impl<T: IArcAdapter + ?Sized, P: Pool<T> + Clone> Clone for IArc<T, P> {
     fn clone(&self) -> Self {
-        self.get_count().fetch_add(1, Ordering::Relaxed);
+        Self::count(self).acquire_strong();
         Self {
             ptr: self.ptr,
             alloc: P::clone(&self.alloc),
@@ -334,10 +548,94 @@ impl<T: IArcAdapter + ?Sized, P: Pool<T>> TryFrom<IArc<T, P>> for PoolBox<T, P> 
     }
 }
 
+pub struct IWeak<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> {
+    ptr: NonNull<T>,
+    alloc: P,
+    value: PhantomData<T>,
+}
+unsafe impl<T: IArcAdapter<Count: WeakCount> + Sync + Send + ?Sized, P: ConstPool<T> + Sync> Sync
+    for IWeak<T, P>
+{
+}
+unsafe impl<T: IArcAdapter<Count: WeakCount> + Sync + Send + ?Sized, P: ConstPool<T> + Send> Send
+    for IWeak<T, P>
+{
+}
+
+impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> IWeak<T, P> {
+    pub fn upgrade(this: &Self) -> Option<IArc<T, P>> {
+        unsafe { WeakCount::upgrade(IArcAdapter::count(this.ptr.as_ptr())) }.then(|| IArc {
+            ptr: this.ptr,
+            alloc: this.alloc,
+            value: PhantomData,
+        })
+    }
+
+    pub fn strong_count(&self) -> usize {
+        unsafe { WeakCount::strong_count(IArcAdapter::count(self.ptr.as_ptr())) }
+    }
+
+    pub fn weak_count(&self) -> usize {
+        unsafe { WeakCount::weak_count(IArcAdapter::count(self.ptr.as_ptr())) }
+    }
+}
+
+impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> Drop for IWeak<T, P> {
+    fn drop(&mut self) {
+        unsafe {
+            let act = WeakCount::release_weak(IArcAdapter::count(self.ptr.as_ptr()));
+            act.apply(self.ptr, &self.alloc);
+        }
+    }
+}
+
+impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> Clone for IWeak<T, P> {
+    fn clone(&self) -> Self {
+        unsafe { WeakCount::acquire_weak(IArcAdapter::count(self.ptr.as_ptr())) };
+        Self {
+            ptr: self.ptr,
+            alloc: self.alloc,
+            value: PhantomData,
+        }
+    }
+}
+
+impl<T: IArcAdapter<Count: WeakCount> + fmt::Debug + ?Sized, P: ConstPool<T>> fmt::Debug
+    for IWeak<T, P>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Dropped;
+        impl fmt::Debug for Dropped {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("<dropped>")
+            }
+        }
+        match Self::upgrade(self) {
+            Some(arc) => fmt::Debug::fmt(&arc, f),
+            None => fmt::Debug::fmt(&Dropped, f),
+        }
+    }
+}
+
+impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> fmt::Pointer for IWeak<T, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Pointer::fmt(&self.ptr, f)
+    }
+}
+
 pub macro iarc_adapter($name:path : $field:ident) {
     impl $crate::pool::arc::IArcAdapter for $name {
-        fn count(&self) -> &$crate::pool::arc::IArcCount {
-            &self.$field
+        unsafe fn count(this: *const Self) -> *const Self::Count {
+            &(*this).$field
+        }
+    }
+}
+
+pub macro iarc_adapter_weak($name:path : $field:ident) {
+    impl $crate::pool::arc::IArcAdapter for $name {
+        type Count = $crate::pool::arc::IArcCountWeak;
+        unsafe fn count(this: *const Self) -> *const Self::Count {
+            &(*this).$field
         }
     }
 }

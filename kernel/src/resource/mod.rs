@@ -1,12 +1,12 @@
 use alloc::string::String;
 use core::mem::MaybeUninit;
 
-use chos_lib::pool::{iarc_adapter, IArc, IArcCount};
+use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
 use chos_lib::ReadOnly;
 
 use crate::async_::oneshot::call_with_sender;
 use crate::fs::buf::BufOwn;
-use crate::fs::{self};
+use crate::fs::{self, InodeArc, InodeAttributes, InodeWeak};
 use crate::mm::slab::object_pool;
 use crate::util::{private_impl, Private};
 
@@ -15,31 +15,48 @@ pub struct ResourceOps {
     pub dir: fn(&ResourceArc) -> Option<DirectoryArc>,
 }
 
-pub fn resource_no_file(_: &ResourceArc) -> Option<FileArc> {
-    None
-}
-
-pub fn resource_no_dir(_: &ResourceArc) -> Option<DirectoryArc> {
-    None
-}
-
 pub struct Resource {
-    count: IArcCount,
+    count: IArcCountWeak,
     ops: &'static ResourceOps,
+    pub inode: Option<InodeWeak>,
+    pub parent: Option<InodeWeak>,
     private: Option<Private>,
 }
-iarc_adapter!(Resource: count);
+iarc_adapter_weak!(Resource: count);
 object_pool!(pub struct ResourcePool : Resource);
 pub type ResourceArc = IArc<Resource, ResourcePool>;
+pub type ResourceWeak = IWeak<Resource, ResourcePool>;
 
 impl Resource {
-    pub fn with_private(ops: &'static ResourceOps, user: Private) -> ResourceArc {
+    pub const fn new(ops: &'static ResourceOps) -> Self {
         Self {
-            count: IArcCount::new(),
+            count: IArcCountWeak::new(),
             ops,
-            private: Some(user),
+            inode: None,
+            parent: None,
+            private: None,
         }
-        .into()
+    }
+
+    pub fn with_private(self, private: Private) -> Self {
+        Self {
+            private: Some(private),
+            ..self
+        }
+    }
+
+    pub fn with_inode(self, inode: InodeWeak) -> Self {
+        Self {
+            inode: Some(inode),
+            ..self
+        }
+    }
+
+    pub fn with_parent(self, parent: InodeWeak) -> Self {
+        Self {
+            parent: Some(parent),
+            ..self
+        }
     }
 
     pub fn file(self: &ResourceArc) -> Option<FileArc> {
@@ -59,28 +76,38 @@ pub struct FileOps {
 }
 
 pub struct File {
-    count: IArcCount,
+    count: IArcCountWeak,
     ops: &'static FileOps,
     private: Option<Private>,
 }
-iarc_adapter!(File: count);
+iarc_adapter_weak!(File: count);
 object_pool!(pub struct FilePool : File);
 pub type FileArc = IArc<File, FilePool>;
+pub type FileWeak = IWeak<File, FilePool>;
 
 impl File {
-    pub fn with_private(ops: &'static FileOps, private: Private) -> FileArc {
+    pub const fn new(ops: &'static FileOps) -> Self {
         Self {
-            count: IArcCount::new(),
+            count: IArcCountWeak::new(),
             ops,
-            private: Some(private),
+            private: None,
         }
-        .into()
     }
+
+    pub fn with_private(self, private: Private) -> Self {
+        Self {
+            private: Some(private),
+            ..self
+        }
+    }
+
     private_impl!(private);
 }
 
 pub struct DirectoryEntry {
     pub name: String,
+    pub attrs: InodeAttributes,
+    pub inode: InodeArc,
 }
 
 pub struct DirectoryOps {
@@ -89,31 +116,34 @@ pub struct DirectoryOps {
         BufOwn<MaybeUninit<DirectoryEntry>>,
         fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
     ),
-    pub mkfile: fn(
-        &DirectoryArc,
-        name: &str,
-        
-    ),
-    pub mkdir: Option<()>,
+    pub mkfile: Option<fn(&DirectoryArc, &str, InodeAttributes, fs::Sender<FileArc>)>,
+    pub mkdir: Option<fn(&DirectoryArc, &str, InodeAttributes, fs::Sender<DirectoryArc>)>,
 }
 
 pub struct Directory {
-    count: IArcCount,
+    count: IArcCountWeak,
     ops: &'static DirectoryOps,
     private: Option<Private>,
 }
-iarc_adapter!(Directory: count);
+iarc_adapter_weak!(Directory: count);
 object_pool!(pub struct DirectoryPool : Directory);
 pub type DirectoryArc = IArc<Directory, DirectoryPool>;
+pub type DirectoryWeak = IWeak<Directory, DirectoryPool>;
 
 impl Directory {
-    pub fn with_private(ops: &'static DirectoryOps, private: Private) -> DirectoryArc {
+    pub const fn new(ops: &'static DirectoryOps) -> Self {
         Self {
-            count: IArcCount::new(),
+            count: IArcCountWeak::new(),
             ops,
-            private: Some(private),
+            private: None,
         }
-        .into()
+    }
+
+    pub fn with_private(self, private: Private) -> Self {
+        Self {
+            private: Some(private),
+            ..self
+        }
     }
 
     pub fn list(
@@ -124,13 +154,53 @@ impl Directory {
         (self.ops.list)(self, buf, result)
     }
 
-    pub async fn async_list<'dir>(
+    pub async fn async_list(
         self: &DirectoryArc,
-        buf: &'dir mut [MaybeUninit<DirectoryEntry>],
-    ) -> fs::Result<&'dir mut [DirectoryEntry]> {
-        let buf_own = unsafe { BufOwn::from_mut_slice(buf) };
-        let (len, _) = call_with_sender!((Self::list)(self, buf_own)).await?;
-        Ok(unsafe { MaybeUninit::slice_assume_init_mut(&mut buf[..len]) })
+        buf: BufOwn<MaybeUninit<DirectoryEntry>>,
+    ) -> fs::Result<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)> {
+        call_with_sender!((Self::list)(self, buf)).await
+    }
+
+    pub fn mkfile(
+        self: &DirectoryArc,
+        name: &str,
+        attrs: InodeAttributes,
+        result: fs::Sender<FileArc>,
+    ) {
+        if let Some(mkfile) = self.ops.mkfile {
+            mkfile(self, name, attrs, result)
+        } else {
+            result.send(Err(fs::Error::NotSupported));
+        }
+    }
+
+    pub async fn async_mkfile(
+        self: &DirectoryArc,
+        name: &str,
+        attrs: InodeAttributes,
+    ) -> fs::Result<FileArc> {
+        call_with_sender!((Self::mkfile)(self, name, attrs)).await
+    }
+
+    pub fn mkdir(
+        self: &DirectoryArc,
+        name: &str,
+        attrs: InodeAttributes,
+        result: fs::Sender<DirectoryArc>,
+    ) {
+        if let Some(mkdir) = self.ops.mkdir {
+            mkdir(self, name, attrs, result)
+        } else {
+            result.send(Err(fs::Error::NotSupported));
+        }
+    }
+
+    pub async fn async_mkdir(
+        self: &DirectoryArc,
+        name: &str,
+        attrs: InodeAttributes,
+    ) -> fs::Result<DirectoryArc> {
+        call_with_sender!((Self::mkdir)(self, name, attrs)).await
     }
 
     private_impl!(private);

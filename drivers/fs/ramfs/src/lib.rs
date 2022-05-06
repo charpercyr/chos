@@ -10,7 +10,7 @@ use chos::driver::block::BlockDevice;
 use chos::fs::buf::BufOwn;
 use chos::fs::{
     self, register_filesystem, unregister_filesystem, Filesystem, FilesystemOps, Inode, InodeArc,
-    InodeOps, Superblock, SuperblockArc, SuperblockOps,
+    InodeAttributes, InodeMode, InodeOps, InodeWeak, Superblock, SuperblockArc, SuperblockOps,
 };
 use chos::module::{module_decl, Module, ModuleDecl};
 use chos::resource::{
@@ -21,8 +21,8 @@ use chos::resource::{
 struct RamfsFile {}
 
 impl RamfsFile {
-    fn new() -> FileArc {
-        File::with_private(&RAMFS_FILE_OPS, Arc::new(RamfsFile {}))
+    fn new() -> File {
+        todo!()
     }
 }
 
@@ -34,8 +34,8 @@ static RAMFS_FILE_OPS: FileOps = FileOps {
 struct RamfsDir {}
 
 impl RamfsDir {
-    fn new() -> DirectoryArc {
-        Directory::with_private(&RAMFS_DIR_OPS, Arc::new(RamfsDir {}))
+    fn new() -> Directory {
+        todo!()
     }
 }
 
@@ -44,34 +44,56 @@ fn ramfs_dir_list(
     buf: BufOwn<MaybeUninit<DirectoryEntry>>,
     result: fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
 ) {
-    result.send_with(move || {
-        Ok((0, buf))
-    })
+    result.send_with(move || Ok((0, buf)))
+}
+
+fn ramfs_dir_mkfile(
+    _dir: &DirectoryArc,
+    _name: &str,
+    _attrs: InodeAttributes,
+    _result: fs::Sender<FileArc>,
+) {
+    todo!()
+}
+
+fn ramfs_dir_mkdir(
+    _dir: &DirectoryArc,
+    _name: &str,
+    _attrs: InodeAttributes,
+    _result: fs::Sender<DirectoryArc>,
+) {
+    todo!()
 }
 
 static RAMFS_DIR_OPS: DirectoryOps = DirectoryOps {
     list: ramfs_dir_list,
-    mkfile: None,
-    mkdir: None,
+    mkfile: Some(ramfs_dir_mkfile),
+    mkdir: Some(ramfs_dir_mkdir),
 };
 
 enum RamfsResource {
-    None,
     File(FileArc),
     Dir(DirectoryArc),
 }
 
 impl RamfsResource {
-    pub fn none() -> ResourceArc {
-        Resource::with_private(&RAMFS_RES_OPS, Arc::new(Self::None))
+    pub fn file(inode: InodeWeak, parent: InodeWeak) -> Resource {
+        let file = File::new(&RAMFS_FILE_OPS).with_private(Arc::new(RamfsFile {}));
+        Resource::new(&RAMFS_RES_OPS)
+            .with_inode(inode)
+            .with_parent(parent)
+            .with_private(Arc::new(RamfsResource::File(file.into())))
     }
 
-    pub fn file() -> ResourceArc {
-        Resource::with_private(&RAMFS_RES_OPS, Arc::new(Self::File(RamfsFile::new())))
-    }
-
-    pub fn dir() -> ResourceArc {
-        Resource::with_private(&RAMFS_RES_OPS, Arc::new(Self::Dir(RamfsDir::new())))
+    pub fn dir(inode: InodeWeak, parent: Option<InodeWeak>) -> Resource {
+        let dir = Directory::new(&RAMFS_DIR_OPS).with_private(Arc::new(RamfsDir {}));
+        let mut res = Resource::new(&RAMFS_RES_OPS)
+            .with_inode(inode)
+            .with_private(Arc::new(RamfsResource::Dir(dir.into())));
+        if let Some(parent) = parent {
+            res = res.with_parent(parent);
+        }
+        res
     }
 }
 
@@ -103,8 +125,10 @@ struct RamfsInode {
 }
 
 impl RamfsInode {
-    pub fn new(res: ResourceArc) -> InodeArc {
-        Inode::with_private(&RAMFS_INODE_OPS, Arc::new(Self { res }))
+    pub fn new(res: ResourceArc, attrs: InodeAttributes) -> Inode {
+        Inode::new(&RAMFS_INODE_OPS)
+            .with_attributes(attrs)
+            .with_private(Arc::new(RamfsInode { res }))
     }
 }
 
@@ -122,13 +146,15 @@ struct RamfsSuperblock {
 }
 
 impl RamfsSuperblock {
-    pub fn new() -> SuperblockArc {
-        Superblock::with_private(
-            &RAMFS_SUPERBLOCK_OPS,
-            Arc::new(Self {
-                root: RamfsInode::new(RamfsResource::dir()),
+    pub fn new() -> Superblock {
+        Superblock::new(&RAMFS_SUPERBLOCK_OPS).with_private(Arc::new(RamfsSuperblock {
+            root: InodeArc::new_cyclic(|inode| {
+                RamfsInode::new(
+                    RamfsResource::dir(inode.clone(), None).into(),
+                    InodeAttributes::root(InodeMode::DEFAULT_DIR),
+                )
             }),
-        )
+        }))
     }
 }
 
@@ -152,7 +178,7 @@ fn ramfs_mount(
         if blkdev.is_some() {
             return Err(fs::Error::InvalidArgument);
         }
-        Ok(RamfsSuperblock::new())
+        Ok(RamfsSuperblock::new().into())
     });
 }
 static RAMFS_OPS: FilesystemOps = FilesystemOps { mount: ramfs_mount };

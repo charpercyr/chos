@@ -14,6 +14,7 @@
 #![feature(generic_associated_types)]
 #![feature(generic_const_exprs)]
 #![feature(inherent_associated_types)]
+#![feature(layout_for_ptr)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(negative_impls)]
 #![feature(never_type)]
