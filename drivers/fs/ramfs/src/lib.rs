@@ -4,6 +4,8 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use chos_lib::log::todo_warn;
 use core::mem::MaybeUninit;
 
 use chos::driver::block::BlockDevice;
@@ -15,58 +17,131 @@ use chos::fs::{
 use chos::module::{module_decl, Module, ModuleDecl};
 use chos::resource::{
     Directory, DirectoryArc, DirectoryEntry, DirectoryOps, File, FileArc, FileOps, Resource,
-    ResourceArc, ResourceOps,
+    ResourceArc, ResourceOps, ResourceWeak,
 };
+use chos_lib::sync::Spinlock;
+use chos_lib::ReadOnly;
 
 struct RamfsFile {}
 
 impl RamfsFile {
-    fn new() -> File {
-        todo!()
+    fn new(resource: ResourceWeak) -> File {
+        File::new(&RAMFS_FILE_OPS, resource).with_private(Arc::new(RamfsFile {}))
     }
 }
 
+fn ramfs_file_read(
+    _file: &FileArc,
+    _offset: usize,
+    _buf: BufOwn<u8>,
+    result: fs::Sender<(usize, BufOwn<u8>)>,
+) {
+    todo_warn!("ramfs_file_read");
+    result.send_err(fs::Error::NotSupported)
+}
+
+fn ramfs_file_write(
+    _file: &FileArc,
+    _offset: usize,
+    _buf: BufOwn<u8, ReadOnly>,
+    result: fs::Sender<(usize, BufOwn<u8, ReadOnly>)>,
+) {
+    todo_warn!("ramfs_file_write");
+    result.send_err(fs::Error::NotSupported)
+}
+
 static RAMFS_FILE_OPS: FileOps = FileOps {
-    read: |_, _, _| todo!(),
-    write: |_, _, _| todo!(),
+    read: ramfs_file_read,
+    write: ramfs_file_write,
 };
 
-struct RamfsDir {}
+struct RamfsDir {
+    children: Spinlock<Vec<DirectoryEntry>>,
+}
 
 impl RamfsDir {
-    fn new() -> Directory {
-        todo!()
+    fn new(resource: ResourceWeak) -> Directory {
+        Directory::new(&RAMFS_DIR_OPS, resource).with_private(Arc::new(RamfsDir {
+            children: Spinlock::new(Vec::new()),
+        }))
     }
 }
 
 fn ramfs_dir_list(
-    _dir: &DirectoryArc,
-    buf: BufOwn<MaybeUninit<DirectoryEntry>>,
+    dir: &DirectoryArc,
+    idx: usize,
+    mut buf: BufOwn<MaybeUninit<DirectoryEntry>>,
     result: fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
 ) {
-    result.send_with(move || Ok((0, buf)))
+    let private = dir.private::<RamfsDir>().unwrap();
+    let resource = dir.resource.upgrade().unwrap();
+    let inode = resource.inode.as_ref().unwrap().upgrade().unwrap();
+    let mut total = 0;
+    if idx <= 0 && buf.len() >= 1 {
+        buf[0] = MaybeUninit::new(DirectoryEntry {
+            name: ".".into(),
+            inode: inode.clone(),
+        });
+        total += 1;
+    }
+    if idx <= 1 && buf.len() >= 2 {
+        let parent = inode
+            .parent
+            .as_ref()
+            .map(|parent| parent.upgrade().unwrap())
+            .unwrap_or_else(|| inode.clone());
+        buf[1] = MaybeUninit::new(DirectoryEntry {
+            name: "..".into(),
+            inode: parent,
+        });
+        total += 1;
+    }
+    let children = private.children.lock();
+    for i in idx.max(2)..children.len() {
+        buf[i] = MaybeUninit::new(children[i - 2].clone());
+        total += 1;
+    }
+    result.send_ok((total, buf))
 }
 
 fn ramfs_dir_mkfile(
-    _dir: &DirectoryArc,
-    _name: &str,
-    _attrs: InodeAttributes,
-    _result: fs::Sender<FileArc>,
+    dir: &DirectoryArc,
+    name: &str,
+    attrs: InodeAttributes,
+    result: fs::Sender<FileArc>,
 ) {
-    todo!()
+    let private = dir.private::<RamfsDir>().unwrap();
+    let mut children = private.children.lock();
+    let inode =
+        InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::file(inode.clone()), attrs));
+    let file = inode.private::<RamfsInode>().unwrap().res.file().unwrap();
+    children.push(DirectoryEntry {
+        name: name.into(),
+        inode,
+    });
+    result.send_ok(file);
 }
 
 fn ramfs_dir_mkdir(
-    _dir: &DirectoryArc,
-    _name: &str,
-    _attrs: InodeAttributes,
-    _result: fs::Sender<DirectoryArc>,
+    dir: &DirectoryArc,
+    name: &str,
+    attrs: InodeAttributes,
+    result: fs::Sender<DirectoryArc>,
 ) {
-    todo!()
+    let private = dir.private::<RamfsDir>().unwrap();
+    let mut children = private.children.lock();
+    let inode =
+        InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::dir(inode.clone()), attrs));
+    let file = inode.private::<RamfsInode>().unwrap().res.dir().unwrap();
+    children.push(DirectoryEntry {
+        name: name.into(),
+        inode,
+    });
+    result.send_ok(file);
 }
 
 static RAMFS_DIR_OPS: DirectoryOps = DirectoryOps {
-    list: ramfs_dir_list,
+    list_iter: ramfs_dir_list,
     mkfile: Some(ramfs_dir_mkfile),
     mkdir: Some(ramfs_dir_mkdir),
 };
@@ -77,23 +152,24 @@ enum RamfsResource {
 }
 
 impl RamfsResource {
-    pub fn file(inode: InodeWeak, parent: InodeWeak) -> Resource {
-        let file = File::new(&RAMFS_FILE_OPS).with_private(Arc::new(RamfsFile {}));
-        Resource::new(&RAMFS_RES_OPS)
-            .with_inode(inode)
-            .with_parent(parent)
-            .with_private(Arc::new(RamfsResource::File(file.into())))
+    pub fn file(inode: InodeWeak) -> ResourceArc {
+        ResourceArc::new_cyclic(|res| {
+            Resource::new(&RAMFS_RES_OPS)
+                .with_inode(inode)
+                .with_private(Arc::new(RamfsResource::File(
+                    RamfsFile::new(res.clone()).into(),
+                )))
+        })
     }
 
-    pub fn dir(inode: InodeWeak, parent: Option<InodeWeak>) -> Resource {
-        let dir = Directory::new(&RAMFS_DIR_OPS).with_private(Arc::new(RamfsDir {}));
-        let mut res = Resource::new(&RAMFS_RES_OPS)
-            .with_inode(inode)
-            .with_private(Arc::new(RamfsResource::Dir(dir.into())));
-        if let Some(parent) = parent {
-            res = res.with_parent(parent);
-        }
-        res
+    pub fn dir(inode: InodeWeak) -> ResourceArc {
+        ResourceArc::new_cyclic(|res| {
+            Resource::new(&RAMFS_RES_OPS)
+                .with_inode(inode)
+                .with_private(Arc::new(RamfsResource::Dir(
+                    RamfsDir::new(res.clone()).into(),
+                )))
+        })
     }
 }
 
@@ -150,7 +226,7 @@ impl RamfsSuperblock {
         Superblock::new(&RAMFS_SUPERBLOCK_OPS).with_private(Arc::new(RamfsSuperblock {
             root: InodeArc::new_cyclic(|inode| {
                 RamfsInode::new(
-                    RamfsResource::dir(inode.clone(), None).into(),
+                    RamfsResource::dir(inode.clone()).into(),
                     InodeAttributes::root(InodeMode::DEFAULT_DIR),
                 )
             }),

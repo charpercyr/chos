@@ -1,5 +1,5 @@
 use alloc::string::String;
-use core::mem::MaybeUninit;
+use core::mem::{replace, MaybeUninit};
 
 use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
 use chos_lib::ReadOnly;
@@ -19,7 +19,6 @@ pub struct Resource {
     count: IArcCountWeak,
     ops: &'static ResourceOps,
     pub inode: Option<InodeWeak>,
-    pub parent: Option<InodeWeak>,
     private: Option<Private>,
 }
 iarc_adapter_weak!(Resource: count);
@@ -33,7 +32,6 @@ impl Resource {
             count: IArcCountWeak::new(),
             ops,
             inode: None,
-            parent: None,
             private: None,
         }
     }
@@ -52,13 +50,6 @@ impl Resource {
         }
     }
 
-    pub fn with_parent(self, parent: InodeWeak) -> Self {
-        Self {
-            parent: Some(parent),
-            ..self
-        }
-    }
-
     pub fn file(self: &ResourceArc) -> Option<FileArc> {
         (self.ops.file)(self)
     }
@@ -71,12 +62,13 @@ impl Resource {
 }
 
 pub struct FileOps {
-    pub read: fn(&FileArc, BufOwn<u8>, fs::Sender<(usize, BufOwn<u8>)>),
-    pub write: fn(&FileArc, BufOwn<u8, ReadOnly>, fs::Sender<(usize, BufOwn<u8, ReadOnly>)>),
+    pub read: fn(&FileArc, usize, BufOwn<u8>, fs::Sender<(usize, BufOwn<u8>)>),
+    pub write: fn(&FileArc, usize, BufOwn<u8, ReadOnly>, fs::Sender<(usize, BufOwn<u8, ReadOnly>)>),
 }
 
 pub struct File {
     count: IArcCountWeak,
+    pub resource: ResourceWeak,
     ops: &'static FileOps,
     private: Option<Private>,
 }
@@ -86,9 +78,10 @@ pub type FileArc = IArc<File, FilePool>;
 pub type FileWeak = IWeak<File, FilePool>;
 
 impl File {
-    pub const fn new(ops: &'static FileOps) -> Self {
+    pub const fn new(ops: &'static FileOps, resource: ResourceWeak) -> Self {
         Self {
             count: IArcCountWeak::new(),
+            resource,
             ops,
             private: None,
         }
@@ -101,18 +94,53 @@ impl File {
         }
     }
 
+    pub fn read(
+        self: &FileArc,
+        offset: usize,
+        buf: BufOwn<u8>,
+        result: fs::Sender<(usize, BufOwn<u8>)>,
+    ) {
+        (self.ops.read)(self, offset, buf, result)
+    }
+
+    pub async fn async_read(
+        self: &FileArc,
+        offset: usize,
+        buf: BufOwn<u8>,
+    ) -> fs::Result<(usize, BufOwn<u8>)> {
+        call_with_sender!((Self::read)(self, offset, buf)).await
+    }
+
+    pub fn write(
+        self: &FileArc,
+        offset: usize,
+        buf: BufOwn<u8, ReadOnly>,
+        result: fs::Sender<(usize, BufOwn<u8, ReadOnly>)>,
+    ) {
+        (self.ops.write)(self, offset, buf, result)
+    }
+
+    pub async fn async_write(
+        self: &FileArc,
+        offset: usize,
+        buf: BufOwn<u8, ReadOnly>,
+    ) -> fs::Result<(usize, BufOwn<u8, ReadOnly>)> {
+        call_with_sender!((Self::write)(self, offset, buf)).await
+    }
+
     private_impl!(private);
 }
 
+#[derive(Clone)]
 pub struct DirectoryEntry {
     pub name: String,
-    pub attrs: InodeAttributes,
     pub inode: InodeArc,
 }
 
 pub struct DirectoryOps {
-    pub list: fn(
+    pub list_iter: fn(
         &DirectoryArc,
+        usize,
         BufOwn<MaybeUninit<DirectoryEntry>>,
         fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
     ),
@@ -122,6 +150,7 @@ pub struct DirectoryOps {
 
 pub struct Directory {
     count: IArcCountWeak,
+    pub resource: ResourceWeak,
     ops: &'static DirectoryOps,
     private: Option<Private>,
 }
@@ -131,9 +160,10 @@ pub type DirectoryArc = IArc<Directory, DirectoryPool>;
 pub type DirectoryWeak = IWeak<Directory, DirectoryPool>;
 
 impl Directory {
-    pub const fn new(ops: &'static DirectoryOps) -> Self {
+    pub fn new(ops: &'static DirectoryOps, resource: ResourceWeak) -> Self {
         Self {
             count: IArcCountWeak::new(),
+            resource,
             ops,
             private: None,
         }
@@ -146,19 +176,45 @@ impl Directory {
         }
     }
 
-    pub fn list(
+    pub fn list_iter(
         self: &DirectoryArc,
+        idx: usize,
         buf: BufOwn<MaybeUninit<DirectoryEntry>>,
         result: fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
     ) {
-        (self.ops.list)(self, buf, result)
+        (self.ops.list_iter)(self, idx, buf, result)
     }
 
-    pub async fn async_list(
+    pub async fn async_list_iter(
         self: &DirectoryArc,
+        idx: usize,
         buf: BufOwn<MaybeUninit<DirectoryEntry>>,
     ) -> fs::Result<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)> {
-        call_with_sender!((Self::list)(self, buf)).await
+        call_with_sender!((Self::list_iter)(self, idx, buf)).await
+    }
+
+    pub async fn async_list<R>(
+        self: &DirectoryArc,
+        mut callback: impl FnMut(DirectoryEntry) -> Option<R>,
+    ) -> fs::Result<Option<R>> {
+        let mut buf: [_; 16] = MaybeUninit::uninit_array();
+        let mut idx = 0;
+        loop {
+            let buf_own = unsafe { BufOwn::from_mut_slice(&mut buf) };
+            let (len, _) = self.async_list_iter(idx, buf_own).await?;
+            for i in 0..len {
+                if let Some(r) =
+                    callback(unsafe { replace(&mut buf[i], MaybeUninit::uninit()).assume_init() })
+                {
+                    return Ok(Some(r));
+                }
+            }
+            if len < buf.len() {
+                break;
+            }
+            idx += len;
+        }
+        Ok(None)
     }
 
     pub fn mkfile(

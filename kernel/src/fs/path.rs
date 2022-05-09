@@ -30,6 +30,27 @@ impl Path {
         &mut self.path
     }
 
+    pub fn parent(&self) -> Option<&Path> {
+        let sep_idx = self.path.rfind(SEPARATOR)?;
+        if sep_idx == 0 {
+            Some(Path::new(&self.path[..=sep_idx]))
+        } else {
+            Some(Path::new(&self.path[..sep_idx]))
+        }
+    }
+
+    pub fn file_name(&self) -> Option<&str> {
+        let sep_idx = self.path.rfind(SEPARATOR);
+        match sep_idx {
+            None => (!self.path.is_empty()).then(|| &self.path),
+            Some(0) => Some(&self.path[..=0]),
+            Some(sep) if sep == self.path.len() - SEPARATOR.len_utf8() => {
+                todo!()
+            }
+            Some(sep) => Some(&self.path[(sep + SEPARATOR.len_utf8())..]),
+        }
+    }
+
     pub fn components(&self) -> Components<'_> {
         Components {
             path: self.as_str(),

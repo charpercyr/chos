@@ -193,6 +193,7 @@ impl InodeMode {
     };
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct InodeAttributes {
     pub mode: InodeMode,
     pub uid: u32,
@@ -217,6 +218,7 @@ pub struct Inode {
     count: IArcCountWeak,
     ops: &'static InodeOps,
     pub attrs: InodeAttributes,
+    pub parent: Option<InodeWeak>,
     private: Option<Private>,
 }
 iarc_adapter_weak!(Inode: count);
@@ -230,6 +232,7 @@ impl Inode {
             count: IArcCountWeak::new(),
             ops,
             attrs: InodeAttributes::empty(),
+            parent: None,
             private: None,
         }
     }
@@ -237,6 +240,13 @@ impl Inode {
     pub fn with_attributes(self, attrs: InodeAttributes) -> Self {
         Self {
             attrs,
+            ..self
+        }
+    }
+
+    pub fn with_parent(self, parent: InodeWeak) -> Self {
+        Self {
+            parent: Some(parent),
             ..self
         }
     }

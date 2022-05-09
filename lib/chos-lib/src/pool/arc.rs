@@ -526,10 +526,10 @@ unsafe impl<T: IArcAdapter<Count: WeakCount> + Sync + Send + ?Sized, P: ConstPoo
 }
 
 impl<T: IArcAdapter<Count: WeakCount> + ?Sized, P: ConstPool<T>> IWeak<T, P> {
-    pub fn upgrade(this: &Self) -> Option<IArc<T, P>> {
-        unsafe { WeakCount::upgrade(IArcAdapter::count(this.ptr.as_ptr())) }.then(|| IArc {
-            ptr: this.ptr,
-            alloc: this.alloc,
+    pub fn upgrade(&self) -> Option<IArc<T, P>> {
+        unsafe { WeakCount::upgrade(IArcAdapter::count(self.ptr.as_ptr())) }.then(|| IArc {
+            ptr: self.ptr,
+            alloc: self.alloc,
             value: PhantomData,
         })
     }

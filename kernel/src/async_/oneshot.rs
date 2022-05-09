@@ -55,6 +55,16 @@ impl<T> Sender<T> {
     }
 }
 
+impl<T, E> Sender<Result<T, E>> {
+    pub fn send_ok(self, v: T) {
+        self.send(Ok(v))
+    }
+
+    pub fn send_err(self, e: E) {
+        self.send(Err(e))
+    }
+}
+
 pub struct Receiver<T> {
     channel: ChannelPtr<T>,
 }

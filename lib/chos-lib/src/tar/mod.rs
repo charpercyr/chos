@@ -34,6 +34,14 @@ impl<'a> Tar<'a> {
     }
 }
 
+impl<'a> IntoIterator for &Tar<'a> {
+    type Item = TarEntry<'a>;
+    type IntoIter = TarIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 pub struct TarEntry<'a> {
     header: &'a raw::FileHeader,
     contents: &'a [u8],
@@ -57,6 +65,8 @@ pub struct TarIter<'a> {
     end: *const u8,
     tar: PhantomData<&'a Tar<'a>>,
 }
+unsafe impl Send for TarIter<'_> {}
+unsafe impl Sync for TarIter<'_> {}
 
 impl<'a> TarIter<'a> {
     unsafe fn header(&self) -> &'a raw::FileHeader {

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem::forget;
-use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
 use core::slice::{from_raw_parts, from_raw_parts_mut, SliceIndex};
 
 use chos_lib::{ReadAccess, ReadWrite, WriteAccess};
@@ -38,6 +38,10 @@ impl<T, A> BufOwn<T, A> {
             drop: Some(drop),
             access: PhantomData,
         }
+    }
+
+    pub unsafe fn from_slice(slice: &[T]) -> Self {
+        Self::from_raw_parts(slice.as_ptr() as *mut T, slice.len())
     }
 
     pub unsafe fn from_mut_slice(slice: &mut [T]) -> Self {
@@ -88,6 +92,15 @@ impl<T, A> BufOwn<T, A> {
         let v = Vec::from_raw_parts(data, len, cap);
         forget(self);
         v
+    }
+
+    pub fn subslice_mut<R>(&mut self, r: R) -> Self
+    where
+        A: ReadAccess + WriteAccess,
+        R: RangeBounds<usize> + SliceIndex<[T], Output = [T]>,
+    {
+        let slice = &mut self.as_slice_mut()[r];
+        unsafe { Self::from_mut_slice(slice) }
     }
 
     unsafe fn drop_from_box(&mut self) {
