@@ -6,7 +6,6 @@
 #![feature(async_closure)]
 #![feature(associated_type_bounds)]
 #![feature(bench_black_box)]
-#![feature(bool_to_option)]
 #![feature(const_mut_refs)]
 #![feature(core_intrinsics)]
 #![feature(default_alloc_error_handler)]

@@ -4,7 +4,6 @@
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(associated_type_defaults)]
-#![feature(bool_to_option)]
 #![feature(build_hasher_simple_hash_one)]
 #![feature(coerce_unsized)]
 #![feature(core_intrinsics)]

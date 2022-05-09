@@ -1,4 +1,3 @@
-use chos_lib::log::println;
 use chos_lib::tar::Tar;
 
 use crate::async_::oneshot::call_with_sender;
@@ -21,6 +20,4 @@ pub async fn load_initrd(initrd: &[u8]) {
     let root = sp.async_root().await.expect("Could not get ramfs root");
     let root = root.async_open().await.expect("Could not open ramfs root");
     let _root = root.dir().expect("Root should be a directory");
-
-    println!("Here");
 }
