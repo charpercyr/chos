@@ -19,6 +19,7 @@
 #![feature(negative_impls)]
 #![feature(never_type)]
 #![feature(new_uninit)]
+#![feature(nonnull_slice_from_raw_parts)]
 #![feature(ptr_metadata)]
 #![feature(poll_ready)]
 #![feature(thread_local)]
@@ -52,3 +53,5 @@ pub mod sched;
 mod symbols;
 pub mod timer;
 pub mod util;
+
+pub extern crate paste;

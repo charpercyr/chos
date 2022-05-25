@@ -1,18 +1,11 @@
 use core::cell::UnsafeCell;
 use core::hint::spin_loop;
 use core::intrinsics::likely;
-use core::mem::{MaybeUninit, replace};
+use core::mem::{replace, MaybeUninit};
 use core::ops::{Deref, DerefMut};
 
-use crate::arch::intr::{disable_interrups_save, IntrStatus, restore_interrupts};
-
+use super::{LockPolicy, NoIrqLockPolicy, NoOpLockPolicy, NoSchedLockPolicy};
 use crate::init::ConstInit;
-
-// I don't like this but it might be the easiest way to add nosched policy short of moving the lock code to the boot & kernel
-extern "Rust" {
-    fn __lock_disable_sched_save() -> u64;
-    fn __lock_restore_sched(v: u64);
-}
 
 pub unsafe trait RawLock {
     fn lock(&self);
@@ -29,46 +22,6 @@ pub unsafe trait RawTryLock: RawLock {
             spin_loop();
         }
         false
-    }
-}
-
-pub trait LockPolicy {
-    type Metadata;
-    fn before_lock() -> Self::Metadata;
-    fn after_unlock(meta: Self::Metadata);
-}
-
-pub struct NoOpLockPolicy(());
-impl LockPolicy for NoOpLockPolicy {
-    type Metadata = ();
-    fn before_lock() -> Self::Metadata {
-        // Nothing
-    }
-    fn after_unlock(_meta: Self::Metadata) {
-        // Nothing
-    }
-}
-
-// TODO: Disable sched only
-pub struct NoSchedLockPolicy(());
-impl LockPolicy for NoSchedLockPolicy {
-    type Metadata = u64;
-    fn before_lock() -> Self::Metadata {
-        unsafe { __lock_disable_sched_save() }
-    }
-    fn after_unlock(meta: Self::Metadata) {
-        unsafe { __lock_restore_sched(meta) }
-    }
-}
-
-pub struct NoIrqLockPolicy(());
-impl LockPolicy for NoIrqLockPolicy {
-    type Metadata = IntrStatus;
-    fn before_lock() -> Self::Metadata {
-        disable_interrups_save()
-    }
-    fn after_unlock(meta: Self::Metadata) {
-        restore_interrupts(meta)
     }
 }
 
@@ -106,7 +59,10 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     pub fn lock_policy<P: LockPolicy>(&self) -> LockGuard<'_, P, L, T> {
         let meta = P::before_lock();
         self.lock.lock();
-        LockGuard { lock: self, meta: MaybeUninit::new(meta) }
+        LockGuard {
+            lock: self,
+            meta: MaybeUninit::new(meta),
+        }
     }
 
     pub fn lock(&self) -> LockGuard<'_, NoSchedLockPolicy, L, T> {
@@ -127,7 +83,10 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     {
         let meta = P::before_lock();
         if self.lock.try_lock() {
-            Some(LockGuard { lock: self, meta: MaybeUninit::new(meta) })
+            Some(LockGuard {
+                lock: self,
+                meta: MaybeUninit::new(meta),
+            })
         } else {
             P::after_unlock(meta);
             None
@@ -164,7 +123,10 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
     {
         let meta = P::before_lock();
         if self.lock.try_lock_tries(tries) {
-            Some(LockGuard { lock: self, meta: MaybeUninit::new(meta) })
+            Some(LockGuard {
+                lock: self,
+                meta: MaybeUninit::new(meta),
+            })
         } else {
             P::after_unlock(meta);
             None
@@ -185,7 +147,10 @@ impl<L: RawLock, T: ?Sized> Lock<L, T> {
         self.try_lock_tries_policy(tries)
     }
 
-    pub fn try_lock_tries_nodisable(&self, tries: usize) -> Option<LockGuard<'_, NoOpLockPolicy, L, T>>
+    pub fn try_lock_tries_nodisable(
+        &self,
+        tries: usize,
+    ) -> Option<LockGuard<'_, NoOpLockPolicy, L, T>>
     where
         L: RawTryLock,
     {
@@ -227,13 +192,29 @@ impl<P: LockPolicy, L: RawLock, T: ?Sized> Drop for LockGuard<'_, P, L, T> {
     }
 }
 
-impl<P: LockPolicy, L: RawLock, T: ?Sized> LockGuard<'_, P, L, T> {
+impl<'a, P: LockPolicy, L: RawLock, T: ?Sized> LockGuard<'a, P, L, T> {
     pub fn get_ref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
 
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.lock.value.get() }
+    }
+
+    pub fn project<V: ?Sized>(
+        mut self,
+        f: impl FnOnce(&mut T) -> &mut V,
+    ) -> LockGuardProject<'a, P, L, T, V> {
+        let value = f(self.get_mut()) as *mut V;
+        LockGuardProject { guard: self, value }
+    }
+
+    pub fn try_project<R: ?Sized>(
+        mut self,
+        f: impl FnOnce(&mut T) -> Option<&mut R>,
+    ) -> Option<LockGuardProject<'a, P, L, T, R>> {
+        let value = f(self.get_mut())? as *mut R;
+        Some(LockGuardProject { guard: self, value })
     }
 }
 
@@ -247,4 +228,73 @@ impl<P: LockPolicy, L: RawLock, T: ?Sized> DerefMut for LockGuard<'_, P, L, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_mut()
     }
+}
+
+pub struct LockGuardProject<'a, P: LockPolicy, L: RawLock, T: ?Sized, V: ?Sized> {
+    guard: LockGuard<'a, P, L, T>,
+    value: *mut V,
+}
+impl<P: LockPolicy, L: RawLock, T: ?Sized, V: ?Sized> !Send for LockGuardProject<'_, P, L, T, V> {}
+unsafe impl<P: LockPolicy, L: RawLock + Sync, T: ?Sized + Sync, V: ?Sized + Sync> Sync
+    for LockGuardProject<'_, P, L, T, V>
+where
+    P::Metadata: Sync,
+{
+}
+
+impl<'a, P: LockPolicy, L: RawLock, T: ?Sized, V: ?Sized> LockGuardProject<'a, P, L, T, V> {
+    pub fn get_ref(&self) -> &V {
+        unsafe { &*self.value }
+    }
+
+    pub fn get_mut(&mut self) -> &mut V {
+        unsafe { &mut *self.value }
+    }
+
+    pub fn project<R: ?Sized>(
+        mut self,
+        f: impl FnOnce(&mut V) -> &mut R,
+    ) -> LockGuardProject<'a, P, L, T, R> {
+        let value = f(self.get_mut()) as *mut R;
+        LockGuardProject {
+            guard: self.guard,
+            value,
+        }
+    }
+
+    pub fn try_project<R: ?Sized>(
+        mut self,
+        f: impl FnOnce(&mut V) -> Option<&mut R>,
+    ) -> Option<LockGuardProject<'a, P, L, T, R>> {
+        let value = f(self.get_mut())? as *mut R;
+        Some(LockGuardProject {
+            guard: self.guard,
+            value,
+        })
+    }
+}
+
+impl<P: LockPolicy, L: RawLock, T: ?Sized, V: ?Sized> Deref for LockGuardProject<'_, P, L, T, V> {
+    type Target = V;
+    fn deref(&self) -> &Self::Target {
+        self.get_ref()
+    }
+}
+impl<P: LockPolicy, L: RawLock, T: ?Sized, V: ?Sized> DerefMut
+    for LockGuardProject<'_, P, L, T, V>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.get_mut()
+    }
+}
+
+fn foo() {
+    struct Foo {
+        value: u32,
+    }
+    use super::spin::lock::Spinlock;
+    let lock = Spinlock::new(Foo { value: 0 });
+    let guard = lock.lock();
+    let mut guard = guard.project(|foo| &mut foo.value);
+    *guard = 1;
 }

@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use chos_lib::intrusive::hash_table::{sizes, AtomicLink, HashTable};
 use chos_lib::log::debug;
 use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
-use chos_lib::sync::SpinRWLock;
+use chos_lib::sync::{SpinRWLock, Spinlock};
 use intrusive_collections::{intrusive_adapter, KeyAdapter};
 
 use crate::async_::oneshot::{self, call_with_sender};
@@ -15,7 +15,7 @@ use crate::driver::block::BlockDevice;
 use crate::mm::slab::object_pool;
 use crate::module::Module;
 use crate::resource::ResourceArc;
-use crate::util::{private_impl, Private};
+use crate::util::{private_impl, private_project_impl, Private};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(usize)]
@@ -88,10 +88,18 @@ pub struct SuperblockOps {
     pub root: fn(&SuperblockArc, Sender<InodeArc>),
 }
 
+pub struct SuperblockMut {
+    private: Option<Private>,
+}
+
+impl SuperblockMut {
+    private_impl!(private);
+}
+
 pub struct Superblock {
     count: IArcCountWeak,
     ops: &'static SuperblockOps,
-    private: Option<Private>,
+    pub sp_mut: Spinlock<SuperblockMut>,
 }
 iarc_adapter_weak!(Superblock: count);
 object_pool!(pub struct SuperblockPool : Superblock);
@@ -105,15 +113,13 @@ impl Superblock {
         Self {
             count: IArcCountWeak::new(),
             ops,
-            private: None,
+            sp_mut: Spinlock::new(SuperblockMut { private: None }),
         }
     }
 
-    pub fn with_private(self, private: Private) -> Self {
-        Self {
-            private: Some(private),
-            ..self
-        }
+    pub fn with_private(mut self, private: Private) -> Self {
+        self.sp_mut.get_mut().private = Some(private);
+        self
     }
 
     pub fn root(self: &SuperblockArc, result: Sender<InodeArc>) {
@@ -124,7 +130,7 @@ impl Superblock {
         call_with_sender!((Self::root)(self)).await
     }
 
-    private_impl!(private);
+    private_project_impl!(sp_mut: SuperblockMut => private);
 }
 
 pub struct InodeOps {
@@ -236,12 +242,9 @@ impl Inode {
             private: None,
         }
     }
-    
+
     pub fn with_attributes(self, attrs: InodeAttributes) -> Self {
-        Self {
-            attrs,
-            ..self
-        }
+        Self { attrs, ..self }
     }
 
     pub fn with_parent(self, parent: InodeWeak) -> Self {

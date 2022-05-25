@@ -356,7 +356,7 @@ pub type DefaultPoolObjectAllocator<T, const O: u8> =
 
 pub macro object_pool {
     ($(pub $(($($vis:tt)*))?)? struct $name:ident (order = $order:expr) : $typ:ty) => {
-        paste::item! {
+        $crate::paste::item! {
             static [<__ $name:snake:upper _IMPL>]: $crate::mm::slab::DefaultPoolObjectAllocator<$typ, $order> =
                 chos_lib::init::ConstInit::INIT;
             chos_lib::pool!($(pub $(($($vis)*))*)* struct $name: $typ => &[<__ $name:snake:upper _IMPL>]);

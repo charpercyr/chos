@@ -7,9 +7,14 @@ use rustc_demangle::demangle;
 
 use crate::symbols::lookup_symbol;
 
+static IN_PANIC: AtomicBool = AtomicBool::new(false);
+
+pub fn in_panic() -> bool {
+    IN_PANIC.load(Ordering::Relaxed)
+}
+
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    static IN_PANIC: AtomicBool = AtomicBool::new(false);
     if IN_PANIC
         .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
         .is_ok()
@@ -29,7 +34,6 @@ fn panic(info: &PanicInfo) -> ! {
             }
             unsafe_error!("========================");
         }
-        IN_PANIC.store(false, Ordering::Relaxed);
     }
     exit_qemu(chos_lib::arch::x64::qemu::QemuStatus::Error)
 }

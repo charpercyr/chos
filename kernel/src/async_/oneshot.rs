@@ -36,7 +36,7 @@ impl<T> Sender<T> {
     where
         T: Send + 'static,
     {
-        self.send_with_future_named(f, "sender::send_with_future ")
+        self.send_with_future_named(f, "sender::send_with_future")
     }
 
     pub fn send_with_future_named(

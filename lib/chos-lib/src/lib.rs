@@ -30,6 +30,8 @@ pub mod access;
 pub mod arch;
 pub mod array;
 pub mod boot;
+#[cfg(any(test, feature = "alloc"))]
+pub mod boxed;
 mod config;
 pub mod cpumask;
 pub mod elf;
@@ -39,7 +41,9 @@ pub mod int;
 pub mod intrusive;
 pub mod log;
 mod macros;
+pub mod mem;
 pub mod mm;
+pub mod pod;
 pub mod pool;
 pub mod ptr;
 pub mod queue;

@@ -1,12 +1,12 @@
 #![no_std]
+#![feature(allocator_api)]
 #![feature(try_blocks)]
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use chos_lib::log::todo_warn;
-use core::mem::MaybeUninit;
 
 use chos::driver::block::BlockDevice;
 use chos::fs::buf::BufOwn;
@@ -14,40 +14,169 @@ use chos::fs::{
     self, register_filesystem, unregister_filesystem, Filesystem, FilesystemOps, Inode, InodeArc,
     InodeAttributes, InodeMode, InodeOps, InodeWeak, Superblock, SuperblockArc, SuperblockOps,
 };
+use chos::mm::slab::object_pool;
 use chos::module::{module_decl, Module, ModuleDecl};
 use chos::resource::{
     Directory, DirectoryArc, DirectoryEntry, DirectoryOps, File, FileArc, FileOps, Resource,
     ResourceArc, ResourceOps, ResourceWeak,
 };
-use chos_lib::sync::Spinlock;
-use chos_lib::ReadOnly;
+use chos_lib::arch::mm::DefaultFrameSize;
+use chos_lib::boxed::try_new_boxed_array;
+use chos_lib::intrusive_adapter;
+use chos_lib::mm::FrameSize;
+use chos_lib::pool::PoolBox;
+use intrusive_collections::linked_list;
 
-struct RamfsFile {}
+const FILE_BLOCK_SIZE: u64 = DefaultFrameSize::PAGE_SIZE;
+const FILE_BLOCK_MASK: u64 = DefaultFrameSize::PAGE_MASK;
+
+struct RamfsFileBlock {
+    link: linked_list::AtomicLink,
+    block: Box<[u8; FILE_BLOCK_SIZE as usize]>,
+    offset: u64,
+}
+object_pool!(struct RamfsFileBlockPool : RamfsFileBlock);
+type RamfsFileBlockBox = PoolBox<RamfsFileBlock, RamfsFileBlockPool>;
+intrusive_adapter!(RamfsFileBlockAdapter = RamfsFileBlockBox : RamfsFileBlock { link: linked_list::AtomicLink });
+
+enum BlockResult<'a> {
+    Found(linked_list::CursorMut<'a, RamfsFileBlockAdapter>),
+    Previous(linked_list::CursorMut<'a, RamfsFileBlockAdapter>),
+}
+
+struct RamfsFile {
+    blocks: linked_list::LinkedList<RamfsFileBlockAdapter>,
+    len: usize,
+}
 
 impl RamfsFile {
     fn new(resource: ResourceWeak) -> File {
-        File::new(&RAMFS_FILE_OPS, resource).with_private(Arc::new(RamfsFile {}))
+        File::new(&RAMFS_FILE_OPS, resource).with_private(Box::new(RamfsFile {
+            blocks: linked_list::LinkedList::new(RamfsFileBlockAdapter::new()),
+            len: 0,
+        }))
+    }
+
+    fn write(&mut self, mut offset: u64, buf_in: &BufOwn<u8>) -> fs::Result<usize> {
+        let mut reader = buf_in.reader();
+        let mut cursor = self.find_or_alloc_block(offset)?;
+        let mut written = 0;
+        loop {
+            let block_start = (offset % FILE_BLOCK_SIZE) as usize;
+            let block_size = FILE_BLOCK_SIZE as usize - block_start;
+            let block_written =
+                reader.read(unsafe { &mut cursor.get_mut().unwrap().block[block_start..] });
+            written += block_written;
+            if block_written == block_size as usize {
+                offset += block_size as u64;
+                cursor = Self::find_or_alloc_block_starting_from(cursor, offset)?;
+            } else {
+                break Ok(written)
+            }
+        }
+    }
+
+    fn read(&mut self, mut offset: u64, buf_out: &mut BufOwn<u8>) -> fs::Result<usize> {
+        let mut read = 0;
+        let mut writer = buf_out.writer();
+        let mut cursor = self.blocks.front_mut();
+        loop {
+            let block_start = (offset % FILE_BLOCK_SIZE) as usize;
+            let block_size = FILE_BLOCK_SIZE as usize - block_start;
+            let block_read;
+            match Self::find_block_starting_from(cursor, offset) {
+                BlockResult::Found(block) => {
+                    block_read = writer.write(&block.get().unwrap().block[block_start..]);
+                    cursor = block;
+                },
+                BlockResult::Previous(prev) => {
+                    block_read = writer.write_bytes(0x00, block_size);
+                    cursor = prev;
+                },
+            }
+            read += block_read;
+            if block_read == block_size as usize {
+                offset += block_size as u64;
+            } else {
+                break Ok(read)
+            }
+        }
+    }
+
+    fn find_block_starting_from<'a>(
+        mut cur: linked_list::CursorMut<'a, RamfsFileBlockAdapter>,
+        offset: u64,
+    ) -> BlockResult<'a> {
+        while !cur.is_null() {
+            let block = cur.get().unwrap();
+            if offset >= block.offset && offset < block.offset + FILE_BLOCK_SIZE {
+                return BlockResult::Found(cur);
+            } else if offset > block.offset {
+                break;
+            }
+            cur.move_next();
+        }
+        cur.move_prev();
+        BlockResult::Previous(cur)
+    }
+
+    fn find_block(&mut self, offset: u64) -> BlockResult<'_> {
+        Self::find_block_starting_from(self.blocks.front_mut(), offset)
+    }
+
+    fn find_or_alloc_block_starting_from<'a>(
+        cur: linked_list::CursorMut<'a, RamfsFileBlockAdapter>,
+        offset: u64,
+    ) -> fs::Result<linked_list::CursorMut<'a, RamfsFileBlockAdapter>> {
+        let mut prev = match Self::find_block_starting_from(cur, offset) {
+            BlockResult::Found(cur) => return Ok(cur),
+            BlockResult::Previous(prev) => prev,
+        };
+        let page_offset = offset & FILE_BLOCK_MASK;
+        let block = try_new_boxed_array().map_err(|_| fs::Error::AllocError)?;
+        let block = PoolBox::try_new(RamfsFileBlock {
+            link: linked_list::AtomicLink::new(),
+            offset: page_offset,
+            block,
+        })
+        .map_err(|_| fs::Error::AllocError)?;
+        prev.insert_after(block);
+        prev.move_next();
+        Ok(prev)
+    }
+
+    fn find_or_alloc_block(
+        &mut self,
+        offset: u64,
+    ) -> fs::Result<linked_list::CursorMut<RamfsFileBlockAdapter>> {
+        Self::find_or_alloc_block_starting_from(self.blocks.front_mut(), offset)
     }
 }
 
 fn ramfs_file_read(
-    _file: &FileArc,
-    _offset: usize,
-    _buf: BufOwn<u8>,
+    file: &FileArc,
+    offset: u64,
+    mut buf: BufOwn<u8>,
     result: fs::Sender<(usize, BufOwn<u8>)>,
 ) {
-    todo_warn!("ramfs_file_read");
-    result.send_err(fs::Error::NotSupported)
+    result.send_with(move || {
+        let mut private = file.lock_private::<RamfsFile>().unwrap();
+        let read = private.read(offset, &mut buf)?;
+        Ok((read, buf))
+    })
 }
 
 fn ramfs_file_write(
-    _file: &FileArc,
-    _offset: usize,
-    _buf: BufOwn<u8, ReadOnly>,
-    result: fs::Sender<(usize, BufOwn<u8, ReadOnly>)>,
+    file: &FileArc,
+    offset: u64,
+    buf: BufOwn<u8>,
+    result: fs::Sender<(usize, BufOwn<u8>)>,
 ) {
-    todo_warn!("ramfs_file_write");
-    result.send_err(fs::Error::NotSupported)
+    result.send_with(move || {
+        let mut private = file.lock_private::<RamfsFile>().unwrap();
+        let written = private.write(offset, &buf)?;
+        Ok((written, buf))
+    })
 }
 
 static RAMFS_FILE_OPS: FileOps = FileOps {
@@ -56,13 +185,13 @@ static RAMFS_FILE_OPS: FileOps = FileOps {
 };
 
 struct RamfsDir {
-    children: Spinlock<Vec<DirectoryEntry>>,
+    children: Vec<DirectoryEntry>,
 }
 
 impl RamfsDir {
     fn new(resource: ResourceWeak) -> Directory {
-        Directory::new(&RAMFS_DIR_OPS, resource).with_private(Arc::new(RamfsDir {
-            children: Spinlock::new(Vec::new()),
+        Directory::new(&RAMFS_DIR_OPS, resource).with_private(Box::new(RamfsDir {
+            children: Vec::new(),
         }))
     }
 }
@@ -70,38 +199,52 @@ impl RamfsDir {
 fn ramfs_dir_list(
     dir: &DirectoryArc,
     idx: usize,
-    mut buf: BufOwn<MaybeUninit<DirectoryEntry>>,
-    result: fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
+    mut buf: BufOwn<DirectoryEntry>,
+    result: fs::Sender<(usize, BufOwn<DirectoryEntry>)>,
 ) {
-    let private = dir.private::<RamfsDir>().unwrap();
-    let resource = dir.resource.upgrade().unwrap();
-    let inode = resource.inode.as_ref().unwrap().upgrade().unwrap();
-    let mut total = 0;
-    if idx <= 0 && buf.len() >= 1 {
-        buf[0] = MaybeUninit::new(DirectoryEntry {
-            name: ".".into(),
-            inode: inode.clone(),
-        });
-        total += 1;
-    }
-    if idx <= 1 && buf.len() >= 2 {
-        let parent = inode
-            .parent
+    result.send_with(|| {
+        let private = dir.lock_private::<RamfsDir>().unwrap();
+        let mut writer = buf.writer();
+        let mut written = 0;
+        let inode = dir
+            .resource
+            .upgrade()
+            .unwrap()
+            .inode
             .as_ref()
-            .map(|parent| parent.upgrade().unwrap())
-            .unwrap_or_else(|| inode.clone());
-        buf[1] = MaybeUninit::new(DirectoryEntry {
-            name: "..".into(),
-            inode: parent,
-        });
-        total += 1;
-    }
-    let children = private.children.lock();
-    for i in idx.max(2)..children.len() {
-        buf[i] = MaybeUninit::new(children[i - 2].clone());
-        total += 1;
-    }
-    result.send_ok((total, buf))
+            .unwrap()
+            .upgrade()
+            .unwrap();
+        if idx <= 0 {
+            if let Err(_) = writer.write_one(DirectoryEntry {
+                name: ".".into(),
+                inode: inode.clone(),
+            }) {
+                return Ok((0, buf));
+            }
+            written += 1;
+        }
+        if idx <= 1 {
+            if let Err(_) = writer.write_one(DirectoryEntry {
+                name: "..".into(),
+                inode: inode
+                    .parent
+                    .as_ref()
+                    .and_then(|inode| inode.upgrade())
+                    .unwrap_or_else(|| inode),
+            }) {
+                return Ok((written, buf));
+            }
+            written += 1;
+        }
+        let children = if idx < 2 {
+            &private.children[..]
+        } else {
+            &private.children[idx - 2..]
+        };
+        written += writer.write_iter(children.iter().cloned());
+        Ok((written, buf))
+    })
 }
 
 fn ramfs_dir_mkfile(
@@ -110,12 +253,11 @@ fn ramfs_dir_mkfile(
     attrs: InodeAttributes,
     result: fs::Sender<FileArc>,
 ) {
-    let private = dir.private::<RamfsDir>().unwrap();
-    let mut children = private.children.lock();
+    let mut private = dir.lock_private::<RamfsDir>().unwrap();
     let inode =
         InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::file(inode.clone()), attrs));
     let file = inode.private::<RamfsInode>().unwrap().res.file().unwrap();
-    children.push(DirectoryEntry {
+    private.children.push(DirectoryEntry {
         name: name.into(),
         inode,
     });
@@ -128,12 +270,11 @@ fn ramfs_dir_mkdir(
     attrs: InodeAttributes,
     result: fs::Sender<DirectoryArc>,
 ) {
-    let private = dir.private::<RamfsDir>().unwrap();
-    let mut children = private.children.lock();
+    let mut private = dir.lock_private::<RamfsDir>().unwrap();
     let inode =
         InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::dir(inode.clone()), attrs));
     let file = inode.private::<RamfsInode>().unwrap().res.dir().unwrap();
-    children.push(DirectoryEntry {
+    private.children.push(DirectoryEntry {
         name: name.into(),
         inode,
     });
@@ -156,7 +297,7 @@ impl RamfsResource {
         ResourceArc::new_cyclic(|res| {
             Resource::new(&RAMFS_RES_OPS)
                 .with_inode(inode)
-                .with_private(Arc::new(RamfsResource::File(
+                .with_private(Box::new(RamfsResource::File(
                     RamfsFile::new(res.clone()).into(),
                 )))
         })
@@ -166,7 +307,7 @@ impl RamfsResource {
         ResourceArc::new_cyclic(|res| {
             Resource::new(&RAMFS_RES_OPS)
                 .with_inode(inode)
-                .with_private(Arc::new(RamfsResource::Dir(
+                .with_private(Box::new(RamfsResource::Dir(
                     RamfsDir::new(res.clone()).into(),
                 )))
         })
@@ -204,7 +345,7 @@ impl RamfsInode {
     pub fn new(res: ResourceArc, attrs: InodeAttributes) -> Inode {
         Inode::new(&RAMFS_INODE_OPS)
             .with_attributes(attrs)
-            .with_private(Arc::new(RamfsInode { res }))
+            .with_private(Box::new(RamfsInode { res }))
     }
 }
 
@@ -223,7 +364,7 @@ struct RamfsSuperblock {
 
 impl RamfsSuperblock {
     pub fn new() -> Superblock {
-        Superblock::new(&RAMFS_SUPERBLOCK_OPS).with_private(Arc::new(RamfsSuperblock {
+        Superblock::new(&RAMFS_SUPERBLOCK_OPS).with_private(Box::new(RamfsSuperblock {
             root: InodeArc::new_cyclic(|inode| {
                 RamfsInode::new(
                     RamfsResource::dir(inode.clone()).into(),
@@ -235,8 +376,9 @@ impl RamfsSuperblock {
 }
 
 fn ramfs_sp_root(sp: &SuperblockArc, result: fs::Sender<InodeArc>) {
-    result.send_with(|| {
-        let private = sp.private::<RamfsSuperblock>().unwrap();
+    let sp = sp.clone();
+    result.send_with(move || {
+        let private = sp.lock_private::<RamfsSuperblock>().unwrap();
         Ok(private.root.clone())
     });
 }

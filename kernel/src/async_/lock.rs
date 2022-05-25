@@ -1,9 +1,11 @@
 use core::cell::UnsafeCell;
 use core::future::Future;
+use core::mem::{replace, MaybeUninit};
 use core::ops::{Deref, DerefMut};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+use chos_lib::sync::{LockPolicy, NoOpLockPolicy};
 use pin_project::pin_project;
 
 use super::sem::AsyncSemWaitFut;
@@ -28,8 +30,22 @@ impl<T: ?Sized> AsyncLock<T> {
         }
     }
 
-    pub fn try_lock(&self) -> Option<AsyncLockGuard<'_, T>> {
-        self.sem.try_wait().then(|| AsyncLockGuard { lock: self })
+    fn try_lock_policy<P: LockPolicy>(&self) -> Option<AsyncLockGuard<'_, P, T>> {
+        let meta = P::before_lock();
+        match self.sem.try_wait() {
+            true => Some(AsyncLockGuard {
+                lock: self,
+                meta: MaybeUninit::new(meta),
+            }),
+            false => {
+                P::after_unlock(meta);
+                None
+            }
+        }
+    }
+
+    pub fn try_lock(&self) -> Option<AsyncLockGuard<'_, NoOpLockPolicy, T>> {
+        self.try_lock_policy()
     }
 }
 
@@ -55,26 +71,31 @@ pub struct AsyncLockFut<'lock, T: ?Sized> {
 }
 
 impl<'lock, T: ?Sized> Future for AsyncLockFut<'lock, T> {
-    type Output = AsyncLockGuard<'lock, T>;
+    type Output = AsyncLockGuard<'lock, NoOpLockPolicy, T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.project();
         let fut = this.fut;
         let lock = this.lock;
-        fut.poll(cx).map(move |_| AsyncLockGuard { lock })
+        fut.poll(cx).map(move |_| AsyncLockGuard {
+            lock,
+            meta: MaybeUninit::new(NoOpLockPolicy::before_lock()),
+        })
     }
 }
 
-pub struct AsyncLockGuard<'lock, T: ?Sized> {
+pub struct AsyncLockGuard<'lock, P: LockPolicy, T: ?Sized> {
     lock: &'lock AsyncLock<T>,
+    meta: MaybeUninit<P::Metadata>,
 }
 
-impl<T: ?Sized> Drop for AsyncLockGuard<'_, T> {
+impl<T: ?Sized, P: LockPolicy> Drop for AsyncLockGuard<'_, P, T> {
     fn drop(&mut self) {
-        self.lock.sem.signal()
+        self.lock.sem.signal();
+        unsafe { P::after_unlock(replace(&mut self.meta, MaybeUninit::uninit()).assume_init()) }
     }
 }
 
-impl<T: ?Sized> AsyncLockGuard<'_, T> {
+impl<T: ?Sized, P: LockPolicy> AsyncLockGuard<'_, P, T> {
     pub fn as_ref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
@@ -83,13 +104,13 @@ impl<T: ?Sized> AsyncLockGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Deref for AsyncLockGuard<'_, T> {
+impl<T: ?Sized, P: LockPolicy> Deref for AsyncLockGuard<'_, P, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.as_ref()
     }
 }
-impl<T: ?Sized> DerefMut for AsyncLockGuard<'_, T> {
+impl<T: ?Sized, P: LockPolicy> DerefMut for AsyncLockGuard<'_, P, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.as_mut()
     }

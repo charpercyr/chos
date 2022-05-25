@@ -4,7 +4,7 @@ use core::intrinsics::likely;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::init::ConstInit;
-use crate::sync::lock::{Lock, LockGuard, RawLock, RawTryLock};
+use crate::sync::lock::{Lock, LockGuard, RawLock, RawTryLock, LockGuardProject};
 use crate::sync::rwlock::{RWLock, RWLockReadGuard, RWLockWriteGuard, RawRWLock, RawTryRWLock};
 
 pub struct RawSpinLock {
@@ -46,6 +46,7 @@ unsafe impl RawTryLock for RawSpinLock {
 
 pub type Spinlock<T> = Lock<RawSpinLock, T>;
 pub type SpinlockGuard<'a, P, T> = LockGuard<'a, P, RawSpinLock, T>;
+pub type SpinlockGuardProject<'a, P, T, V> = LockGuardProject<'a, P, RawSpinLock, T, V>;
 
 pub struct RawSpinRWLock {
     write_lock: RawSpinLock,

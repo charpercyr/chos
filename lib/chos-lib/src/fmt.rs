@@ -1,4 +1,6 @@
 use core::fmt::{self, Write};
+use core::mem::size_of;
+use core::slice;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bytes(pub u64);
@@ -104,8 +106,9 @@ pub fn size_of_fmt(fmt: fmt::Arguments) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use core::fmt::Arguments;
+
+    use super::*;
 
     #[test]
     fn size_writer() {
@@ -118,5 +121,44 @@ mod tests {
         test_one(format_args!("{}", 1), 1);
         test_one(format_args!("{:b}+{:#x}", 10, 16), 9);
         test_one(format_args!("hello {}", "world"), 11);
+    }
+}
+
+fn hexdump(bytes: &[u8], f: &mut fmt::Formatter) -> fmt::Result {
+    f.write_fmt(format_args!("[{:p}]\n", bytes.as_ptr()))?;
+    for (i, block) in bytes.chunks(16).enumerate() {
+        f.write_fmt(format_args!("[0x{:04x}]", i * 16))?;
+        for &b in block {
+            f.write_fmt(format_args!(" {:02x}", b))?;
+        }
+        for _ in 0..(16 - block.len()) {
+            f.write_str("   ")?;
+        }
+        f.write_str("  [")?;
+        for &b in block {
+            if b.is_ascii() && !b.is_ascii_control() {
+                f.write_char(b as char)?;
+            } else {
+                f.write_char('.')?;
+            }
+        }
+        for _ in 0..(16 - block.len()) {
+            f.write_char(' ')?;
+        }
+        f.write_str("]\n")?;
+    }
+    Ok(())
+}
+
+pub struct Hexdump<'a, T>(pub &'a [T]);
+
+impl<T> fmt::Display for Hexdump<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe {
+            hexdump(
+                slice::from_raw_parts(self.0.as_ptr().cast(), self.0.len() * size_of::<T>()),
+                f,
+            )
+        }
     }
 }

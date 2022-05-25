@@ -4,11 +4,12 @@ use core::ptr::NonNull;
 
 use chos_lib::arch::mm::{FrameSize4K, PAGE_SIZE};
 use chos_lib::init::ConstInit;
-use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame};
+use chos_lib::int::log2u64;
+use chos_lib::mm::{PFrame, PFrameRange, VAddr, VFrame, VFrameRange};
 use chos_lib::pool::{iarc_adapter, IArc, IArcCount, Pool, PoolBox};
 use chos_lib::sync::spin::lock::RawSpinLock;
 use chos_lib::sync::Spinlock;
-use intrusive_collections::{rbtree, Bound, KeyAdapter};
+use intrusive_collections::{linked_list, rbtree, Bound, KeyAdapter};
 pub use raw_alloc::{add_region, add_regions, AllocFlags, RegionFlags};
 
 use super::slab::{ObjectAllocator, PoolObjectAllocator, Slab, SlabAllocator};
@@ -28,18 +29,22 @@ impl Page {
     pub fn frame_range(&self) -> PFrameRange {
         PFrameRange::new(self.frame, self.frame.add(1 << self.order))
     }
+
+    pub fn vframe_range(&self) -> Option<VFrameRange> {
+        self.vframe.map(|vframe| self.frame_range().offset(vframe))
+    }
 }
 
-chos_lib::intrusive_adapter!(pub PageListBoxAdapter = PageBox: Page { rb_link: rbtree::AtomicLink });
-chos_lib::intrusive_adapter!(pub PageListArcAdapter = PageArc: Page { rb_link: rbtree::AtomicLink });
+chos_lib::intrusive_adapter!(pub PageBoxAdapter = PageBox: Page { rb_link: rbtree::AtomicLink });
+chos_lib::intrusive_adapter!(pub PageArcAdapter = PageArc: Page { rb_link: rbtree::AtomicLink });
 
-impl<'a> KeyAdapter<'a> for PageListBoxAdapter {
+impl<'a> KeyAdapter<'a> for PageBoxAdapter {
     type Key = PFrame;
     fn get_key(&self, value: &'a Page) -> PFrame {
         value.frame
     }
 }
-impl<'a> KeyAdapter<'a> for PageListArcAdapter {
+impl<'a> KeyAdapter<'a> for PageArcAdapter {
     type Key = PFrame;
     fn get_key(&self, value: &'a Page) -> PFrame {
         value.frame
@@ -120,7 +125,7 @@ chos_lib::pool!(pub struct PagePool: Page => &PAGE_POOL);
 pub type PageBox = PoolBox<Page, PagePool>;
 pub type PageArc = IArc<Page, PagePool>;
 
-pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
+pub fn alloc_pages_order(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> {
     let paddr = raw_alloc::alloc_pages(order, flags)?;
     PoolBox::try_new(Page {
         count: IArcCount::INIT,
@@ -135,6 +140,20 @@ pub fn alloc_pages(order: u8, flags: AllocFlags) -> Result<PageBox, AllocError> 
     })
 }
 
+pub fn alloc_pages(
+    mut count: usize,
+    flags: AllocFlags,
+) -> Result<linked_list::LinkedList<PageBoxAdapter>, AllocError> {
+    let mut list = linked_list::LinkedList::new(PageBoxAdapter::new());
+    while count > 0 {
+        let order = log2u64(count as u64);
+        let page = alloc_pages_order(order as u8, flags)?;
+        list.push_back(page);
+        count -= 1 << order;
+    }
+    Ok(list)
+}
+
 pub struct MMSlab<const O: u8> {
     page: PageArc,
 }
@@ -147,19 +166,19 @@ impl<const O: u8> Slab for MMSlab<O> {
 }
 
 pub struct MMSlabAllocator<const O: u8> {
-    all_pages: rbtree::RBTree<PageListArcAdapter>,
+    all_pages: rbtree::RBTree<PageArcAdapter>,
 }
 
 impl<const O: u8> ConstInit for MMSlabAllocator<O> {
     const INIT: Self = Self {
-        all_pages: rbtree::RBTree::new(PageListArcAdapter::NEW),
+        all_pages: rbtree::RBTree::new(PageArcAdapter::NEW),
     };
 }
 
 unsafe impl<const O: u8> SlabAllocator for MMSlabAllocator<O> {
     type Slab = MMSlab<O>;
     unsafe fn alloc_slab(&mut self) -> Result<Self::Slab, AllocError> {
-        let mut page = alloc_pages(O, AllocFlags::empty())?;
+        let mut page = alloc_pages_order(O, AllocFlags::empty())?;
         let vframe = map_page(&page, MemoryRegionType::Normal).map_err(|_| AllocError)?;
         page.vframe = Some(vframe);
         let page: PageArc = page.into();

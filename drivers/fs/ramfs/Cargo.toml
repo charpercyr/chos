@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 chos = { path = "../../../kernel" }
 chos-lib = { path = "../../../lib/chos-lib" }
+
+[dependencies.intrusive-collections]
+git = "https://github.com/charpercyr/intrusive-rs"
+features = ["nightly"]

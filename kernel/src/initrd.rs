@@ -2,21 +2,20 @@ use chos_lib::tar::raw::EntryType;
 use chos_lib::tar::Tar;
 
 use crate::async_::oneshot::call_with_sender;
-use crate::fs::buf::BufOwn;
 use crate::fs::path::{Component, Path};
 use crate::fs::{with_filesystem, Filesystem, InodeAttributes, InodeMode};
 use crate::resource::DirectoryArc;
 
 const RAMFS_FS_NAME: &'static str = "ramfs";
 
-async fn create_file(path: &Path, root: &DirectoryArc, mut contents: &[u8]) {
+async fn create_file(path: &Path, root: &DirectoryArc, contents: &[u8]) {
     let filename = path.file_name().expect("Should have a file name");
     let dirname = path.parent().unwrap_or(Path::new("."));
     let mut dir = root.clone();
     for c in dirname.components() {
         match c {
             Component::CurDir | Component::RootDir => (),
-            Component::ParentDir => panic!("Not supported"),
+            Component::ParentDir => panic!("ParentDir not supported"),
             Component::Normal(name) => {
                 if let Some(direntry) = dir
                     .async_list(|entry| (entry.name == name).then(|| entry))
@@ -34,19 +33,11 @@ async fn create_file(path: &Path, root: &DirectoryArc, mut contents: &[u8]) {
             }
         }
     }
-
     let file = dir
         .async_mkfile(filename, InodeAttributes::root(InodeMode::DEFAULT_FILE))
         .await
         .unwrap();
-
-    let mut offset = 0;
-    while !contents.is_empty() {
-        let buf = unsafe { BufOwn::from_slice(contents) };
-        let (written, _) = file.async_write(offset, buf).await.unwrap();
-        offset += written;
-        contents = &contents[written..];
-    }
+    file.async_write_all(0, contents).await.unwrap();
 }
 
 pub async fn load_initrd(initrd: &[u8]) {

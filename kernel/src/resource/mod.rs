@@ -1,13 +1,15 @@
 use alloc::string::String;
+use core::future::Future;
 use core::mem::{replace, MaybeUninit};
 
 use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
-use chos_lib::ReadOnly;
+use chos_lib::sync::Spinlock;
 
 use crate::async_::oneshot::call_with_sender;
-use crate::fs::buf::BufOwn;
+use crate::fs::buf::{Buf, BufOwn};
 use crate::fs::{self, InodeArc, InodeAttributes, InodeWeak};
 use crate::mm::slab::object_pool;
+use crate::private_project_impl;
 use crate::util::{private_impl, Private};
 
 pub struct ResourceOps {
@@ -62,15 +64,23 @@ impl Resource {
 }
 
 pub struct FileOps {
-    pub read: fn(&FileArc, usize, BufOwn<u8>, fs::Sender<(usize, BufOwn<u8>)>),
-    pub write: fn(&FileArc, usize, BufOwn<u8, ReadOnly>, fs::Sender<(usize, BufOwn<u8, ReadOnly>)>),
+    pub read: fn(&FileArc, u64, BufOwn<u8>, fs::Sender<(usize, BufOwn<u8>)>),
+    pub write: fn(&FileArc, u64, BufOwn<u8>, fs::Sender<(usize, BufOwn<u8>)>),
+}
+
+pub struct FileMut {
+    private: Option<Private>,
+}
+
+impl FileMut {
+    private_impl!(private);
 }
 
 pub struct File {
     count: IArcCountWeak,
     pub resource: ResourceWeak,
     ops: &'static FileOps,
-    private: Option<Private>,
+    pub file_mut: Spinlock<FileMut>,
 }
 iarc_adapter_weak!(File: count);
 object_pool!(pub struct FilePool : File);
@@ -83,20 +93,18 @@ impl File {
             count: IArcCountWeak::new(),
             resource,
             ops,
-            private: None,
+            file_mut: Spinlock::new(FileMut { private: None }),
         }
     }
 
-    pub fn with_private(self, private: Private) -> Self {
-        Self {
-            private: Some(private),
-            ..self
-        }
+    pub fn with_private(mut self, private: Private) -> Self {
+        self.file_mut.get_mut().private = Some(private);
+        self
     }
 
     pub fn read(
         self: &FileArc,
-        offset: usize,
+        offset: u64,
         buf: BufOwn<u8>,
         result: fs::Sender<(usize, BufOwn<u8>)>,
     ) {
@@ -105,30 +113,58 @@ impl File {
 
     pub async fn async_read(
         self: &FileArc,
-        offset: usize,
+        offset: u64,
         buf: BufOwn<u8>,
     ) -> fs::Result<(usize, BufOwn<u8>)> {
         call_with_sender!((Self::read)(self, offset, buf)).await
     }
 
+    pub async fn async_read_all(
+        self: &FileArc,
+        mut offset: u64,
+        mut buf: &mut [u8],
+    ) -> fs::Result<()> {
+        while !buf.is_empty() {
+            let buf_own = unsafe { BufOwn::new_single(Buf::from_slice_mut(buf)) };
+            let (read, _) = self.async_read(offset, buf_own).await?;
+            offset += read as u64;
+            buf = &mut buf[read..];
+        }
+        Ok(())
+    }
+
     pub fn write(
         self: &FileArc,
-        offset: usize,
-        buf: BufOwn<u8, ReadOnly>,
-        result: fs::Sender<(usize, BufOwn<u8, ReadOnly>)>,
+        offset: u64,
+        buf: BufOwn<u8>,
+        result: fs::Sender<(usize, BufOwn<u8>)>,
     ) {
         (self.ops.write)(self, offset, buf, result)
     }
 
     pub async fn async_write(
         self: &FileArc,
-        offset: usize,
-        buf: BufOwn<u8, ReadOnly>,
-    ) -> fs::Result<(usize, BufOwn<u8, ReadOnly>)> {
+        offset: u64,
+        buf: BufOwn<u8>,
+    ) -> fs::Result<(usize, BufOwn<u8>)> {
         call_with_sender!((Self::write)(self, offset, buf)).await
     }
 
-    private_impl!(private);
+    pub async fn async_write_all(
+        self: &FileArc,
+        mut offset: u64,
+        mut buf: &[u8],
+    ) -> fs::Result<()> {
+        while !buf.is_empty() {
+            let buf_own = unsafe { BufOwn::new_single(Buf::from_slice(buf)) };
+            let (written, _) = self.async_write(offset, buf_own).await?;
+            offset += written as u64;
+            buf = &buf[written..];
+        }
+        Ok(())
+    }
+
+    private_project_impl!(file_mut: FileMut => private);
 }
 
 #[derive(Clone)]
@@ -141,18 +177,26 @@ pub struct DirectoryOps {
     pub list_iter: fn(
         &DirectoryArc,
         usize,
-        BufOwn<MaybeUninit<DirectoryEntry>>,
-        fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
+        BufOwn<DirectoryEntry>,
+        fs::Sender<(usize, BufOwn<DirectoryEntry>)>,
     ),
     pub mkfile: Option<fn(&DirectoryArc, &str, InodeAttributes, fs::Sender<FileArc>)>,
     pub mkdir: Option<fn(&DirectoryArc, &str, InodeAttributes, fs::Sender<DirectoryArc>)>,
+}
+
+pub struct DirectoryMut {
+    private: Option<Private>,
+}
+
+impl DirectoryMut {
+    private_impl!(private);
 }
 
 pub struct Directory {
     count: IArcCountWeak,
     pub resource: ResourceWeak,
     ops: &'static DirectoryOps,
-    private: Option<Private>,
+    pub dir_mut: Spinlock<DirectoryMut>,
 }
 iarc_adapter_weak!(Directory: count);
 object_pool!(pub struct DirectoryPool : Directory);
@@ -165,22 +209,20 @@ impl Directory {
             count: IArcCountWeak::new(),
             resource,
             ops,
-            private: None,
+            dir_mut: Spinlock::new(DirectoryMut { private: None }),
         }
     }
 
-    pub fn with_private(self, private: Private) -> Self {
-        Self {
-            private: Some(private),
-            ..self
-        }
+    pub fn with_private(mut self, private: Private) -> Self {
+        self.dir_mut.get_mut().private = Some(private);
+        self
     }
 
     pub fn list_iter(
         self: &DirectoryArc,
         idx: usize,
-        buf: BufOwn<MaybeUninit<DirectoryEntry>>,
-        result: fs::Sender<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)>,
+        buf: BufOwn<DirectoryEntry>,
+        result: fs::Sender<(usize, BufOwn<DirectoryEntry>)>,
     ) {
         (self.ops.list_iter)(self, idx, buf, result)
     }
@@ -188,8 +230,8 @@ impl Directory {
     pub async fn async_list_iter(
         self: &DirectoryArc,
         idx: usize,
-        buf: BufOwn<MaybeUninit<DirectoryEntry>>,
-    ) -> fs::Result<(usize, BufOwn<MaybeUninit<DirectoryEntry>>)> {
+        buf: BufOwn<DirectoryEntry>,
+    ) -> fs::Result<(usize, BufOwn<DirectoryEntry>)> {
         call_with_sender!((Self::list_iter)(self, idx, buf)).await
     }
 
@@ -200,11 +242,36 @@ impl Directory {
         let mut buf: [_; 16] = MaybeUninit::uninit_array();
         let mut idx = 0;
         loop {
-            let buf_own = unsafe { BufOwn::from_mut_slice(&mut buf) };
+            let buf_own = unsafe { BufOwn::new_single(Buf::from_slice_uninit_mut(&mut buf)) };
             let (len, _) = self.async_list_iter(idx, buf_own).await?;
             for i in 0..len {
                 if let Some(r) =
                     callback(unsafe { replace(&mut buf[i], MaybeUninit::uninit()).assume_init() })
+                {
+                    return Ok(Some(r));
+                }
+            }
+            if len < buf.len() {
+                break;
+            }
+            idx += len;
+        }
+        Ok(None)
+    }
+
+    pub async fn async_list_fut<R, F: Future<Output = Option<R>>>(
+        self: &DirectoryArc,
+        mut callback: impl FnMut(DirectoryEntry) -> F,
+    ) -> fs::Result<Option<R>> {
+        let mut buf: [_; 16] = MaybeUninit::uninit_array();
+        let mut idx = 0;
+        loop {
+            let buf_own = unsafe { BufOwn::new_single(Buf::from_slice_uninit_mut(&mut buf)) };
+            let (len, _) = self.async_list_iter(idx, buf_own).await?;
+            for i in 0..len {
+                if let Some(r) =
+                    callback(unsafe { replace(&mut buf[i], MaybeUninit::uninit()).assume_init() })
+                        .await
                 {
                     return Ok(Some(r));
                 }
@@ -259,5 +326,5 @@ impl Directory {
         call_with_sender!((Self::mkdir)(self, name, attrs)).await
     }
 
-    private_impl!(private);
+    private_project_impl!(dir_mut: DirectoryMut => private);
 }

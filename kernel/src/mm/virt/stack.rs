@@ -12,7 +12,7 @@ use intrusive_collections::{rbtree, Bound, KeyAdapter};
 use super::{MemoryMapError, MemoryRegion, MemoryRegionType, PageFaultReason, PageFaultResult};
 use crate::arch::early;
 use crate::arch::mm::virt::map_page;
-use crate::mm::phys::{alloc_pages, AllocFlags, MMPoolObjectAllocator, Page, PageBox};
+use crate::mm::phys::{alloc_pages_order, AllocFlags, MMPoolObjectAllocator, Page, PageBox};
 
 struct StackAlloc {
     link: rbtree::AtomicLink,
@@ -75,7 +75,7 @@ fn do_alloc_kernel_stack(
     order: u8,
     map: impl FnOnce(&Page, VFrame, MapFlags) -> Result<(), AllocError>,
 ) -> Result<Stack, AllocError> {
-    let page = alloc_pages(order, AllocFlags::empty())?;
+    let page = alloc_pages_order(order, AllocFlags::empty())?;
     let mut all_stacks = ALL_STACKS.lock();
     let vbase = map_stack_unlocked(&mut all_stacks, &page, map)?;
     let range = page.frame_range();

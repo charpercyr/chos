@@ -163,7 +163,11 @@ macro_rules! frame {
                 }
 
                 pub const fn frame_count(&self) -> u64 {
-                    (self.end.addr().as_u64() - self.start.addr().as_u64()) / S::PAGE_SIZE
+                    self.bytes_count() / S::PAGE_SIZE
+                }
+
+                pub const fn bytes_count(&self) -> u64 {
+                    (self.end.addr().as_u64() - self.start.addr().as_u64())
                 }
 
                 pub fn contains(&self, rhs: &Self) -> bool {
