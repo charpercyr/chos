@@ -156,9 +156,7 @@ pub fn enter_schedule() -> ! {
 }
 
 pub fn schedule_tick() {
-    if SCHED_DISABLE.copy() == 0 {
-        // TODO
-    }
+    // TODO
 }
 
 #[inline]

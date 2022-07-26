@@ -1,0 +1,407 @@
+    Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+     Running `build/target/debug/chos-build r`
+==> Building chos-boot
+> cargo rustc -p chos-boot --target boot/../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos-lib/log-debug -- -Clink-args=-Tboot/./arch/x86_64/linker.ld -Crelocation-model=static 
+    Finished dev [unoptimized + debuginfo] target(s) in 0.03s
+==> Building chos-fs-ramfs
+> cargo rustc -p chos-fs-ramfs --target kernel/chos-bin/../../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos/log-debug -- -Clink-args=-Tkernel/chos-bin/../arch/x86_64/linker.ld --crate-type rlib 
+   Compiling chos v0.1.0 (/home/chrou/chos/kernel)
+   Compiling chos-fs-ramfs v0.1.0 (/home/chrou/chos/drivers/fs/ramfs)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.92s
+==> Building chos-fs-ext2
+> cargo rustc -p chos-fs-ext2 --target kernel/chos-bin/../../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos/log-debug -- -Clink-args=-Tkernel/chos-bin/../arch/x86_64/linker.ld --crate-type dylib 
+   Compiling chos-fs-ramfs v0.1.0 (/home/chrou/chos/drivers/fs/ramfs)
+   Compiling chos-bin v0.1.0 (/home/chrou/chos/kernel/chos-bin)
+   Compiling chos-fs-ext2 v0.1.0 (/home/chrou/chos/drivers/fs/ext2)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.83s
+==> Building chos-block-ahci
+> cargo rustc -p chos-block-ahci --target kernel/chos-bin/../../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos/log-debug -- -Clink-args=-Tkernel/chos-bin/../arch/x86_64/linker.ld --crate-type dylib 
+   Compiling chos-bus-pci v0.1.0 (/home/chrou/chos/drivers/bus/pci)
+   Compiling chos-block-ahci v0.1.0 (/home/chrou/chos/drivers/block/ahci)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.28s
+==> Building chos-bus-pci
+> cargo rustc -p chos-bus-pci --target kernel/chos-bin/../../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos/log-debug -- -Clink-args=-Tkernel/chos-bin/../arch/x86_64/linker.ld --crate-type dylib 
+   Compiling chos-bus-pci v0.1.0 (/home/chrou/chos/drivers/bus/pci)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.17s
+==> Building chos-bin
+> cargo rustc -p chos-bin --target kernel/chos-bin/../../arch/x86_64-chos.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --features=chos/log-debug -- -Clink-args=-Tkernel/chos-bin/../arch/x86_64/linker.ld 
+   Compiling chos-bin v0.1.0 (/home/chrou/chos/kernel/chos-bin)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.47s
+> dd if=/dev/zero of=/tmp/chos3CyJMP.img bs=512 count=262144 
+262144+0 records in
+262144+0 records out
+134217728 bytes (134 MB, 128 MiB) copied, 0.340973 s, 394 MB/s
+> fdisk /tmp/chos3CyJMP.img 
+
+Welcome to fdisk (util-linux 2.38).
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+Device does not contain a recognized partition table.
+Created a new DOS disklabel with disk identifier 0x07cee975.
+
+Command (m for help): Partition type
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended (container for logical partitions)
+Select (default p): 
+Using default response p.
+Partition number (1-4, default 1): First sector (2048-262143, default 2048): Last sector, +/-sectors or +/-size{K,M,G,T,P} (2048-262143, default 262143): 
+Created a new partition 1 of type 'Linux' and of size 127 MiB.
+
+Command (m for help): The partition table has been altered.
+Syncing disks.
+
+> losetup -f 
+> sudo losetup -P /dev/loop1 /tmp/chos3CyJMP.img 
+> sudo mkfs.ext2 /dev/loop1p1 
+mke2fs 1.46.5 (30-Dec-2021)
+Discarding device blocks:      0/130048             done                            
+Creating filesystem with 130048 1k blocks and 32512 inodes
+Filesystem UUID: 47df3d7b-3a7f-410b-8c9f-74584283dd1a
+Superblock backups stored on blocks: 
+	8193, 24577, 40961, 57345, 73729
+
+Allocating group tables:  0/16     done                            
+Writing inode tables:  0/16     done                            
+Writing superblocks and filesystem accounting information:  0/16     done
+
+> sudo mount /dev/loop1p1 /tmp/chos-diskZ3h2AZ 
+> sudo grub-install --root-directory=/tmp/chos-diskZ3h2AZ --boot-directory=/tmp/chos-diskZ3h2AZ/boot /dev/loop1 
+Installing for i386-pc platform.
+Installation finished. No error reported.
+> sudo mkdir -p /tmp/chos-diskZ3h2AZ/boot 
+> sudo cp ./target/x86_64-chos/debug/chos-boot.elf /tmp/chos-diskZ3h2AZ/boot/boot.elf 
+> sudo mkdir -p /tmp/chos-diskZ3h2AZ/boot/grub 
+> sudo cp boot/./arch/x86_64/grub.cfg /tmp/chos-diskZ3h2AZ/boot/grub/grub.cfg 
+> sudo mkdir -p /tmp/chos-diskZ3h2AZ/chos 
+> sudo cp ./target/x86_64-chos/debug/libchos_bin.so /tmp/chos-diskZ3h2AZ/chos/libchos_bin.so 
+> sudo mkdir -p /tmp/chos-initrdqR7a7A 
+> sudo cp kernel/chos-bin/../config.txt /tmp/chos-initrdqR7a7A/config.txt 
+> sudo mkdir -p /tmp/chos-initrdqR7a7A 
+> sudo cp target/x86_64-chos/debug/libchos_fs_ext2.so /tmp/chos-initrdqR7a7A/libchos_fs_ext2.so 
+> sudo mkdir -p /tmp/chos-initrdqR7a7A 
+> sudo cp target/x86_64-chos/debug/libchos_block_ahci.so /tmp/chos-initrdqR7a7A/libchos_block_ahci.so 
+> sudo mkdir -p /tmp/chos-initrdqR7a7A 
+> sudo cp target/x86_64-chos/debug/libchos_bus_pci.so /tmp/chos-initrdqR7a7A/libchos_bus_pci.so 
+> sudo tar --owner=root --group=root -C /tmp/chos-initrdqR7a7A -cvf /tmp/chos-diskZ3h2AZ/chos/initrd.tar . 
+./
+./libchos_fs_ext2.so
+./libchos_block_ahci.so
+./libchos_bus_pci.so
+./config.txt
+> sync 
+> sudo umount /tmp/chos-diskZ3h2AZ 
+> sudo losetup -d /dev/loop1 
+> sudo qemu-system-x86_64 -m 4G -smp 2 -machine q35,accel=kvm -cpu host -device isa-debug-exit,iobase=0xf4,iosize=0x4 -display none -serial stdio /tmp/chos3CyJMP.img -D target/qemu.log -d guest_errors 
+WARNING: Image format was not specified for '/tmp/chos3CyJMP.img' and probing guessed raw.
+         Automatically detecting the format is dangerous for raw images, write operations on block 0 will be restricted.
+         Specify the 'raw' format explicitly to remove the restrictions.
+[m
+   .oooooo.   ooooo   ooooo   .oooooo.    .oooooo..o 
+  d8P'  `Y8b  `888'   `888'  d8P'  `Y8b  d8P'    `Y8 
+ 888           888     888  888      888 Y88bo.      
+ 888           888ooooo888  888      888  `"Y8888o.  
+ 888           888     888  888      888      `"Y88b 
+ `88b    ooo   888     888  `88b    d88' oo     .d8P 
+  `Y8bood8P'  o888o   o888o  `Y8bood8P'  8""88888P'  
+
+[0m[2m
+[0m[2m############
+[0m[2m### BOOT ###
+[0m[2m############
+[0m[2m
+[0m[2mMultiboot structure @ 0x1782000 (len=(1KiB 800B) [1824])
+[0m[2mMemory map
+[0m[2m  000000000000-00000009fc00 Available (639KiB 0B)
+[0m[2m  00000009fc00-0000000a0000 Reserved (1KiB 0B)
+[0m[2m  0000000f0000-000000100000 Reserved (64KiB 0B)
+[0m[2m  000000100000-00007ffdf000 Available (1GiB 1022MiB 892KiB 0B)
+[0m[2m  00007ffdf000-000080000000 Reserved (132KiB 0B)
+[0m[2m  0000b0000000-0000c0000000 Reserved (256MiB 0KiB 0B)
+[0m[2m  0000fed1c000-0000fed20000 Reserved (16KiB 0B)
+[0m[2m  0000feffc000-0000ff000000 Reserved (16KiB 0B)
+[0m[2m  0000fffc0000-000100000000 Reserved (256KiB 0B)
+[0m[2m  000100000000-000180000000 Available (2GiB 0MiB 0KiB 0B)
+[0m[2mTotal available memory: (3GiB 1023MiB 507KiB 0B)
+[0m[2mELF @ 0x68f000 - 0x177cd48 (16MiB 951KiB 328B)
+[0m[2mINIT 0x4000000 - 0x43db000
+[0m[2mCOPY 0068f000 - 00836dfc to 04000000 - 041a7dfc
+[0m[2mCOPY 00836e00 - 00a3be60 to 041a8e00 - 043ade60
+[0m[2mCOPY 00a3c000 - 00a53578 to 043af000 - 043c6578
+[0m[2mCOPY 00a53580 - 00a63cf0 to 043c7580 - 043d7cf0
+[0m[2mZERO 043d7cf0 - 043da4a8
+[0m[2mUsing 0x43db000 as PAlloc base
+[0m[2mMAP 0000000000000000-0000000180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | EXEC]
+[0m[2mMAP ffff800000000000-ffff800180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | EXEC]
+[0m[2mMAP ffff808000000000-ffff8080001a8000 (4K) -> 0000000004000000-00000000041a8000 [(empty)]
+[0m[2mMAP ffff8080001a8000-ffff8080003ae000 (4K) -> 00000000041a8000-00000000043ae000 [EXEC]
+[0m[2mMAP ffff8080003af000-ffff8080003c7000 (4K) -> 00000000043af000-00000000043c7000 [WRITE]
+[0m[2mMAP ffff8080003c7000-ffff8080003db000 (4K) -> 00000000043c7000-00000000043db000 [WRITE]
+[0m[2m
+[0m[2m####################
+[0m[2m### EARLY KERNEL ###
+[0m[2m####################
+[0m[2m
+[0m[2mUsing 0x00000100000000 - 0x00000180000000 as early memory
+[0m[2mPALLOC: add block 0x100011000 (order = 18)
+[0m[2mPALLOC: add block 0x140011000 (order = 17)
+[0m[2mPALLOC: add block 0x160011000 (order = 16)
+[0m[2mPALLOC: add block 0x170011000 (order = 15)
+[0m[2mPALLOC: add block 0x178011000 (order = 14)
+[0m[2mPALLOC: add block 0x17c011000 (order = 13)
+[0m[2mPALLOC: add block 0x17e011000 (order = 12)
+[0m[2mPALLOC: add block 0x17f011000 (order = 11)
+[0m[2mPALLOC: add block 0x17f811000 (order = 10)
+[0m[2mPALLOC: add block 0x17fc11000 (order = 9)
+[0m[2mPALLOC: add block 0x17fe11000 (order = 8)
+[0m[2mPALLOC: add block 0x17ff11000 (order = 7)
+[0m[2mPALLOC: add block 0x17ff91000 (order = 6)
+[0m[2mPALLOC: add block 0x17ffd1000 (order = 5)
+[0m[2mPALLOC: add block 0x17fff1000 (order = 3)
+[0m[2mPALLOC: add block 0x17fff9000 (order = 2)
+[0m[2mPALLOC: add block 0x17fffd000 (order = 1)
+[0m[2mPALLOC: add block 0x17ffff000 (order = 0)
+[0m[2mMAP 0000000000000000-0000000180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | EXEC]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffff000
+[0m[2mMAP ffff800000000000-ffff800180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fffd000
+[0m[2mMAP ffff810000000000-ffff810180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fffe000
+[0m[2mMAP ffff818000000000-ffff818180000000 (1G) -> 0000000000000000-0000000180000000 [WRITE | GLOBAL | NOCACHE]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff9000
+[0m[2mMAP ffff808000000000-ffff8080001a8000 (4K) -> 0000000004000000-00000000041a8000 [GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fffa000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fffb000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fffc000
+[0m[2mMAP ffff8080001a8000-ffff8080003ae000 (4K) -> 00000000041a8000-00000000043ae000 [EXEC | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff1000
+[0m[2mMAP ffff8080003af000-ffff8080003c7000 (4K) -> 00000000043af000-00000000043c7000 [WRITE | GLOBAL]
+[0m[2mMAP ffff8080003c7000-ffff8080003db000 (4K) -> 00000000043c7000-00000000043db000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff2000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff3000
+[0m[2mPALLOC: alloc_pages(order = 2, flags = (empty)) = 0x17fff5000
+[0m[2mMAP ffff820000000000-ffff820000004000 (4K) -> 000000017fff5000-000000017fff9000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff4000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffd1000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffd2000
+[0m[2mPALLOC: alloc_pages(order = 2, flags = (empty)) = 0x17ffd5000
+[0m[2mMAP ffff820000004000-ffff820000008000 (4K) -> 000000017ffd5000-000000017ffd9000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffd3000
+[0m[2mTLS [0] -> 0xffff820000004000
+[0m[2mTLS [1] -> 0xffff820000008000
+[0m[2mPALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17ff91000
+[0m[2mMAP ffff828000001000-ffff828000021000 (4K) -> 000000017ff91000-000000017ffb1000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffd4000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffd9000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffda000
+[0m[2mPALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffdb000
+[0m[2mPALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17ffb1000
+[0m[2mMAP ffff828000041000-ffff828000061000 (4K) -> 000000017ffb1000-000000017ffd1000 [WRITE | GLOBAL]
+[0m[2mPALLOC: alloc_pages(order = 13, flags = (empty)) = 0x17c011000
+[0m[2mPALLOC: alloc_pages(order = 3, flags = (empty)) = 0x17ffe1000
+[0m[2m[0] Using stack @ ffff828000021000
+[0m[2m[1] Using stack @ ffff828000061000
+[0m[2m[0] 
+[0m[2m[0] ##############
+[0m[2m[0] ### KERNEL ###
+[0m[2m[0] ##############
+[0m[2m[0] 
+[0m[2m[0] UNMAP 0000000000000000-0000000180000000 (1G)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17ffff000, order = 0)
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffff000
+[0m[2m[0] Using 0x00000000000000-0x0000000009f000 as kernel memory
+[0m[2m[0] PALLOC: add block 0x1000 (order = 7)
+[0m[2m[0] PALLOC: add block 0x81000 (order = 4)
+[0m[2m[0] PALLOC: add block 0x91000 (order = 3)
+[0m[2m[0] PALLOC: add block 0x99000 (order = 2)
+[0m[2m[0] PALLOC: add block 0x9d000 (order = 1)
+[0m[2m[0] Using 0x00000000100000-0x00000004000000 as kernel memory
+[0m[2m[0] Using 0x000000043db000-0x0000007ffdf000 as kernel memory
+[0m[2m[0] PALLOC: add block 0x101000 (order = 13)
+[0m[2m[0] PALLOC: add block 0x2101000 (order = 12)
+[0m[2m[0] PALLOC: add block 0x3101000 (order = 11)
+[0m[2m[0] PALLOC: add block 0x3901000 (order = 10)
+[0m[2m[0] PALLOC: add block 0x3d01000 (order = 9)
+[0m[2m[0] PALLOC: add block 0x3f01000 (order = 7)
+[0m[2m[0] PALLOC: add block 0x3f81000 (order = 6)
+[0m[2m[0] PALLOC: add block 0x3fc1000 (order = 5)
+[0m[2m[0] PALLOC: add block 0x3fe1000 (order = 4)
+[0m[2m[0] PALLOC: add block 0x3ff1000 (order = 3)
+[0m[2m[0] PALLOC: add block 0x3ff9000 (order = 2)
+[0m[2m[0] PALLOC: add block 0x3ffd000 (order = 1)
+[0m[2m[0] PALLOC: add block 0x3fff000 (order = 0)
+[0m[2m[0] PALLOC: add block 0x43eb000 (order = 18)
+[0m[2m[0] PALLOC: add block 0x443eb000 (order = 17)
+[0m[2m[0] PALLOC: add block 0x643eb000 (order = 16)
+[0m[2m[0] PALLOC: add block 0x743eb000 (order = 15)
+[0m[2m[0] PALLOC: add block 0x7c3eb000 (order = 13)
+[0m[2m[0] PALLOC: add block 0x7e3eb000 (order = 12)
+[0m[2m[0] PALLOC: add block 0x7f3eb000 (order = 11)
+[0m[2m[0] PALLOC: add block 0x7fbeb000 (order = 9)
+[0m[2m[0] PALLOC: add block 0x7fdeb000 (order = 8)
+[0m[2m[0] PALLOC: add block 0x7feeb000 (order = 7)
+[0m[2m[0] PALLOC: add block 0x7ff6b000 (order = 6)
+[0m[2m[0] PALLOC: add block 0x7ffab000 (order = 5)
+[0m[2m[0] PALLOC: add block 0x7ffcb000 (order = 4)
+[0m[2m[0] PALLOC: add block 0x7ffdb000 (order = 2)
+[0m[2m[0] PALLOC: alloc_pages(order = 6, flags = (empty)) = 0x17ff11000
+[0m[2m[0] Adding 14232 symbols to lookup
+[0m[2m[0] PALLOC: alloc_pages(order = 13, flags = (empty)) = 0x178011000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffdc000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffdd000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffde000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffdf000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffe0000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffe9000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffea000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffeb000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffec000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffed000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffee000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ffef000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fff0000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff51000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff52000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff53000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff54000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff55000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff56000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff57000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff58000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff59000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5a000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5b000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5c000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5d000
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5e000
+[0m[2m[0] Setting LINT1 as NMI [NmiFlags { polarity: Conforming, trigger_mode: Conforming }]
+[0m[2m[1] Setting LINT1 as NMI [NmiFlags { polarity: Conforming, trigger_mode: Conforming }]
+[0m[2m[0] PALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17ff71000
+[0m[2m[1] PALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17fe11000
+[0m[2m[0] MAP ffff828000081000-ffff8280000a1000 (4K) -> 000000017ff71000-000000017ff91000 [WRITE | GLOBAL]
+[0m[2m[1] MAP ffff8280000c1000-ffff8280000e1000 (4K) -> 000000017fe11000-000000017fe31000 [WRITE | GLOBAL]
+[0m[2m[0] PALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17fe31000
+[0m[2m[1] PALLOC: alloc_pages(order = 5, flags = (empty)) = 0x17fe51000
+[0m[2m[0] MAP ffff828000101000-ffff828000121000 (4K) -> 000000017fe31000-000000017fe51000 [WRITE | GLOBAL]
+[0m[2m[0] Using 0xffff828000081000-0xffff8280000a1000 for Page Fault Stack (ist = 1)
+[0m[2m[1] MAP ffff828000141000-ffff828000161000 (4K) -> 000000017fe51000-000000017fe71000 [WRITE | GLOBAL]
+[0m[2m[0] Using 0xffff828000101000-0xffff828000121000 for Double Fault Stack (ist = 2)
+[0m[2m[1] Using 0xffff8280000c1000-0xffff8280000e1000 for Page Fault Stack (ist = 1)
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff5f000
+[0m[2m[1] Using 0xffff828000141000-0xffff828000161000 for Double Fault Stack (ist = 2)
+[0m[2m[0] HPET Period is 10000000fs, setting comparator to 200000 (500Hz)
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff60000
+[0m[2m[0] enter_schedule()
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff61000
+[0m[2m[0] Using 0xffff828000001000-0xffff828000021000 for ktask stack
+[0m[2m[1] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff62000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff63000
+[0m[2m[1] PALLOC: alloc_pages(order = 3, flags = (empty)) = 0x17ff69000
+[0m[2m[0] First task '[ktask]'
+[0m[2m[1] PALLOC: alloc_pages(order = 4, flags = (empty)) = 0x17fe71000
+[0m[2m[0] KTask run '[mod-init:ramfs]'
+[0m[2m[1] enter_schedule()
+[0m[2m[0] Register filesystem 'ramfs'
+[0m[2m[1] Using 0xffff828000041000-0xffff828000061000 for ktask stack
+[0m[2m[0] KTask run '[initrd]'
+[0m[2m[1] First task '[ktask]'
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff64000
+[0m[2m[1] PALLOC: alloc_pages(order = 1, flags = (empty)) = 0x17ff65000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff67000
+[0m[2m[1] MAP ffff828000181000-ffff828000183000 (4K) -> 000000017ff65000-000000017ff67000 [WRITE | GLOBAL]
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17ff68000
+[0m[2m[1] Using 0xffff828000181000-0xffff828000183000 for idle stack
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe81000
+[0m[2m[1] Switch from '[ktask]' to '[idle]'
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe82000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe83000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe84000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe85000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe86000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe87000
+[0m[2m[0] initrd: Written (4KiB 768B) bytes to ./libchos_fs_ext2.so
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe88000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe89000
+[0m[2m[0] initrd: Written (4KiB 768B) bytes to ./libchos_block_ahci.so
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe8a000
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe8b000
+[0m[2m[0] initrd: Written (4KiB 744B) bytes to ./libchos_bus_pci.so
+[0m[2m[0] PALLOC: alloc_pages(order = 0, flags = (empty)) = 0x17fe8c000
+[0m[2m[0] initrd: Written (121B) bytes to ./config.txt
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe87000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe85000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe89000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe88000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe8b000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe8a000, order = 0)
+[0m[2m[0] PALLOC: dealloc_pages(page = 17fe8c000, order = 0)
+[0m[1;31m[0] ========================
+[0m[1;31m[0] PANIC: panicked at 'Could not find block 00017fe8d000', kernel/src/mm/phys/raw_alloc.rs:310:17
+[0m[m[0] Backtrace
+[0m[m[0]   0xffff80800034e44f [core::panicking::panic_fmt + 0x3f]
+[0m[m[0]   0xffff8080001cecb1 [chos::mm::phys::raw_alloc::free_in_region + 0x601]
+[0m[m[0]   0xffff8080001cf724 [chos::mm::phys::raw_alloc::dealloc_pages_unlocked + 0x2b4]
+[0m[m[0]   0xffff8080001cf81c [chos::mm::phys::raw_alloc::dealloc_pages + 0x3c]
+[0m[m[0]   0xffff8080002157ba [<chos::mm::global::KAlloc as core::alloc::global::GlobalAlloc>::dealloc + 0x47a]
+[0m[m[0]   0xffff808000215903 [__rg_dealloc + 0x53]
+[0m[m[0]   0xffff8080001b61a3 [alloc::alloc::dealloc + 0x43]
+[0m[m[0]   0xffff8080001b6207 [<alloc::alloc::Global as core::alloc::Allocator>::deallocate + 0x57]
+[0m[m[0]   0xffff8080001ada62 [alloc::alloc::box_free + 0x92]
+[0m[m[0]   0xffff8080001abc9c [core::ptr::drop_in_place<alloc::boxed::Box<[u8; 4096]>> + 0x1c]
+[0m[m[0]   0xffff8080001abb85 [core::ptr::drop_in_place<chos_fs_ramfs::RamfsFileBlock> + 0x15]
+[0m[m[0]   0xffff8080001ac02b [<chos_lib::pool::boxed::PoolBox<T,P> as core::ops::drop::Drop>::drop + 0x4b]
+[0m[m[0]   0xffff8080001ab841 [core::ptr::drop_in_place<chos_lib::pool::boxed::PoolBox<chos_fs_ramfs::RamfsFileBlock,chos_fs_ramfs::RamfsFileBlockPool>> + 0x11]
+[0m[m[0]   0xffff8080001b0f04 [intrusive_collections::linked_list::LinkedList<A>::clear + 0xd4]
+[0m[m[0]   0xffff8080001ac241 [<intrusive_collections::linked_list::LinkedList<A> as core::ops::drop::Drop>::drop + 0x11]
+[0m[m[0]   0xffff8080001ab7e1 [core::ptr::drop_in_place<intrusive_collections::linked_list::LinkedList<chos_fs_ramfs::RamfsFileBlockAdapter>> + 0x11]
+[0m[m[0]   0xffff8080001abaf1 [core::ptr::drop_in_place<chos_fs_ramfs::RamfsFile> + 0x11]
+[0m[m[0]   0xffff8080001ef0fc [core::ptr::drop_in_place<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>> + 0x1c]
+[0m[m[0]   0xffff8080001ef804 [core::ptr::drop_in_place<core::option::Option<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>>> + 0x34]
+[0m[m[0]   0xffff8080001f0dd1 [core::ptr::drop_in_place<chos::resource::FileMut> + 0x11]
+[0m[m[0]   0xffff8080001f1641 [core::ptr::drop_in_place<core::cell::UnsafeCell<chos::resource::FileMut>> + 0x11]
+[0m[m[0]   0xffff8080001ef235 [core::ptr::drop_in_place<chos_lib::sync::lock::Lock<chos_lib::sync::spin::lock::RawSpinLock,chos::resource::FileMut>> + 0x15]
+[0m[m[0]   0xffff8080001f0d36 [core::ptr::drop_in_place<chos::resource::File> + 0x26]
+[0m[m[0]   0xffff8080001c8f2e [<chos_lib::pool::arc::IArcCountWeak as chos_lib::pool::arc::Count>::release_strong + 0x5e]
+[0m[m[0]   0xffff8080001f2aea [<chos_lib::pool::arc::IArc<T,P> as core::ops::drop::Drop>::drop + 0x3a]
+[0m[m[0]   0xffff8080001eee11 [core::ptr::drop_in_place<chos_lib::pool::arc::IArc<chos::resource::File,chos::resource::FilePool>> + 0x11]
+[0m[m[0]   0xffff8080001abb53 [core::ptr::drop_in_place<chos_fs_ramfs::RamfsResource> + 0x23]
+[0m[m[0]   0xffff8080001ef0fc [core::ptr::drop_in_place<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>> + 0x1c]
+[0m[m[0]   0xffff8080001ef804 [core::ptr::drop_in_place<core::option::Option<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>>> + 0x34]
+[0m[m[0]   0xffff8080001f0e46 [core::ptr::drop_in_place<chos::resource::Resource> + 0x26]
+[0m[m[0]   0xffff8080001c8eae [<chos_lib::pool::arc::IArcCountWeak as chos_lib::pool::arc::Count>::release_strong + 0x5e]
+[0m[m[0]   0xffff8080001f2c2a [<chos_lib::pool::arc::IArc<T,P> as core::ops::drop::Drop>::drop + 0x3a]
+[0m[m[0]   0xffff8080001ef071 [core::ptr::drop_in_place<chos_lib::pool::arc::IArc<chos::resource::Resource,chos::resource::ResourcePool>> + 0x11]
+[0m[m[0]   0xffff8080001abb11 [core::ptr::drop_in_place<chos_fs_ramfs::RamfsInode> + 0x11]
+[0m[m[0]   0xffff8080001ef0fc [core::ptr::drop_in_place<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>> + 0x1c]
+[0m[m[0]   0xffff8080001ef804 [core::ptr::drop_in_place<core::option::Option<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>>> + 0x34]
+[0m[m[0]   0xffff8080001f0cb1 [core::ptr::drop_in_place<chos::fs::InodeMut> + 0x11]
+[0m[m[0]   0xffff8080001f1421 [core::ptr::drop_in_place<core::cell::UnsafeCell<chos::fs::InodeMut>> + 0x11]
+[0m[m[0]   0xffff8080001ef155 [core::ptr::drop_in_place<chos_lib::sync::lock::Lock<chos_lib::sync::spin::lock::RawSpinLock,chos::fs::InodeMut>> + 0x15]
+[0m[m[0]   0xffff8080001f0c76 [core::ptr::drop_in_place<chos::fs::Inode> + 0x26]
+[0m[m[0]   0xffff8080001c8dae [<chos_lib::pool::arc::IArcCountWeak as chos_lib::pool::arc::Count>::release_strong + 0x5e]
+[0m[m[0]   0xffff8080001f2bda [<chos_lib::pool::arc::IArc<T,P> as core::ops::drop::Drop>::drop + 0x3a]
+[0m[m[0]   0xffff8080001f1d51 [core::ptr::drop_in_place<chos_lib::pool::arc::IArc<chos::fs::Inode,chos::fs::InodePool>> + 0x11]
+[0m[m[0]   0xffff8080001f1052 [core::ptr::drop_in_place<chos::resource::DirectoryEntry> + 0x22]
+[0m[m[0]   0xffff8080001abc21 [core::ptr::drop_in_place<[chos::resource::DirectoryEntry]> + 0x61]
+[0m[m[0]   0xffff8080001abf6f [<alloc::vec::Vec<T,A> as core::ops::drop::Drop>::drop + 0x3f]
+[0m[m[0]   0xffff8080001abcc5 [core::ptr::drop_in_place<alloc::vec::Vec<chos::resource::DirectoryEntry>> + 0x15]
+[0m[m[0]   0xffff8080001abac1 [core::ptr::drop_in_place<chos_fs_ramfs::RamfsDir> + 0x11]
+[0m[m[0]   0xffff8080001ef0fc [core::ptr::drop_in_place<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>> + 0x1c]
+[0m[m[0]   0xffff8080001ef804 [core::ptr::drop_in_place<core::option::Option<alloc::boxed::Box<dyn core::any::Any+core::marker::Send+core::marker::Sync>>> + 0x34]
+[0m[m[0]   0xffff8080001f0f91 [core::ptr::drop_in_place<chos::resource::DirectoryMut> + 0x11]
+[0m[m[0]   0xffff8080001f1a31 [core::ptr::drop_in_place<core::cell::UnsafeCell<chos::resource::DirectoryMut>> + 0x11]
+[0m[m[0]   0xffff8080001ef395 [core::ptr::drop_in_place<chos_lib::sync::lock::Lock<chos_lib::sync::spin::lock::RawSpinLock,chos::resource::DirectoryMut>> + 0x15]
+[0m[m[0]   0xffff8080001f0ec6 [core::ptr::drop_in_place<chos::resource::Directory> + 0x26]
+[0m[m[0]   0xffff8080001c8e2e [<chos_lib::pool::arc::IArcCountWeak as chos_lib::pool::arc::Count>::release_strong + 0x5e]
+[0m[m[0]   0xffff8080001f2d1a [<chos_lib::pool::arc::IArc<T,P> as core::ops::drop::Drop>::drop + 0x3a]
+[0m[m[0]   0xffff8080001ef0b1 [core::ptr::drop_in_place<chos_lib::pool::arc::IArc<chos::resource::Directory,chos::resource::DirectoryPool>> + 0x11]
+[0m[m[0]   0xffff8080001dcf24 [chos::initrd::load_initrd::{{closure}} + 0x184]
+[0m[m[0]   0xffff8080001f5340 [<core::future::from_generator::GenFuture<T> as core::future::future::Future>::poll + 0x50]
+[0m[m[0]   0xffff80800021954a [chos::kmain::kernel_main::{{closure}} + 0x21a]
+[0m[m[0]   0xffff8080001f5190 [<core::future::from_generator::GenFuture<T> as core::future::future::Future>::poll + 0x50]
+[0m[m[0]   0xffff8080001fc20e [<chos::sched::ktask::KTaskFuture<F> as chos::sched::ktask::KTaskFn>::poll + 0x2e]
+[0m[m[0]   0xffff8080001f6011 [chos::sched::ktask::ktask_loop + 0x2b1]
+[0m[m[0]   0xffff8080001bd72b [chos::arch::x64::sched::setup_task + 0xb]
+[0m[1;31m[0] ========================
+[0mthread 'main' panicked at 'Qemu failed with exit code 35', src/run.rs:75:9
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

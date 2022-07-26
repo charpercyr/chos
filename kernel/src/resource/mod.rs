@@ -1,7 +1,8 @@
-use alloc::string::String;
+use alloc::borrow::Cow;
 use core::future::Future;
 use core::mem::{replace, MaybeUninit};
 
+use chos_lib::mm::VAddr;
 use chos_lib::pool::{iarc_adapter_weak, IArc, IArcCountWeak, IWeak};
 use chos_lib::sync::Spinlock;
 
@@ -52,6 +53,10 @@ impl Resource {
         }
     }
 
+    pub fn inode(&self) -> Option<InodeArc> {
+        self.inode.as_ref()?.upgrade()
+    }
+
     pub fn file(self: &ResourceArc) -> Option<FileArc> {
         (self.ops.file)(self)
     }
@@ -100,6 +105,14 @@ impl File {
     pub fn with_private(mut self, private: Private) -> Self {
         self.file_mut.get_mut().private = Some(private);
         self
+    }
+
+    pub fn resource(&self) -> Option<ResourceArc> {
+        self.resource.upgrade()
+    }
+
+    pub fn inode(&self) -> Option<InodeArc> {
+        self.resource()?.inode()
     }
 
     pub fn read(
@@ -169,7 +182,7 @@ impl File {
 
 #[derive(Clone)]
 pub struct DirectoryEntry {
-    pub name: String,
+    pub name: Cow<'static, str>,
     pub inode: InodeArc,
 }
 
@@ -216,6 +229,14 @@ impl Directory {
     pub fn with_private(mut self, private: Private) -> Self {
         self.dir_mut.get_mut().private = Some(private);
         self
+    }
+
+    pub fn resource(&self) -> Option<ResourceArc> {
+        self.resource.upgrade()
+    }
+
+    pub fn inode(&self) -> Option<InodeArc> {
+        self.resource()?.inode()
     }
 
     pub fn list_iter(
@@ -327,4 +348,42 @@ impl Directory {
     }
 
     private_project_impl!(dir_mut: DirectoryMut => private);
+}
+
+pub struct MemoryOps {
+    pub map: fn(fs::Sender<VAddr>),
+    pub unmap: fn(fs::Sender<()>),
+}
+
+pub struct MemoryMut {
+    private: Option<Private>,
+}
+
+impl MemoryMut {
+    private_impl!(private);
+}
+
+pub struct Memory {
+    count: IArcCountWeak,
+    pub resource: ResourceWeak,
+    ops: &'static MemoryOps,
+    pub mem_mut: Spinlock<MemoryMut>,
+}
+
+impl Memory {
+    pub const fn new(ops: &'static MemoryOps, resource: ResourceWeak) -> Self {
+        Self {
+            count: IArcCountWeak::new(),
+            resource,
+            ops,
+            mem_mut: Spinlock::new(MemoryMut { private: None }),
+        }
+    }
+
+    pub fn with_private(mut self, private: Private) -> Self {
+        self.mem_mut.get_mut().private = Some(private);
+        self
+    }
+
+    private_project_impl!(mem_mut: MemoryMut => private);
 }

@@ -1,6 +1,7 @@
 use alloc::borrow::Cow;
 use alloc::sync::Arc;
 use core::future::Future;
+use core::mem::replace;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
 
@@ -8,9 +9,15 @@ use chos_lib::sync::Spinlock;
 
 use crate::sched::ktask::spawn_future;
 
+enum ChannelState<T> {
+    Pending,
+    Ready(T),
+    Dropped,
+}
+
 struct Channel<T> {
-    value: Option<T>,
-    waker: Option<Waker>,
+    state: ChannelState<T>,
+    waker: Option<Waker>
 }
 type ChannelPtr<T> = Arc<Spinlock<Channel<T>>>;
 
@@ -21,8 +28,11 @@ pub struct Sender<T> {
 impl<T> Sender<T> {
     pub fn send(self, value: T) {
         let mut data = self.channel.lock();
-        assert!(data.value.is_none(), "BUG: send() called twice?");
-        data.value = Some(value);
+        match replace(&mut data.state, ChannelState::Pending) {
+            ChannelState::Pending => data.state = ChannelState::Ready(value),
+            ChannelState::Ready(_) => panic!("BUG: send() called twice"),
+            ChannelState::Dropped => panic!("BUG: send called after drop"),
+        }
         if let Some(waker) = data.waker.take() {
             waker.wake();
         }
@@ -72,20 +82,22 @@ pub struct Receiver<T> {
 impl<T> Future for Receiver<T> {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<T> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut data = self.channel.lock();
-        if let Some(value) = data.value.take() {
-            Poll::Ready(value)
-        } else {
-            data.waker = Some(cx.waker().clone());
-            Poll::Pending
+        match replace(&mut data.state, ChannelState::Dropped) {
+            ChannelState::Pending => {
+                data.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            ChannelState::Ready(value) => Poll::Ready(value),
+            ChannelState::Dropped => panic!("Sender dropped"),
         }
     }
 }
 
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let channel = Arc::new(Spinlock::new(Channel {
-        value: None,
+        state: ChannelState::Pending,
         waker: None,
     }));
     (

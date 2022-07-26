@@ -4,7 +4,7 @@ cwd=$(realpath $(dirname $0))
 
 pushd $cwd &> /dev/null
 
-cmd="cargo doc --workspace --document-private-items --no-deps"
+cmd="cargo doc --workspace --document-private-items --no-deps -Zbuild-std=core,alloc --target arch/x86_64-chos.json"
 echo $cmd
 exec $cmd
 

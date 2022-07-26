@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -71,7 +72,7 @@ impl RamfsFile {
                 offset += block_size as u64;
                 cursor = Self::find_or_alloc_block_starting_from(cursor, offset)?;
             } else {
-                break Ok(written)
+                break Ok(written);
             }
         }
     }
@@ -88,17 +89,17 @@ impl RamfsFile {
                 BlockResult::Found(block) => {
                     block_read = writer.write(&block.get().unwrap().block[block_start..]);
                     cursor = block;
-                },
+                }
                 BlockResult::Previous(prev) => {
                     block_read = writer.write_bytes(0x00, block_size);
                     cursor = prev;
-                },
+                }
             }
             read += block_read;
             if block_read == block_size as usize {
                 offset += block_size as u64;
             } else {
-                break Ok(read)
+                break Ok(read);
             }
         }
     }
@@ -206,15 +207,7 @@ fn ramfs_dir_list(
         let private = dir.lock_private::<RamfsDir>().unwrap();
         let mut writer = buf.writer();
         let mut written = 0;
-        let inode = dir
-            .resource
-            .upgrade()
-            .unwrap()
-            .inode
-            .as_ref()
-            .unwrap()
-            .upgrade()
-            .unwrap();
+        let inode = dir.inode().unwrap();
         if idx <= 0 {
             if let Err(_) = writer.write_one(DirectoryEntry {
                 name: ".".into(),
@@ -227,11 +220,7 @@ fn ramfs_dir_list(
         if idx <= 1 {
             if let Err(_) = writer.write_one(DirectoryEntry {
                 name: "..".into(),
-                inode: inode
-                    .parent
-                    .as_ref()
-                    .and_then(|inode| inode.upgrade())
-                    .unwrap_or_else(|| inode),
+                inode: inode.parent().unwrap_or_else(|| inode),
             }) {
                 return Ok((written, buf));
             }
@@ -256,9 +245,14 @@ fn ramfs_dir_mkfile(
     let mut private = dir.lock_private::<RamfsDir>().unwrap();
     let inode =
         InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::file(inode.clone()), attrs));
-    let file = inode.private::<RamfsInode>().unwrap().res.file().unwrap();
+    let file = inode
+        .lock_private::<RamfsInode>()
+        .unwrap()
+        .res
+        .file()
+        .unwrap();
     private.children.push(DirectoryEntry {
-        name: name.into(),
+        name: Cow::Owned(name.into()),
         inode,
     });
     result.send_ok(file);
@@ -273,9 +267,14 @@ fn ramfs_dir_mkdir(
     let mut private = dir.lock_private::<RamfsDir>().unwrap();
     let inode =
         InodeArc::new_cyclic(|inode| RamfsInode::new(RamfsResource::dir(inode.clone()), attrs));
-    let file = inode.private::<RamfsInode>().unwrap().res.dir().unwrap();
+    let file = inode
+        .lock_private::<RamfsInode>()
+        .unwrap()
+        .res
+        .dir()
+        .unwrap();
     private.children.push(DirectoryEntry {
-        name: name.into(),
+        name: Cow::Owned(name.into()),
         inode,
     });
     result.send_ok(file);
@@ -350,7 +349,7 @@ impl RamfsInode {
 }
 
 fn ramfs_inode_open(inode: &InodeArc, result: fs::Sender<ResourceArc>) {
-    let private = inode.private::<RamfsInode>().unwrap();
+    let private = inode.lock_private::<RamfsInode>().unwrap();
     result.send(Ok(private.res.clone()))
 }
 
@@ -403,14 +402,11 @@ static RAMFS_OPS: FilesystemOps = FilesystemOps { mount: ramfs_mount };
 static RAMFS: Filesystem = Filesystem::new("ramfs", &RAMFS_OPS);
 
 fn ramfs_init(module: Module) {
-    register_filesystem(&RAMFS, module).expect("ramfs name conflict");
+    register_filesystem(&RAMFS, &module).expect("ramfs name conflict");
 }
 
 fn ramfs_fini() {
-    assert!(
-        unregister_filesystem(&RAMFS).is_ok(),
-        "ramfs should be registered"
-    );
+    unregister_filesystem(&RAMFS).expect("ramfs should be registered")
 }
 
 module_decl!(ModuleDecl::new("ramfs").with_init_fini(ramfs_init, ramfs_fini));

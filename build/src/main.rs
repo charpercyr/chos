@@ -31,7 +31,7 @@ use run::*;
 
 mod util;
 use std::fmt;
-use std::lazy::SyncLazy;
+use std::sync::LazyLock;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -39,8 +39,8 @@ use cargo_toml::Manifest;
 use structopt::StructOpt;
 use util::*;
 
-static ROOT_CONFIG: SyncLazy<PathBuf> =
-    SyncLazy::new(|| PathBuf::from_str("./Cargo.toml").unwrap());
+static ROOT_CONFIG: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from_str("./Cargo.toml").unwrap());
 
 const DEBUG_STR: &'static str = "debug";
 const RELEASE_STR: &'static str = "release";

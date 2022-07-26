@@ -2,6 +2,7 @@ pub mod buf;
 pub mod path;
 
 use alloc::sync::Arc;
+use core::future::Future;
 
 use bitflags::bitflags;
 use chos_lib::intrusive::hash_table::{sizes, AtomicLink, HashTable};
@@ -79,6 +80,10 @@ impl Filesystem {
 
     pub fn mount(&self, blkdev: Option<Arc<dyn BlockDevice>>, result: Sender<SuperblockArc>) {
         (self.ops.mount)(self, blkdev, result)
+    }
+
+    pub async fn async_mount(&self, blkdev: Option<Arc<dyn BlockDevice>>) -> Result<SuperblockArc> {
+        call_with_sender!((Self::mount)(self, blkdev)).await
     }
 
     private_impl!(private);
@@ -220,12 +225,20 @@ impl InodeAttributes {
     }
 }
 
+pub struct InodeMut {
+    pub attrs: InodeAttributes,
+    private: Option<Private>,
+}
+
+impl InodeMut {
+    private_impl!(private);
+}
+
 pub struct Inode {
     count: IArcCountWeak,
     ops: &'static InodeOps,
-    pub attrs: InodeAttributes,
     pub parent: Option<InodeWeak>,
-    private: Option<Private>,
+    pub inode_mut: Spinlock<InodeMut>,
 }
 iarc_adapter_weak!(Inode: count);
 object_pool!(pub struct InodePool : Inode);
@@ -237,14 +250,17 @@ impl Inode {
         Self {
             count: IArcCountWeak::new(),
             ops,
-            attrs: InodeAttributes::empty(),
             parent: None,
-            private: None,
+            inode_mut: Spinlock::new(InodeMut {
+                attrs: InodeAttributes::empty(),
+                private: None,
+            }),
         }
     }
 
-    pub fn with_attributes(self, attrs: InodeAttributes) -> Self {
-        Self { attrs, ..self }
+    pub fn with_attributes(mut self, attrs: InodeAttributes) -> Self {
+        self.inode_mut.get_mut().attrs = attrs;
+        self
     }
 
     pub fn with_parent(self, parent: InodeWeak) -> Self {
@@ -254,11 +270,13 @@ impl Inode {
         }
     }
 
-    pub fn with_private(self, private: Private) -> Self {
-        Self {
-            private: Some(private),
-            ..self
-        }
+    pub fn with_private(mut self, private: Private) -> Self {
+        self.inode_mut.get_mut().private = Some(private);
+        self
+    }
+
+    pub fn parent(&self) -> Option<InodeArc> {
+        self.parent.as_ref()?.upgrade()
     }
 
     pub fn open(self: &InodeArc, result: Sender<ResourceArc>) {
@@ -269,7 +287,7 @@ impl Inode {
         call_with_sender!((Self::open)(self)).await
     }
 
-    private_impl!(private);
+    private_project_impl!(inode_mut: InodeMut => private);
 }
 
 static FILESYSTEMS: SpinRWLock<HashTable<FilesystemAdapter, sizes::O4>> =
@@ -286,12 +304,23 @@ pub fn with_filesystem<R>(
     fss.find(&name).get().map(f).ok_or(NoSuchFilesystem)
 }
 
+pub async fn with_filesystem_async<F: Future>(
+    name: &str,
+    f: impl FnOnce(&Filesystem) -> F,
+) -> core::result::Result<F::Output, NoSuchFilesystem> {
+    let fss = FILESYSTEMS.lock_read();
+    match fss.find(&name).get() {
+        Some(fs) => Ok(f(fs).await),
+        None => Err(NoSuchFilesystem),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FilesystemAlreadyExists;
 
 pub fn register_filesystem(
     fs: &'static Filesystem,
-    _module: Module,
+    _module: &Module,
 ) -> core::result::Result<(), FilesystemAlreadyExists> {
     debug!("Register filesystem '{}'", fs.name);
     let mut fss = FILESYSTEMS.lock_write();

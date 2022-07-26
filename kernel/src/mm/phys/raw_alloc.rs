@@ -9,7 +9,7 @@ use chos_lib::arch::mm::PAGE_SIZE64;
 use chos_lib::init::ConstInit;
 use chos_lib::int::{log2u64, CeilDiv};
 use chos_lib::log::domain_debug;
-use chos_lib::mm::{PFrame, PFrameRange, PAddr};
+use chos_lib::mm::{PAddr, PFrame, PFrameRange};
 use chos_lib::sync::spin::lock::Spinlock;
 use intrusive_collections::{intrusive_adapter, linked_list, LinkedList, UnsafeMut};
 
@@ -180,9 +180,8 @@ pub unsafe fn add_region(frame: PFrameRange, flags: RegionFlags) {
     while remaining_pages > 0 {
         let order = log2u64(remaining_pages);
         let block_head = &mut blocks[order as usize];
-        let block = ((current_page + meta_pages) * PAGE_SIZE64
-            + paddr.as_u64()
-            + virt::PHYSICAL_MAP_BASE.addr().as_u64()) as *mut Block;
+        let block_paddr = (current_page + meta_pages) * PAGE_SIZE64 + paddr.as_u64();
+        let block = (block_paddr + virt::PHYSICAL_MAP_BASE.addr().as_u64()) as *mut Block;
         write(
             block,
             Block {
@@ -200,6 +199,8 @@ pub unsafe fn add_region(frame: PFrameRange, flags: RegionFlags) {
 
         current_page += 1 << order;
         remaining_pages -= 1 << order;
+
+        domain_debug!(domain::PALLOC, "add block {:#x} (order = {})", block_paddr, order);
     }
 
     REGIONS.push_back(UnsafeMut::from_raw(region));

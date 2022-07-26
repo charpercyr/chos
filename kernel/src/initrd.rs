@@ -1,3 +1,5 @@
+use chos_lib::fmt::Bytes;
+use chos_lib::log::debug;
 use chos_lib::tar::raw::EntryType;
 use chos_lib::tar::Tar;
 
@@ -38,9 +40,11 @@ async fn create_file(path: &Path, root: &DirectoryArc, contents: &[u8]) {
         .await
         .unwrap();
     file.async_write_all(0, contents).await.unwrap();
+
+    debug!("initrd: Written {} bytes to {}", Bytes(contents.len() as u64), path)
 }
 
-pub async fn load_initrd(initrd: &[u8]) {
+async fn load_initrd_fs(initrd: &[u8]) -> DirectoryArc {
     let initrd = Tar::new(initrd).expect("Initrd not a valid tar file");
 
     let sp = with_filesystem(RAMFS_FS_NAME, |fs| {
@@ -61,4 +65,10 @@ pub async fn load_initrd(initrd: &[u8]) {
             create_file(path, &root, file.contents()).await;
         }
     }
+
+    root
+}
+
+pub async fn load_initrd(initrd: &[u8]) {
+    let _root = load_initrd_fs(initrd).await;
 }
